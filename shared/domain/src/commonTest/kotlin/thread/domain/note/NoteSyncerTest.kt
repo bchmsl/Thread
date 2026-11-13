@@ -228,7 +228,7 @@ class NoteSyncerTest {
 
             assertEquals(NoteId("conflict-r2"), copyId)
             val resolution = h.remote.resolutions.single()
-            assertEquals(RevisionId("rev-1"), resolution.keep)
+            assertEquals(NoteHead(RevisionId("rev-1"), TITLE, doc("this device")), resolution.keep)
             assertEquals(listOf(RevisionId("r2")), resolution.discard)
             val expectedFirst = NewRevision(RevisionId("r2"), null, TITLE, doc("other device"), otherDevice)
             assertEquals(NoteCopy(NoteId("conflict-r2"), expectedFirst, true, RevisionId("r2")), resolution.copy)
@@ -250,7 +250,7 @@ class NoteSyncerTest {
 
             assertEquals(NoteId("conflict-rev-2"), copyId)
             val resolution = h.remote.resolutions.single()
-            assertEquals(RevisionId("r2"), resolution.keep)
+            assertEquals(NoteHead(RevisionId("r2"), TITLE, doc("other device")), resolution.keep)
             assertEquals(listOf(RevisionId("rev-1")), resolution.discard)
             val expectedCopy = NoteCopy(NoteId("conflict-rev-2"), newRevision("rev-3", "this device"), true, RevisionId("rev-1"))
             assertEquals(expectedCopy, resolution.copy)
@@ -485,7 +485,7 @@ class NoteSyncerTest {
 
         override suspend fun resolveConflict(
             noteId: NoteId,
-            keep: RevisionId?,
+            keep: NoteHead?,
             discard: List<RevisionId>,
             copy: NoteCopy,
         ) {
@@ -504,7 +504,7 @@ class NoteSyncerTest {
     }
 
     private data class Resolution(
-        val keep: RevisionId?,
+        val keep: NoteHead?,
         val discard: List<RevisionId>,
         val copy: NoteCopy,
     )

@@ -3,6 +3,8 @@ package thread.domain.workspace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import thread.domain.note.NoteSaveState
+import thread.domain.note.NoteSummary
+import thread.domain.note.NoteTopicLink
 import thread.domain.reminder.Reminder
 import thread.domain.task.Task
 import thread.domain.time.DEFAULT_WORKSPACE_ZONE
@@ -85,6 +87,22 @@ sealed interface WorkspaceWrite {
         val isNew: Boolean = false,
         val before: Reminder? = null,
     ) : WorkspaceWrite
+
+    /**
+     * Saves where [note] is filed: its Inbox flag, and whether it was discarded. [isNew] marks its first write, which
+     * also stores when it was made. The title, preview, versions and Trash state belong to Note sync (NoteSyncRemote)
+     * and are never written here.
+     */
+    data class PutNote(
+        val note: NoteSummary,
+        val isNew: Boolean = false,
+        val before: NoteSummary? = null,
+    ) : WorkspaceWrite
+
+    /** Saves one Topic link of a Note. Unlinking writes [NoteTopicLink.linked] false; nothing is deleted. */
+    data class PutNoteLink(
+        val link: NoteTopicLink,
+    ) : WorkspaceWrite
 }
 
 /** What this device knows of the workspace: its own changes included, acknowledged or not. */
@@ -96,6 +114,10 @@ data class WorkspaceData(
     val tasks: List<Task> = emptyList(),
     /** Every stored Reminder, those in Trash included. */
     val reminders: List<Reminder> = emptyList(),
+    /** Every stored Note listing, those in Trash and discarded ones included. */
+    val notes: List<NoteSummary> = emptyList(),
+    /** Every stored Note to Topic link, unlinked ones included. */
+    val noteLinks: List<NoteTopicLink> = emptyList(),
     val prefs: WorkspacePrefs = WorkspacePrefs(),
     /** True when the account has a stored preferences document. Until then [prefs] are the defaults. */
     val prefsStored: Boolean = false,
@@ -108,8 +130,9 @@ data class WorkspaceData(
 )
 
 /**
- * Topics, statuses, Tasks, Reminders and preferences of one signed-in account (adr/ADR-009-workspace-entities-and-sync.md,
- * adr/ADR-010-tasks-reminders-and-dates.md). Platform
+ * Topics, statuses, Tasks, Reminders, Note listings and links, and preferences of one signed-in account
+ * (adr/ADR-009-workspace-entities-and-sync.md, adr/ADR-010-tasks-reminders-and-dates.md,
+ * adr/ADR-011-notes-in-the-workspace.md). Platform
  * code implements it (Firestore on the web). The store's local copy is this device's only copy and outbox: there is
  * no second queue.
  */

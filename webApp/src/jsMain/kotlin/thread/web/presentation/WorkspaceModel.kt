@@ -1,12 +1,22 @@
 package thread.web.presentation
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
+import thread.domain.note.NoteSummary
+import thread.domain.note.NoteTopicLink
+import thread.domain.note.UNTITLED_NOTE
+import thread.domain.note.linkedTopicIds
+import thread.domain.note.liveNotes
+import thread.domain.note.newNote
+import thread.domain.note.notesForTopic
+import thread.domain.note.notesInOrder
 import thread.domain.reminder.Reminder
 import thread.domain.reminder.ReminderId
 import thread.domain.reminder.ReminderTarget
@@ -37,14 +47,19 @@ import thread.domain.workspace.WorkspaceEdit
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceStore
 import thread.domain.workspace.WorkspaceWrite
+import thread.domain.workspace.copyNoteLinks
+import thread.domain.workspace.createNoteWrites
 import thread.domain.workspace.createReminderWrite
 import thread.domain.workspace.createTaskWrite
+import thread.domain.workspace.discardNote
 import thread.domain.workspace.discardTask
 import thread.domain.workspace.dismissReminder
 import thread.domain.workspace.savePrefs
 import thread.domain.workspace.seedWrites
 import thread.domain.workspace.workspaceSaveStates
+import thread.web.presentation.notes.notePlace
 import thread.web.presentation.topics.topicPlace
+import thread.domain.note.inboxNotes as inboxNotesOf
 
 internal sealed interface TopicCreation {
     data class Created(
@@ -67,8 +82,9 @@ internal sealed interface TaskCreation {
 }
 
 /**
- * The signed-in account's Topics, statuses, Tasks, Reminders and preferences for the screens
- * (adr/ADR-009-workspace-entities-and-sync.md, adr/ADR-010-tasks-reminders-and-dates.md).
+ * The signed-in account's Topics, statuses, Tasks, Reminders, Note listings and preferences for the screens
+ * (adr/ADR-009-workspace-entities-and-sync.md, adr/ADR-010-tasks-reminders-and-dates.md,
+ * adr/ADR-011-notes-in-the-workspace.md). A Note's text is not here: an open Note syncs through its own NoteSyncer.
  * State comes from [WorkspaceStore.observe]; screens change it only through writes, so what they show is always what
  * the device stored.
  */
@@ -109,13 +125,36 @@ internal class WorkspaceModel(
 
     fun task(id: String): Task? = derived().tasksById[id]
 
-    /** Reminders not in Trash whose Task or Topic is still here. Note reminders arrive with Notes (Phase 8). */
+    /** Reminders not in Trash whose Task, Topic or Note is still here. */
     val reminders: List<Reminder> get() = derived().reminders
 
     /** A Task's reminders, oldest first. */
     fun remindersOf(task: Task): List<Reminder> = derived().remindersByTask[task.id.value].orEmpty()
 
     val inbox: List<Task> get() = derived().inbox
+
+    /** Every stored Note listing, Trash and undone creations included: the input of the Note edits. */
+    val storedNotes: List<NoteSummary> get() = data?.notes.orEmpty()
+
+    /** Every stored Topic link, unlinked ones included. */
+    val noteLinks: List<NoteTopicLink> get() = data?.noteLinks.orEmpty()
+
+    /** Notes not in Trash, newest change first. */
+    val notes: List<NoteSummary> get() = derived().notes
+
+    fun note(id: String): NoteSummary? = derived().notesById[id]
+
+    /** The Topics [noteId] is linked to that still exist, in link order. */
+    fun topicsOf(noteId: NoteId): List<Topic> = derived().topicsOf(noteId)
+
+    /** The Notes linked to [topicId], newest change first. */
+    fun notesFor(topicId: TopicId): List<NoteSummary> = notesForTopic(topicId, storedNotes, noteLinks)
+
+    /** Notes waiting in Inbox, newest first. */
+    val inboxNotes: List<NoteSummary> get() = derived().inboxNotes
+
+    /** Tasks and Notes waiting in Inbox. */
+    val inboxCount: Int get() = derived().inbox.size + derived().inboxNotes.size
 
     fun progress(topicId: TopicId): TaskProgress = derived().progress.getOrPut(topicId) { progressOf(topicId, storedTasks) }
 
@@ -131,12 +170,27 @@ internal class WorkspaceModel(
                 .orEmpty()
                 .map { it.id.value }
                 .toSet()
+        val notes = notesInOrder(liveNotes(data?.notes.orEmpty()))
+        val notesById = notes.associateBy { it.id.value }
+        val inboxNotes = inboxNotesOf(data?.notes.orEmpty())
+
+        // A Note's Topics show in the order Topics have everywhere else, not in link order.
+        private val orderedTopics = topicsInOrder(data?.topics.orEmpty(), visibleStatuses(data?.statuses.orEmpty()))
+        private val links = data?.noteLinks.orEmpty()
+        private val topicsByNote = mutableMapOf<NoteId, List<Topic>>()
+
+        fun topicsOf(noteId: NoteId): List<Topic> =
+            topicsByNote.getOrPut(noteId) {
+                val linked = linkedTopicIds(noteId, links).toSet()
+                orderedTopics.filter { it.id in linked }
+            }
+
         val reminders =
             liveReminders(data?.reminders.orEmpty()) { target ->
                 when (target.kind) {
                     TargetKind.Task -> target.id in tasksById
                     TargetKind.Topic -> target.id in topicIds
-                    TargetKind.Note -> false
+                    TargetKind.Note -> target.id in notesById
                 }
             }
         val remindersByTask = reminders.filter { it.target.kind == TargetKind.Task }.groupBy { it.target.id }
@@ -225,6 +279,41 @@ internal class WorkspaceModel(
         store.write(discardTask(current))
     }
 
+    /**
+     * Stores a new Note's listing (D39: without [topicId] it waits in Inbox; with one it is linked there). Its text
+     * is written by the note sync: the first revision, when there is a title or the first edit.
+     */
+    fun createNote(topicId: TopicId?): NoteSummary? {
+        if (!loaded) return null
+        val note = newNote(NoteId(newId("n-")), topicId)
+        madeHere += note.id.value
+        store.write(createNoteWrites(note, topicId))
+        return note
+    }
+
+    /** Ids of the Notes made on this device while the app is open. */
+    private val madeHere = mutableStateListOf<String>()
+
+    /**
+     * True for a Note made here since the app opened. It can be opened before the store shows its listing, and its
+     * page opens with the title ready for typing.
+     */
+    fun isMadeHere(id: NoteId): Boolean = id.value in madeHere
+
+    /** Takes back a Note made a moment ago (the Undo of its toast). The documents stay, hidden even from Trash. */
+    fun discard(note: NoteSummary) {
+        val current = storedNotes.firstOrNull { it.id == note.id } ?: note
+        discardNote(current).takeIf { it.isNotEmpty() }?.let(store::write)
+    }
+
+    /** Links the Note made from a conflict to the Topics of the Note it came from (D41). */
+    fun copyLinks(
+        from: NoteId,
+        to: NoteId,
+    ) {
+        copyNoteLinks(from, to, noteLinks).takeIf { it.isNotEmpty() }?.let(store::write)
+    }
+
     /** Adds a reminder, or returns null when its text is too long. */
     fun createReminder(
         at: WallTime,
@@ -303,6 +392,23 @@ internal class WorkspaceModel(
                     NoteSaveState.SyncFailed,
                     null,
                 )
+            is WorkspaceWrite.PutNote -> {
+                val title = note(write.note.id.value)?.title?.ifBlank { null } ?: UNTITLED_NOTE
+                SyncProblem(
+                    "Where “$title” is filed was not saved. The server refused the change.",
+                    NoteSaveState.SyncFailed,
+                    if (write.isNew) null else notePlace(write.note.id),
+                )
+            }
+            is WorkspaceWrite.PutNoteLink -> {
+                val title = note(write.link.noteId.value)?.title?.ifBlank { null } ?: UNTITLED_NOTE
+                val topic = topic(write.link.topicId.value)?.name ?: "a Topic"
+                SyncProblem(
+                    "The link between “$title” and $topic was not saved. The server refused the change.",
+                    NoteSaveState.SyncFailed,
+                    notePlace(write.link.noteId),
+                )
+            }
         }
 }
 

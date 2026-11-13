@@ -98,13 +98,14 @@ fun remindersFor(
 ): List<Reminder> = reminders.filter { !it.deleted && it.target == target }.sortedWith(TIME_ORDER)
 
 /**
- * The reminders a Topic's page lists: its own and those of its Tasks (v3 `remindersForTopic`). Notes join in
- * Phase 8. [tasks] are the live Tasks.
+ * The reminders a Topic's page lists: its own, those of its Tasks and those of its linked Notes (v3
+ * `remindersForTopic`). [tasks] are the live Tasks; [noteIds] are the live Notes linked to the Topic.
  */
 fun remindersForTopic(
     topicId: TopicId,
     reminders: List<Reminder>,
     tasks: List<Task>,
+    noteIds: Set<String> = emptySet(),
 ): List<Reminder> {
     val taskIds = tasks.filter { it.topicId == topicId && !it.deleted }.map { it.id.value }.toSet()
     return reminders
@@ -113,7 +114,7 @@ fun remindersForTopic(
                 when (reminder.target.kind) {
                     TargetKind.Topic -> reminder.target.id == topicId.value
                     TargetKind.Task -> reminder.target.id in taskIds
-                    TargetKind.Note -> false
+                    TargetKind.Note -> reminder.target.id in noteIds
                 }
         }.sortedWith(TIME_ORDER)
 }

@@ -20,9 +20,12 @@ import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
+import thread.domain.note.NoteId
+import thread.domain.note.NoteSummary
+import thread.domain.note.UNTITLED_NOTE
 import thread.domain.task.Task
 import thread.domain.topic.TopicId
-import thread.domain.workspace.triageTasks
+import thread.domain.workspace.triageInbox
 import thread.web.platform.WallClock
 import thread.web.presentation.CheckBox
 import thread.web.presentation.EmptyState
@@ -40,7 +43,7 @@ import thread.web.presentation.topics.topicPlace
 
 /**
  * Inbox (v3 inbox.html): captures without a Topic. Select some, then link them to a Topic or keep them standalone.
- * Both only clear the Inbox flag; nothing is copied or deleted. Notes join in Phase 8.
+ * Tasks join the Topic and Notes add it to their Topics; both clear the Inbox flag. Nothing is copied or deleted.
  */
 @Composable
 internal fun InboxScreen(
@@ -48,6 +51,7 @@ internal fun InboxScreen(
     router: Router,
     capture: CaptureState,
     onOpenTask: (Task) -> Unit,
+    onOpenNote: (NoteId) -> Unit,
 ) {
     if (!workspace.loaded) {
         if (workspace.readFailed) EmptyState(Icon.Alert, "Inbox could not load", "Reload the page to try again.")
@@ -55,17 +59,30 @@ internal fun InboxScreen(
     }
     val toasts = LocalToasts.current
     val now = LocalNow.current
-    val items = workspace.inbox
+    val zone = workspace.prefs.timeZone
+    val items = inboxItems(workspace.inbox, workspace.inboxNotes)
     val selection = remember { mutableStateListOf<String>() }
     var linking by remember { mutableStateOf(false) }
-    val chosen = items.filter { it.id.value in selection }
+    val chosen = items.filter { it.key in selection }
     val count = chosen.size
     val all = items.isNotEmpty() && count == items.size
     SideEffect {
-        // A Task filed elsewhere leaves the selection with it.
-        val present = items.map { it.id.value }.toSet()
+        // An item filed elsewhere leaves the selection with it.
+        val present = items.map { it.key }.toSet()
         selection.removeAll { it !in present }
     }
+
+    fun triage(
+        picked: List<InboxItem>,
+        topicId: TopicId?,
+    ) = workspace.apply(
+        triageInbox(
+            picked.mapNotNull { it.task },
+            picked.mapNotNull { it.note },
+            workspace.noteLinks,
+            topicId,
+        ),
+    )
     DisposableEffect(count > 0) {
         document.body?.classList?.toggle("has-selbar", count > 0)
         onDispose { document.body?.classList?.remove("has-selbar") }
@@ -94,33 +111,36 @@ internal fun InboxScreen(
         Label {
             CheckBox(all, label = null, id = "ibx-all", indeterminate = count > 0 && !all) { checked ->
                 selection.clear()
-                if (checked) selection.addAll(items.map { it.id.value })
+                if (checked) selection.addAll(items.map { it.key })
             }
             Text(if (all) " Clear selection " else " Select all ")
             Span({ classes("n") }) { Text(items.size.toString()) }
         }
     }
     Ul({ classes("ibx") }) {
-        items.forEach { task ->
-            val id = task.id.value
-            val picked = id in selection
-            val captured = task.createdAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), workspace.prefs.timeZone) } ?: now
-            key(id) {
+        items.forEach { item ->
+            val picked = item.key in selection
+            val captured = item.createdAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), zone) } ?: now
+            val kind = if (item.task != null) "Task" else "Note"
+            key(item.key) {
                 Li({
                     classes("irow")
                     if (picked) classes("is-sel")
                 }) {
-                    CheckBox(picked, label = "Select task: ${task.title}") { checked ->
-                        if (checked) selection.add(id) else selection.remove(id)
+                    CheckBox(picked, label = "Select ${kind.lowercase()}: ${item.title}") { checked ->
+                        if (checked) selection.add(item.key) else selection.remove(item.key)
                     }
-                    Span({ classes("irow__icon") }) { IconView(Icon.Task, 18) }
+                    Span({ classes("irow__icon") }) { IconView(if (item.task != null) Icon.Task else Icon.Notes, 18) }
                     Div({ classes("irow__body") }) {
                         Button({
                             type(ButtonType.Button)
                             classes("irow__title")
-                            onClick { onOpenTask(task) }
-                        }) { Text(task.title) }
-                        Span({ classes("irow__kind") }) { Text("Task, captured ${agoText(captured, now)}") }
+                            onClick {
+                                item.task?.let(onOpenTask)
+                                item.note?.let { onOpenNote(it.id) }
+                            }
+                        }) { Text(item.title) }
+                        Span({ classes("irow__kind") }) { Text("$kind, captured ${agoText(captured, now)}") }
                     }
                 }
             }
@@ -145,7 +165,7 @@ internal fun InboxScreen(
                 type(ButtonType.Button)
                 classes("btn", "btn--line")
                 onClick {
-                    val edit = workspace.apply(triageTasks(chosen, null)) ?: return@onClick
+                    val edit = triage(chosen, null) ?: return@onClick
                     selection.clear()
                     toasts.show("Kept ${itemCount(chosen.size)} standalone", undo = { workspace.undo(edit) })
                 }
@@ -169,8 +189,8 @@ internal fun InboxScreen(
             onPick = { picked: TopicId? ->
                 linking = false
                 val topic = picked?.let { workspace.topic(it.value) } ?: return@TopicPickerDialog
-                val linked = items.filter { it.id.value in selection }
-                val edit = workspace.apply(triageTasks(linked, topic.id)) ?: return@TopicPickerDialog
+                val linked = items.filter { it.key in selection }
+                val edit = triage(linked, topic.id) ?: return@TopicPickerDialog
                 selection.clear()
                 toasts.show(
                     "Linked ${itemCount(linked.size)} to ${topic.name}",
@@ -183,5 +203,23 @@ internal fun InboxScreen(
         )
     }
 }
+
+/** A Task or a Note waiting in Inbox. */
+private class InboxItem(
+    val task: Task?,
+    val note: NoteSummary?,
+) {
+    val key: String = task?.let { "task:${it.id.value}" } ?: "note:${note?.id?.value}"
+    val title: String = task?.title ?: note?.title?.ifBlank { null } ?: UNTITLED_NOTE
+    val createdAtMillis: Long? = task?.createdAtMillis ?: note?.createdAtMillis
+}
+
+/** Tasks and Notes together, newest capture first (v3 S.inboxItems). One not on the server yet is the newest. */
+private fun inboxItems(
+    tasks: List<Task>,
+    notes: List<NoteSummary>,
+): List<InboxItem> =
+    (tasks.map { InboxItem(it, null) } + notes.map { InboxItem(null, it) })
+        .sortedByDescending { it.createdAtMillis ?: Long.MAX_VALUE }
 
 private fun itemCount(count: Int): String = if (count == 1) "1 item" else "$count items"

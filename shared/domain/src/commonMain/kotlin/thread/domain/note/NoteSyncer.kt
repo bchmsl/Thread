@@ -160,7 +160,8 @@ class NoteSyncer(
                 )
             val discard = known.leaves.filter { it.id != other.id }.map { it.id }
             inFlight = null
-            write { remote.resolveConflict(noteId, keep = other.id, discard = discard, copy = copy) }
+            val keep = NoteHead(other.id, other.title, other.body)
+            write { remote.resolveConflict(noteId, keep = keep, discard = discard, copy = copy) }
             replaceContent(other)
         } else {
             // The copy's ids and content come only from the other version, so two devices that resolve the same way
@@ -174,7 +175,9 @@ class NoteSyncer(
                     inTrash = !keepBoth,
                     copiedFrom = other.id,
                 )
-            write { remote.resolveConflict(noteId, keep = mine, discard = listOf(other.id), copy = copy) }
+            // The listing follows the kept version. Newer local content is written as its own revision after this.
+            val kept = mine?.let { id -> known[id]?.let { NoteHead(id, it.title, it.body) } ?: NoteHead(id, local.title, local.body) }
+            write { remote.resolveConflict(noteId, keep = kept, discard = listOf(other.id), copy = copy) }
         }
         untouched = false
         conflict = null

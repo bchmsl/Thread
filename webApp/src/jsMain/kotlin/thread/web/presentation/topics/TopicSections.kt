@@ -12,6 +12,7 @@ import org.jetbrains.compose.web.attributes.onSubmit
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.attributes.required
 import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
@@ -25,6 +26,8 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
 import org.jetbrains.compose.web.dom.Ul
+import thread.domain.note.NoteId
+import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.reminder.remindersForTopic
@@ -32,7 +35,9 @@ import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
 import thread.domain.task.topicTasks
 import thread.domain.topic.Topic
+import thread.domain.workspace.linkNote
 import thread.domain.workspace.trashReminder
+import thread.domain.workspace.unlinkNote
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
@@ -40,6 +45,7 @@ import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.TaskCreation
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.notes.notePlace
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.tasks.ReminderDialog
 import thread.web.presentation.tasks.TaskRow
@@ -160,7 +166,112 @@ internal fun TopicTasksSection(
     }
 }
 
-/** Reminders for the Topic and its Tasks (v3 remindersSection). Note reminders join in Phase 8. */
+/**
+ * The Notes linked to the Topic (v3 notesSection): "New note" makes one linked here and opens it; "Link existing"
+ * links a Note without copying it; unlinking never deletes the Note.
+ */
+@Composable
+internal fun TopicNotesSection(
+    workspace: WorkspaceModel,
+    topic: Topic,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onOpenNote: (NoteId) -> Unit,
+) {
+    val toasts = LocalToasts.current
+    var linking by remember(topic.id) { mutableStateOf(false) }
+    val notes = workspace.notesFor(topic.id)
+    TopicSection(
+        "notes",
+        "Notes",
+        notes.size.toString(),
+        open,
+        onToggle,
+        actions = {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                id("td-new-note")
+                onClick {
+                    val note = workspace.createNote(topic.id)
+                    if (note == null) toasts.show("Your workspace is still loading. Try again in a moment.") else onOpenNote(note.id)
+                }
+            }) {
+                IconView(Icon.Plus, 15)
+                Text(" New note")
+            }
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                id("td-link-note")
+                onClick { linking = true }
+            }) {
+                IconView(Icon.Link, 15)
+                Text(" Link existing")
+            }
+        },
+    ) {
+        if (notes.isEmpty()) {
+            P({ classes("sect__empty") }) { Text("No notes linked. A note can belong to several Topics.") }
+            return@TopicSection
+        }
+        Ul({ classes("tlist") }) {
+            notes.forEach { note ->
+                val title = note.title.ifBlank { UNTITLED_NOTE }
+                val others = workspace.topicsOf(note.id).filter { it.id != topic.id }
+                key(note.id.value) {
+                    Li({ classes("xrow") }) {
+                        Span({ classes("xrow__icon") }) { IconView(Icon.Notes, 18) }
+                        A(notePlace(note.id).hash, { classes("xrow__main") }) {
+                            Span({ classes("xrow__title") }) { Text(title) }
+                            Span({ classes("xrow__snip") }) { Text(note.preview.ifBlank { "Empty note" }) }
+                            if (others.isNotEmpty()) {
+                                Span({ classes("xrow__also") }) {
+                                    Text("Also in ")
+                                    others.forEach { PlainTopicTag(it) }
+                                }
+                            }
+                        }
+                        IconButton(Icon.Unlink, "Unlink note $title from this Topic", small = true) {
+                            val current = workspace.storedNotes.firstOrNull { it.id == note.id } ?: note
+                            val edit = workspace.apply(unlinkNote(current, workspace.noteLinks, topic.id))
+                            if (edit != null) toasts.show("Note unlinked. It still exists in Notes.", undo = { workspace.undo(edit) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (linking) {
+        val items =
+            workspace.notes
+                .filter { note -> workspace.topicsOf(note.id).none { it.id == topic.id } }
+                .map { note ->
+                    val topics = workspace.topicsOf(note.id)
+                    val sub =
+                        when {
+                            topics.isNotEmpty() -> topics.joinToString(", ") { it.name }
+                            note.inbox -> "In Inbox"
+                            else -> "Standalone"
+                        }
+                    PickItem(note.id.value, Icon.Notes, note.title.ifBlank { UNTITLED_NOTE }, sub)
+                }
+        ItemPickerDialog(
+            title = "Link a note",
+            items = items,
+            empty = "Every note is already linked here.",
+            onPick = { picked ->
+                linking = false
+                val note = workspace.storedNotes.firstOrNull { it.id.value == picked } ?: return@ItemPickerDialog
+                val edit = workspace.apply(linkNote(note, workspace.noteLinks, topic.id)) ?: return@ItemPickerDialog
+                toasts.show("Note linked", undo = { workspace.undo(edit) })
+            },
+            onCancel = { linking = false },
+        )
+    }
+}
+
+/** Reminders for the Topic, its Tasks and its linked Notes (v3 remindersSection). */
 @Composable
 internal fun TopicRemindersSection(
     workspace: WorkspaceModel,
@@ -172,7 +283,8 @@ internal fun TopicRemindersSection(
     val toasts = LocalToasts.current
     val today = LocalNow.current.day
     var adding by remember(topic.id) { mutableStateOf(false) }
-    val reminders = remindersForTopic(topic.id, workspace.reminders, workspace.tasks)
+    val noteIds = workspace.notesFor(topic.id).map { it.id.value }.toSet()
+    val reminders = remindersForTopic(topic.id, workspace.reminders, workspace.tasks, noteIds)
     TopicSection(
         "reminders",
         "Reminders",
@@ -208,7 +320,11 @@ internal fun TopicRemindersSection(
                         }) {
                             Span({ classes("xrow__key") }) {
                                 B { Text(time) }
-                                if (info != null && info.kind == TargetKind.Task) Span { Text("Task: ${info.label}") }
+                                when (info?.kind) {
+                                    TargetKind.Task -> Span { Text("Task: ${info.label}") }
+                                    TargetKind.Note -> Span { Text("Note: ${info.label}") }
+                                    else -> Unit
+                                }
                             }
                             Span({ classes("xrow__title") }) { Text(reminder.text) }
                         }

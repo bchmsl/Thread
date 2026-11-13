@@ -14,6 +14,7 @@ import thread.domain.note.DraftAutosaver
 import thread.domain.note.LocalDraft
 import thread.domain.note.NewRevision
 import thread.domain.note.NoteCopy
+import thread.domain.note.NoteHead
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSyncRejectedException
 import thread.domain.note.NoteSyncer
@@ -148,7 +149,12 @@ class FirestoreNoteSyncEmulatorTest {
                 )
 
                 val copy = NoteCopy(NoteId("conflict-r3"), newRevision("r3", null, "y", device = deviceY), true, RevisionId("r3"))
-                remote.resolveConflict(noteId, keep = RevisionId("r2"), discard = listOf(RevisionId("r3")), copy = copy)
+                remote.resolveConflict(
+                    noteId,
+                    keep = NoteHead(RevisionId("r2"), "Synthetic title", syntheticDoc("x")),
+                    discard = listOf(RevisionId("r3")),
+                    copy = copy,
+                )
 
                 val after = remote.observe(noteId).first { it.fromServer && it.history[RevisionId("r3")]?.discarded == true }
                 assertEquals(listOf(RevisionId("r2")), after.history.leaves.map { it.id })
@@ -162,7 +168,12 @@ class FirestoreNoteSyncEmulatorTest {
                 )
 
                 // A second device that resolves the same way writes the same copy again.
-                remote.resolveConflict(noteId, keep = RevisionId("r2"), discard = listOf(RevisionId("r3")), copy = copy)
+                remote.resolveConflict(
+                    noteId,
+                    keep = NoteHead(RevisionId("r2"), "Synthetic title", syntheticDoc("x")),
+                    discard = listOf(RevisionId("r3")),
+                    copy = copy,
+                )
             } finally {
                 device.backend.close()
             }

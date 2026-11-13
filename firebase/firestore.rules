@@ -4,23 +4,49 @@ rules_version = '2';
 // (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
 // users/{uid}. Only the shapes below can be written; anything not matched is denied, and nothing can be deleted.
 // Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes), adr/ADR-009-workspace-entities-and-sync.md
-// (statuses, Topics, preferences) and adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders).
+// (statuses, Topics, preferences), adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders) and
+// adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(uid) {
       return request.auth != null && request.auth.uid == uid;
     }
 
-    // users/{uid}/notes/{noteId}: the Note's current head and Trash state. Writes merge, so a write that does not
-    // name deletedAt never moves a Note out of Trash.
+    // users/{uid}/notes/{noteId}: the Note's current head, its listing (title, preview) and Trash state, written by the
+    // note sync, and its filing (inbox, discarded, createdAt), written by the workspace. Writes merge, so a write that
+    // does not name deletedAt never moves a Note out of Trash, and neither writer clears the other's fields.
     function validNote(note) {
-      return note.keys().hasOnly(['title', 'headRevisionId', 'updatedAt', 'schemaVersion', 'deletedAt', 'copiedFrom'])
+      return note.keys().hasOnly(['title', 'preview', 'headRevisionId', 'updatedAt', 'schemaVersion', 'deletedAt', 'copiedFrom',
+          'inbox', 'discarded', 'createdAt'])
         && note.schemaVersion == 1
         && note.updatedAt == request.time
         && (!('title' in note) || note.title is string)
+        && (!('preview' in note) || (note.preview is string && note.preview.size() <= 1000))
         && (!('headRevisionId' in note) || (note.headRevisionId is string && note.headRevisionId.size() > 0))
         && (!('deletedAt' in note) || note.deletedAt == null || note.deletedAt is timestamp)
-        && (!('copiedFrom' in note) || validCopiedFrom(note.copiedFrom));
+        && (!('copiedFrom' in note) || validCopiedFrom(note.copiedFrom))
+        && (!('inbox' in note) || note.inbox is bool)
+        && (!('discarded' in note) || note.discarded is bool)
+        && (!('createdAt' in note) || note.createdAt is timestamp);
+    }
+
+    // createdAt is set once, by the first workspace write; Notes made before Phase 8 have none.
+    function keepsNoteCreatedAt(after, before) {
+      return ('createdAt' in before && after.createdAt == before.createdAt)
+        || (!('createdAt' in before) && (!('createdAt' in after) || after.createdAt == request.time));
+    }
+
+    // users/{uid}/topicNoteLinks/{topicId}_{noteId}: one Note in one Topic. The id is made from the pair, so linking
+    // twice writes one document. Unlinking writes linked: false; the Note and the Topic stay.
+    function validNoteLink(link, linkId) {
+      return link.keys().hasOnly(['topicId', 'noteId', 'linked', 'updatedAt', 'schemaVersion'])
+        && link.keys().hasAll(['topicId', 'noteId', 'linked', 'updatedAt', 'schemaVersion'])
+        && link.schemaVersion == 1
+        && link.updatedAt == request.time
+        && link.topicId is string && link.topicId.size() > 0
+        && link.noteId is string && link.noteId.size() > 0
+        && linkId == link.topicId + '_' + link.noteId
+        && link.linked is bool;
     }
 
     function validCopiedFrom(source) {
@@ -147,7 +173,12 @@ service cloud.firestore {
 
     match /users/{uid}/notes/{noteId} {
       allow read: if signedInAs(uid);
-      allow create, update: if signedInAs(uid) && validNote(request.resource.data);
+      allow create: if signedInAs(uid)
+        && validNote(request.resource.data)
+        && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == request.time);
+      allow update: if signedInAs(uid)
+        && validNote(request.resource.data)
+        && keepsNoteCreatedAt(request.resource.data, resource.data);
 
       match /revisions/{revisionId} {
         allow read: if signedInAs(uid);
@@ -159,6 +190,11 @@ service cloud.firestore {
           && validRevision(request.resource.data)
           && validRevisionChange(request.resource.data, resource.data);
       }
+    }
+
+    match /users/{uid}/topicNoteLinks/{linkId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validNoteLink(request.resource.data, linkId);
     }
 
     match /users/{uid}/statuses/{statusId} {

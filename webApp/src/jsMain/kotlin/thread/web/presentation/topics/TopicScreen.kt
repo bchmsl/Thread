@@ -41,6 +41,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextArea
 import org.jetbrains.compose.web.dom.TextInput
 import org.w3c.dom.HTMLTextAreaElement
+import thread.domain.note.NoteId
 import thread.domain.reminder.ReminderTarget
 import thread.domain.task.Task
 import thread.domain.topic.StatusId
@@ -65,7 +66,7 @@ import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.tasks.focusById
 
 /**
- * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks and Reminders. Notes, Jira,
+ * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks, Notes and Reminders. Jira,
  * pull requests and Move to Trash join in later phases.
  */
 @Composable
@@ -74,6 +75,7 @@ internal fun TopicScreen(
     topicId: String?,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
+    onOpenNote: (NoteId) -> Unit,
 ) {
     if (!workspace.loaded) {
         if (workspace.readFailed) EmptyState(Icon.Alert, "Topics could not load", "Reload the page to try again.")
@@ -88,8 +90,9 @@ internal fun TopicScreen(
     }
     val toasts = LocalToasts.current
     var editing by remember { mutableStateOf(false) }
-    // v3 opens Tasks and closes Reminders by default; the choice lasts while the page is open.
+    // v3 opens Tasks and Notes and closes Reminders by default; the choice lasts while the page is open.
     var tasksOpen by remember(topic.id) { mutableStateOf(true) }
+    var notesOpen by remember(topic.id) { mutableStateOf(true) }
     var remindersOpen by remember(topic.id) { mutableStateOf(false) }
     var focusAddTask by remember { mutableStateOf(0) }
     LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("td-new-task") }
@@ -173,6 +176,7 @@ internal fun TopicScreen(
     Div({ classes("td-grid") }) {
         Div({ classes("td-main") }) {
             TopicTasksSection(workspace, topic, tasksOpen, { tasksOpen = !tasksOpen }, onOpenTask)
+            TopicNotesSection(workspace, topic, notesOpen, { notesOpen = !notesOpen }, onOpenNote)
         }
         Aside({
             classes("td-side")

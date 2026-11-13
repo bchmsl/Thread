@@ -23,11 +23,12 @@ interface NoteSyncRemote {
 
     /**
      * Resolves a conflict in one atomic write: marks [discard] as discarded, makes [keep] the Note's newest version,
-     * and saves [copy] as a separate Note (adr/ADR-004-note-revisions-and-conflicts.md, D41).
+     * and saves [copy] as a separate Note (adr/ADR-004-note-revisions-and-conflicts.md, D41). [keep] carries the kept
+     * version's content, so the Note's listed title and preview follow it.
      */
     suspend fun resolveConflict(
         noteId: NoteId,
-        keep: RevisionId?,
+        keep: NoteHead?,
         discard: List<RevisionId>,
         copy: NoteCopy,
     )
@@ -60,6 +61,13 @@ data class NewRevision(
     val title: String,
     val body: RichTextDocument,
     val deviceId: DeviceId,
+)
+
+/** The version a conflict resolution keeps as the Note's newest one, with the content its listing shows. */
+data class NoteHead(
+    val id: RevisionId,
+    val title: String,
+    val body: RichTextDocument,
 )
 
 /**

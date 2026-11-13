@@ -152,6 +152,18 @@ internal fun TopicTag(
     }
 }
 
+/** A Topic's tag that is not a link, for use inside another link (v3 T.topicTag with plain). */
+@Composable
+internal fun PlainTopicTag(topic: Topic) {
+    Span({
+        classes("ttag")
+        attr("style", topicStyle(topic.color))
+    }) {
+        TopicHex(topic.name, topic.color, HexSize.Xs)
+        Span { Text(topic.name) }
+    }
+}
+
 /**
  * The Topic's personal Task progress (v3 T.progress): one segment per Task, done ones first, or a bar above twelve.
  * Linked Jira tickets never count (D21).

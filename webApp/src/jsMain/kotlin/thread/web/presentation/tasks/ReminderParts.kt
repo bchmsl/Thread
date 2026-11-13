@@ -23,6 +23,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
 import org.jetbrains.compose.web.dom.TimeInput
+import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.REMINDER_TEXT_MAX_LENGTH
 import thread.domain.reminder.Reminder
 import thread.domain.reminder.ReminderTarget
@@ -61,10 +62,13 @@ internal fun targetInfo(
                 ReminderTargetInfo(TargetKind.Task, task.title, task.topicId?.let { workspace.topic(it.value) })
             }
         TargetKind.Topic -> workspace.topic(target.id)?.let { ReminderTargetInfo(TargetKind.Topic, it.name, it) }
-        TargetKind.Note -> null
+        TargetKind.Note ->
+            workspace.note(target.id)?.let { note ->
+                ReminderTargetInfo(TargetKind.Note, note.title.ifBlank { UNTITLED_NOTE }, workspace.topicsOf(note.id).firstOrNull())
+            }
     }
 
-/** The v3 "New reminder" dialog for a Task or Topic: day, time (15:00 by default) and text. */
+/** The v3 "New reminder" dialog for a Task, Topic or Note: day, time (15:00 by default) and text. */
 @Composable
 internal fun ReminderDialog(
     workspace: WorkspaceModel,

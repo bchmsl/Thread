@@ -175,3 +175,13 @@ Status: **provisional**. Written in Phase 7 while the owner was away. Details: A
 - Inbox is a flag on the Task. Triage clears it, and sets the Topic when linking. Nothing is copied or deleted.
 - Trash is `deletedAt`; Undo of a fresh capture writes `discarded`. Nothing is hard-deleted.
 - `prefs/main` gains `keepCompleted` (default true) and `timeZone`.
+
+## Phase 8 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 8 while the owner was away. Details: ADR-011 (Proposed).
+
+- The Note head document `users/{uid}/notes/{id}` is also the Notes listing. The NoteSyncer writes `title`, `preview` (280 characters of plain text), `headRevisionId` and `deletedAt`. The workspace store writes `inbox`, `discarded`, `createdAt` and `updatedAt`. Both use merge writes of their own fields only.
+- Topic links are `users/{uid}/topicNoteLinks/{topicId}_{noteId}` with `linked` true or false. The id comes from the pair, so linking twice is one document. Unlinking never deletes the Note or the link document.
+- D39: a Note made outside a Topic has `inbox = true`. Linking any Topic clears it. Unlinking every Topic leaves the Note standalone.
+- Conflict copies get the same Topic links as the Note they came from.
+- The Notes index searches the title and the preview only.

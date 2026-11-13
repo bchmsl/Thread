@@ -3,6 +3,7 @@ package thread.web.presentation.notes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +33,7 @@ import thread.domain.note.DraftAutosaver
 import thread.domain.note.LocalDraft
 import thread.domain.note.LocalDraftStore
 import thread.domain.note.LocalSaveStatus
+import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
 import thread.domain.note.NoteSyncState
 import thread.domain.note.NoteSyncer
@@ -59,6 +61,14 @@ internal fun NoteSession(
     ready: NoteLoad.Ready,
     toasts: ToastState,
     onCompareShown: (Boolean) -> Unit,
+    focusTitle: Boolean = false,
+    onTitleChange: (String) -> Unit = {},
+    onSaveState: (NoteSaveState) -> Unit = {},
+    onReminder: (() -> Unit)? = null,
+    onTrashed: (title: String) -> Unit = { toasts.show("Moved to Trash: ${it.ifBlank { UNTITLED }}") },
+    onResolved: (ConflictChoice, copyId: NoteId) -> Unit = { choice, _ -> toasts.show(resolvedText(choice)) },
+    filing: @Composable () -> Unit = {},
+    syncedAt: String? = null,
 ) {
     // Not tied to the composition: the last write, started when the note is closed, must still finish.
     val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main) }
@@ -90,6 +100,8 @@ internal fun NoteSession(
     val status by autosaver.status.collectAsState()
     val sync: NoteSyncState? = syncer?.state?.collectAsState()?.value
     val saveState = noteSaveState(status, sync, online)
+    SideEffect { onSaveState(saveState) }
+    LaunchedEffect(title) { onTitleChange(title) }
 
     DisposableEffect(autosaver, syncer) {
         syncer?.start()
@@ -114,6 +126,13 @@ internal fun NoteSession(
         onDispose { removeUnloadWarning?.invoke() }
     }
     LaunchedEffect(title, titleElement) { titleElement?.let(::fitHeight) }
+    // A Note made a moment ago opens with its title ready for typing (v3 openNote(id, focusTitle)).
+    var titleFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(titleElement) {
+        val element = titleElement ?: return@LaunchedEffect
+        if (focusTitle && !titleFocused && title.isEmpty()) element.focus()
+        titleFocused = true
+    }
     val conflict = sync?.conflict
     LaunchedEffect(conflict == null) { if (conflict == null) comparing = false }
     val showCompare = comparing && conflict != null
@@ -136,18 +155,14 @@ internal fun NoteSession(
     }
 
     fun keep(choice: ConflictChoice) {
-        if (syncer?.resolveConflict(choice) == null) {
+        val copyId = syncer?.resolveConflict(choice)
+        if (copyId == null) {
             toasts.show("This device's version is still on its way to the server. Try again in a moment.")
             return
         }
         comparing = false
-        toasts.show(
-            when (choice) {
-                ConflictChoice.KeepThisDevice -> "Kept this device's version. The other one is in Trash."
-                ConflictChoice.KeepOther -> "Kept the other device's version. Yours is in Trash."
-                ConflictChoice.KeepBoth -> "Kept both. The other device's copy is a second note."
-            },
-        )
+        (document.getElementById("npane") as? HTMLElement)?.focus()
+        onResolved(choice, copyId)
     }
 
     // Without a stored draft, the content on screen is only a placeholder. The server's version comes first, so
@@ -195,8 +210,19 @@ internal fun NoteSession(
         }
     }
     Div({ classes("pagebar") }) {
-        SaveStatus(saveState, editorFailed = editorFailure != null)
+        SaveStatus(saveState, editorFailed = editorFailure != null, syncedAt = syncedAt)
         Span({ classes("pagebar__sp") })
+        if (onReminder != null && sync?.inTrash != true) {
+            Button({
+                classes("btn", "btn--text", "btn--sm")
+                id("note-rem")
+                type(ButtonType.Button)
+                onClick { onReminder() }
+            }) {
+                IconView(Icon.Bell, 15)
+                Text("Reminder")
+            }
+        }
         if (syncer != null && sync?.inTrash != true) {
             Button({
                 classes("btn", "btn--text", "btn--sm", "btn--danger-text")
@@ -204,7 +230,7 @@ internal fun NoteSession(
                 type(ButtonType.Button)
                 onClick {
                     syncer.setInTrash(true)
-                    toasts.show("Moved to Trash: ${title.ifBlank { UNTITLED }}")
+                    onTrashed(title)
                 }
             }) {
                 IconView(Icon.Trash, 15)
@@ -216,6 +242,7 @@ internal fun NoteSession(
         classes("page")
         attr("aria-label", "Note")
     }) {
+        filing()
         H2({ classes("vh") }) { Text("Note: ${title.ifBlank { UNTITLED }}") }
         Label("note-title", { classes("vh") }) { Text("Note title") }
         TextArea(title) {
@@ -271,8 +298,9 @@ internal fun NoteSession(
 private fun SaveStatus(
     state: NoteSaveState,
     editorFailed: Boolean,
+    syncedAt: String?,
 ) {
-    val view = if (editorFailed) StatusView(Icon.Alert, "Needs attention", "Editing is off", "tone-bad") else statusView(state)
+    val view = if (editorFailed) StatusView(Icon.Alert, "Needs attention", "Editing is off", "tone-bad") else statusView(state, syncedAt)
     P({
         classes("savest", view.tone)
         id("nsave")
@@ -286,15 +314,19 @@ private fun SaveStatus(
     }
 }
 
-/** The phase plan's five labels, with the v3 notes page's detail line. */
-private fun statusView(state: NoteSaveState): StatusView =
+/** The phase plan's five labels, with the v3 notes page's detail line. [syncedAt] is when the server copy last changed. */
+private fun statusView(
+    state: NoteSaveState,
+    syncedAt: String?,
+): StatusView =
     when (state) {
         NoteSaveState.Saving -> StatusView(Icon.Device, "Saving locally", null, "tone-busy")
         NoteSaveState.LocalFailed -> StatusView(Icon.Alert, "Needs attention", "Not saved on this device", "tone-bad")
         NoteSaveState.LocalOnly -> StatusView(Icon.Device, "Saved locally", "Local only, no sync", "tone-warn")
         NoteSaveState.Offline -> StatusView(Icon.Device, "Saved locally", "Syncs when online", "tone-warn")
         NoteSaveState.Syncing -> StatusView(Icon.CloudUp, "Syncing", "Saved locally", "tone-busy")
-        NoteSaveState.Synced -> StatusView(Icon.CloudCheck, "Synced", "On this device and the server", "tone-ok")
+        NoteSaveState.Synced ->
+            StatusView(Icon.CloudCheck, "Synced", "On this device and the server" + syncedAt?.let { ", $it" }.orEmpty(), "tone-ok")
         NoteSaveState.SyncFailed -> StatusView(Icon.Alert, "Needs attention", "Saved locally, sync failed", "tone-bad")
         NoteSaveState.Conflict -> StatusView(Icon.Compare, "Needs attention", "Conflict with another device", "tone-bad")
     }
@@ -447,6 +479,13 @@ internal fun BannerButton(
         Text(label)
     }
 }
+
+private fun resolvedText(choice: ConflictChoice): String =
+    when (choice) {
+        ConflictChoice.KeepThisDevice -> "Kept this device's version. The other one is in Trash."
+        ConflictChoice.KeepOther -> "Kept the other device's version. Yours is in Trash."
+        ConflictChoice.KeepBoth -> "Kept both. The other device's copy is a second note."
+    }
 
 private fun fitHeight(textArea: HTMLElement) {
     textArea.style.height = "auto"

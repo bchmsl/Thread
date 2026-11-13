@@ -11,6 +11,7 @@ import thread.domain.account.AccountId
 import thread.domain.note.DeviceId
 import thread.domain.note.NewRevision
 import thread.domain.note.NoteCopy
+import thread.domain.note.NoteHead
 import thread.domain.note.NoteId
 import thread.domain.note.NoteRevision
 import thread.domain.note.NoteSyncRejectedException
@@ -18,14 +19,18 @@ import thread.domain.note.NoteSyncRemote
 import thread.domain.note.RemoteNote
 import thread.domain.note.RevisionHistory
 import thread.domain.note.RevisionId
+import thread.domain.note.RichTextDocument
 import thread.domain.note.RichTextFormatException
 import thread.domain.note.RichTextJson
+import thread.domain.note.notePreview
 
 /**
  * [NoteSyncRemote] on Cloud Firestore for one account (adr/ADR-004-note-revisions-and-conflicts.md).
  *
- * - `users/{uid}/notes/{noteId}`: `{title, headRevisionId, updatedAt, schemaVersion: 1, deletedAt?, copiedFrom?}`.
- *   `deletedAt` set means the Note is in Trash.
+ * - `users/{uid}/notes/{noteId}`: `{title, preview, headRevisionId, updatedAt, schemaVersion: 1, deletedAt?, copiedFrom?}`.
+ *   `deletedAt` set means the Note is in Trash. `title` and `preview` follow the head version, for the Notes listing
+ *   (adr/ADR-011-notes-in-the-workspace.md). The workspace store writes the other fields of this document (`inbox`,
+ *   `discarded`, `createdAt`); writes here never name them, and merges keep them.
  * - `users/{uid}/notes/{noteId}/revisions/{revisionId}`: `{parentRevisionId, title, body, schemaVersion: 1, deviceId,
  *   createdAt, discardedAt?}`. `body` is the RichText JSON string. Revisions are never deleted.
  *
@@ -86,13 +91,13 @@ class FirestoreNoteSyncRemote internal constructor(
         val data = revisionData(revision)
         if (rejectWritesForTesting()) data.rejectedForTesting = true
         batch.set(revisionRef(noteId, revision.id), data)
-        batch.set(noteRef(noteId), headData(revision.id, revision.title), merge())
+        batch.set(noteRef(noteId), headData(revision.id, revision.title, revision.body), merge())
         commit(batch)
     }
 
     override suspend fun resolveConflict(
         noteId: NoteId,
-        keep: RevisionId?,
+        keep: NoteHead?,
         discard: List<RevisionId>,
         copy: NoteCopy,
     ) {
@@ -102,16 +107,10 @@ class FirestoreNoteSyncRemote internal constructor(
             change.discardedAt = serverTimestamp()
             batch.update(revisionRef(noteId, id), change)
         }
-        if (keep != null) {
-            val head = newJsObject()
-            head.headRevisionId = keep.value
-            head.updatedAt = serverTimestamp()
-            head.schemaVersion = SCHEMA_VERSION
-            batch.set(noteRef(noteId), head, merge())
-        }
+        if (keep != null) batch.set(noteRef(noteId), headData(keep.id, keep.title, keep.body), merge())
         val first = copy.firstRevision
         batch.set(revisionRef(copy.id, first.id), revisionData(first))
-        val copyNote = headData(first.id, first.title)
+        val copyNote = headData(first.id, first.title, first.body)
         copyNote.deletedAt = if (copy.inTrash) serverTimestamp() else null
         val copiedFrom = newJsObject()
         copiedFrom.noteId = noteId.value
@@ -168,9 +167,11 @@ class FirestoreNoteSyncRemote internal constructor(
     private fun headData(
         head: RevisionId,
         title: String,
+        body: RichTextDocument,
     ): dynamic {
         val data = newJsObject()
         data.title = title
+        data.preview = notePreview(body)
         data.headRevisionId = head.value
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION

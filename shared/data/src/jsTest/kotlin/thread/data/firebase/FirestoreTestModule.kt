@@ -12,6 +12,12 @@ internal external fun setDoc(
     data: dynamic,
 ): Promise<Unit>
 
+internal external fun setDoc(
+    reference: DocumentReference,
+    data: dynamic,
+    options: dynamic,
+): Promise<Unit>
+
 internal external fun updateDoc(
     reference: DocumentReference,
     data: dynamic,

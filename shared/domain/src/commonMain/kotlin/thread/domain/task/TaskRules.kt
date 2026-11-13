@@ -136,7 +136,7 @@ fun todayTasks(
     )
 }
 
-/** Tasks waiting in Inbox, newest first (v3 `inboxItems`). Notes join in Phase 8. */
+/** Tasks waiting in Inbox, newest first (v3 `inboxItems`). Notes in Inbox: `inboxNotes`. */
 fun inboxTasks(tasks: List<Task>): List<Task> = liveTasks(tasks).filter { it.inbox }.sortedWith(CREATION_ORDER.reversed())
 
 /** Oldest first. A Task whose creation time is not known yet is the newest. */

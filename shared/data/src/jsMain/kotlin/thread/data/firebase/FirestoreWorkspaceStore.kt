@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import thread.data.local.newJsObject
 import thread.domain.account.AccountId
+import thread.domain.note.NoteId
+import thread.domain.note.NoteSummary
+import thread.domain.note.NoteTopicLink
 import thread.domain.reminder.Reminder
 import thread.domain.reminder.ReminderId
 import thread.domain.reminder.ReminderTarget
@@ -51,6 +54,11 @@ class WorkspaceReadException(
  * - `users/{uid}/reminders/{reminderId}`: `{at, zone, text, targetKind, targetId, dismissedAt, createdAt, updatedAt,
  *   deletedAt, schemaVersion: 1}`.
  * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, updatedAt, schemaVersion: 1}`.
+ * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
+ *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
+ *   [FirestoreNoteSyncRemote], and the merge keeps them.
+ * - `users/{uid}/topicNoteLinks/{topicId}_{noteId}`: `{topicId, noteId, linked, updatedAt, schemaVersion: 1}`.
+ *   Unlinking writes `linked: false`; the document stays.
  *
  * The Firestore persistent cache is the device copy and the outbox. A write goes into it at once, also offline, and
  * the snapshot metadata says whether the server acknowledged it. A refused write is dropped from the cache by the SDK;
@@ -82,14 +90,15 @@ class FirestoreWorkspaceStore internal constructor(
             var topics: QuerySnapshot? = null
             var tasks: QuerySnapshot? = null
             var reminders: QuerySnapshot? = null
+            var notes: QuerySnapshot? = null
+            var links: QuerySnapshot? = null
             var prefs: DocumentSnapshot? = null
             val emitWhenComplete = {
-                val s = statuses
-                val t = topics
-                val k = tasks
-                val r = reminders
+                val collections = listOf(statuses, topics, tasks, reminders, notes, links)
                 val p = prefs
-                if (s != null && t != null && k != null && r != null && p != null) trySend(toWorkspaceData(s, t, k, r, p))
+                if (p != null && collections.all { it != null }) {
+                    trySend(toWorkspaceData(Snapshots(statuses!!, topics!!, tasks!!, reminders!!, notes!!, links!!, p)))
+                }
             }
             val stop = { error: FirestoreError ->
                 close(WorkspaceReadException("Listening failed (${error.code})"))
@@ -117,6 +126,16 @@ class FirestoreWorkspaceStore internal constructor(
                     reminders = it
                     emitWhenComplete()
                 }, stop)
+            val stopNotes =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, NOTES), options, {
+                    notes = it
+                    emitWhenComplete()
+                }, stop)
+            val stopLinks =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, LINKS), options, {
+                    links = it
+                    emitWhenComplete()
+                }, stop)
             val stopPrefs =
                 onDocumentSnapshot(prefsRef(), options, {
                     prefs = it
@@ -127,6 +146,8 @@ class FirestoreWorkspaceStore internal constructor(
                 stopTopics()
                 stopTasks()
                 stopReminders()
+                stopNotes()
+                stopLinks()
                 stopPrefs()
             }
         }.conflate()
@@ -143,6 +164,8 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutPrefs -> prefsData(write.prefs, write.before)
                     is WorkspaceWrite.PutTask -> taskData(write.task, write.isNew, write.before)
                     is WorkspaceWrite.PutReminder -> reminderData(write.reminder, write.isNew, write.before)
+                    is WorkspaceWrite.PutNote -> noteData(write.note, write.isNew, write.before)
+                    is WorkspaceWrite.PutNoteLink -> linkData(write.link)
                 }
             if (reject) data.rejectedForTesting = true
             batch.set(reference(write), data, merge())
@@ -158,6 +181,8 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutPrefs -> prefsRef()
             is WorkspaceWrite.PutTask -> doc(firestore, USERS, accountId.value, TASKS, write.task.id.value)
             is WorkspaceWrite.PutReminder -> doc(firestore, USERS, accountId.value, REMINDERS, write.reminder.id.value)
+            is WorkspaceWrite.PutNote -> doc(firestore, USERS, accountId.value, NOTES, write.note.id.value)
+            is WorkspaceWrite.PutNoteLink -> doc(firestore, USERS, accountId.value, LINKS, write.link.id)
         }
 
     private fun prefsRef() = doc(firestore, USERS, accountId.value, PREFS, PREFS_ID)
@@ -255,6 +280,32 @@ class FirestoreWorkspaceStore internal constructor(
         return data
     }
 
+    /** Only the filing fields. The title, preview, head and Trash state are the note sync's, and the merge keeps them. */
+    private fun noteData(
+        note: NoteSummary,
+        isNew: Boolean,
+        before: NoteSummary?,
+    ): dynamic {
+        val data = newJsObject()
+        val base = before.takeUnless { isNew }
+        if (base == null || base.inbox != note.inbox) data.inbox = note.inbox
+        if ((base == null && note.discarded) || (base != null && base.discarded != note.discarded)) data.discarded = note.discarded
+        if (isNew) data.createdAt = serverTimestamp()
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
+    private fun linkData(link: NoteTopicLink): dynamic {
+        val data = newJsObject()
+        data.topicId = link.topicId.value
+        data.noteId = link.noteId.value
+        data.linked = link.linked
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
     private fun merge(): dynamic {
         val options = newJsObject()
         options.merge = true
@@ -268,36 +319,47 @@ class FirestoreWorkspaceStore internal constructor(
         const val PREFS = "prefs"
         const val TASKS = "tasks"
         const val REMINDERS = "reminders"
+        const val NOTES = "notes"
+        const val LINKS = "topicNoteLinks"
         const val PREFS_ID = "main"
         const val SCHEMA_VERSION = 1
     }
 }
 
-private fun toWorkspaceData(
-    statuses: QuerySnapshot,
-    topics: QuerySnapshot,
-    tasks: QuerySnapshot,
-    reminders: QuerySnapshot,
-    prefs: DocumentSnapshot,
-): WorkspaceData {
+private class Snapshots(
+    val statuses: QuerySnapshot,
+    val topics: QuerySnapshot,
+    val tasks: QuerySnapshot,
+    val reminders: QuerySnapshot,
+    val notes: QuerySnapshot,
+    val links: QuerySnapshot,
+    val prefs: DocumentSnapshot,
+)
+
+private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
+    val statuses = snapshots.statuses
+    val prefs = snapshots.prefs
     val decodedStatuses = statuses.docs.map(::decodeStatus)
-    val decodedTopics = topics.docs.map(::decodeTopic)
-    val decodedTasks = tasks.docs.map(::decodeTask)
-    val decodedReminders = reminders.docs.map(::decodeReminder)
-    val all = listOf(statuses, topics, tasks, reminders)
+    val decodedTopics = snapshots.topics.docs.map(::decodeTopic)
+    val decodedTasks = snapshots.tasks.docs.map(::decodeTask)
+    val decodedReminders = snapshots.reminders.docs.map(::decodeReminder)
+    val decodedNotes = snapshots.notes.docs.map(::decodeNote)
+    val decodedLinks = snapshots.links.docs.map(::decodeLink)
+    val all = listOf(statuses, snapshots.topics, snapshots.tasks, snapshots.reminders, snapshots.notes, snapshots.links)
+    val decoded = listOf(decodedStatuses, decodedTopics, decodedTasks, decodedReminders, decodedNotes, decodedLinks)
     return WorkspaceData(
         statuses = decodedStatuses.filterNotNull(),
         topics = decodedTopics.filterNotNull(),
         tasks = decodedTasks.filterNotNull(),
         reminders = decodedReminders.filterNotNull(),
+        notes = decodedNotes.filterNotNull(),
+        noteLinks = decodedLinks.filterNotNull(),
         prefs = decodePrefs(prefs),
         prefsStored = prefs.exists(),
         // Only the server can say that an account has no status at all. The cache may just not have them yet.
         needsSeed = !statuses.metadata.fromCache && statuses.docs.isEmpty(),
         pendingWrites = all.any { it.metadata.hasPendingWrites } || prefs.metadata.hasPendingWrites,
-        unreadable =
-            decodedStatuses.count { it == null } + decodedTopics.count { it == null } +
-                decodedTasks.count { it == null } + decodedReminders.count { it == null },
+        unreadable = decoded.sumOf { list -> list.count { it == null } },
     )
 }
 
@@ -382,6 +444,36 @@ private fun decodeReminder(snapshot: DocumentSnapshot): Reminder? {
         deleted = data.deletedAt != null,
         createdAtMillis = millisOrNull(data.createdAt),
     )
+}
+
+/**
+ * The Note listing in [snapshot], or null when this app cannot read it. The note sync writes the title, preview and
+ * head and the workspace writes the filing fields, so any of them may be missing for a moment; each has a default.
+ */
+private fun decodeNote(snapshot: DocumentSnapshot): NoteSummary? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    return NoteSummary(
+        id = NoteId(snapshot.id),
+        title = stringOrNull(data.title).orEmpty(),
+        preview = stringOrNull(data.preview).orEmpty(),
+        inbox = data.inbox == true,
+        inTrash = data.deletedAt != null,
+        discarded = data.discarded == true,
+        createdAtMillis = millisOrNull(data.createdAt),
+        updatedAtMillis = millisOrNull(data.updatedAt),
+        pendingWrites = snapshot.metadata.hasPendingWrites,
+    )
+}
+
+/** The Topic link in [snapshot], or null when this app cannot read it or its id does not match its pair. */
+private fun decodeLink(snapshot: DocumentSnapshot): NoteTopicLink? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val topicId = stringOrNull(data.topicId)?.takeIf { it.isNotBlank() } ?: return null
+    val noteId = stringOrNull(data.noteId)?.takeIf { it.isNotBlank() } ?: return null
+    val linked = booleanOrNull(data.linked) ?: return null
+    return NoteTopicLink(TopicId(topicId), NoteId(noteId), linked).takeIf { it.id == snapshot.id }
 }
 
 /** Missing or unknown values fall back to the defaults, field by field. */

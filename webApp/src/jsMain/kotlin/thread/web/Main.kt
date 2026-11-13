@@ -4,11 +4,17 @@ import org.jetbrains.compose.web.renderComposable
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
+import thread.data.firebase.FirestoreNoteSyncRemote
 import thread.data.firebase.FirestoreWorkspaceStore
+import thread.data.local.IndexedDbDraftStore
+import thread.data.local.browserDeviceId
+import thread.data.local.randomRevisionId
 import thread.data.local.randomWorkspaceId
+import thread.domain.note.LocalDraftStore
 import thread.web.platform.registerOfflineShell
 import thread.web.presentation.App
 import thread.web.presentation.AppServices
+import thread.web.presentation.notes.NoteServices
 
 /**
  * Composition root: the only place that picks data implementations. Firebase runs against the local emulators and the
@@ -27,10 +33,30 @@ fun main() {
             usesEmulators = backend.usesEmulators,
             workspaceStore = { accountId -> FirestoreWorkspaceStore(backend, accountId) { testFlags.failServerWrites } },
             newId = ::randomWorkspaceId,
+            notes = noteServices(backend, testFlags),
         )
     renderComposable(rootElementId = "root") {
         App(services)
     }
+}
+
+/** One draft store per account on this device, and the server side of the account's Notes. */
+private fun noteServices(
+    backend: FirebaseBackend,
+    testFlags: TestFlags,
+): NoteServices {
+    val draftStores = mutableMapOf<String, LocalDraftStore>()
+    return NoteServices(
+        draftStore = { accountId ->
+            val name = accountId?.let { IndexedDbDraftStore.databaseNameFor(it) } ?: IndexedDbDraftStore.DEFAULT_DATABASE_NAME
+            draftStores.getOrPut(name) { IndexedDbDraftStore(name, failWritesForTesting = { testFlags.failLocalSaves }) }
+        },
+        syncRemote = { accountId ->
+            FirestoreNoteSyncRemote(backend, accountId, rejectWritesForTesting = { testFlags.failServerWrites })
+        },
+        deviceId = browserDeviceId(),
+        newRevisionId = ::randomRevisionId,
+    )
 }
 
 private fun firebaseProject(): FirebaseProjectConfig? =

@@ -20,6 +20,9 @@ import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountId
 import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
+import thread.domain.note.NewRevision
+import thread.domain.note.NoteId
+import thread.domain.note.RichTextDocument
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.task.Task
@@ -27,6 +30,11 @@ import thread.domain.topic.TopicId
 import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.notes.NOTE_PARAM
+import thread.web.presentation.notes.NoteServices
+import thread.web.presentation.notes.NotesScreen
+import thread.web.presentation.notes.launchNoteWrite
+import thread.web.presentation.notes.notePlace
 import thread.web.presentation.settings.PreferencesBlock
 import thread.web.presentation.settings.SettingsScreen
 import thread.web.presentation.settings.StatusesBlock
@@ -56,6 +64,8 @@ class AppServices(
     val workspaceStore: (AccountId) -> WorkspaceStore,
     /** A new random id with this prefix, for entities made on this device. */
     val newId: (prefix: String) -> String,
+    /** Note drafts on this device and Note sync with the server. */
+    val notes: NoteServices,
 )
 
 @Composable
@@ -121,10 +131,12 @@ private fun Workspace(
     // The Task sheet rides on any page as `?task=`, so the page under it is the place without that parameter.
     val page = place.with(TASK_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
+    // Opening another Note keeps the Notes view; the Notes screen moves focus itself.
+    val focusPlace = if (view == View.Notes) page.with(NOTE_PARAM, null) else page
     val title = if (place.head == "topic") placeTopicId?.let(workspace::topic)?.name ?: "Topic" else view.label
     LaunchedEffect(title) { document.title = "$title | Thread" }
     var firstPlace by remember { mutableStateOf(true) }
-    LaunchedEffect(page) {
+    LaunchedEffect(focusPlace) {
         // Announce a new view by moving focus to its title, but not on first load.
         if (firstPlace) {
             firstPlace = false
@@ -148,12 +160,12 @@ private fun Workspace(
     }
     val syncState = syncCenter.overall(online)
     val openTask: (Task) -> Unit = { task -> router.replace(taskPlace(router.place, task.id)) }
+    val openNote: (NoteId) -> Unit = { id -> router.go(notePlace(id)) }
     val openTarget: (ReminderTarget) -> Unit = { target ->
         when (target.kind) {
             TargetKind.Task -> workspace.task(target.id)?.let(openTask)
             TargetKind.Topic -> workspace.topic(target.id)?.let { router.go(topicPlace(it)) }
-            // Notes arrive in Phase 8.
-            TargetKind.Note -> Unit
+            TargetKind.Note -> router.go(notePlace(NoteId(target.id)))
         }
     }
 
@@ -172,9 +184,11 @@ private fun Workspace(
                 tabIndex(-1)
             }) {
                 when {
-                    place.head == "topic" -> TopicScreen(workspace, placeTopicId, openTask, openTarget)
+                    place.head == "topic" -> TopicScreen(workspace, placeTopicId, openTask, openTarget, openNote)
                     view == View.Today -> TodayScreen(workspace, place.param("add") == "1", openTask, openTarget)
-                    view == View.Inbox -> InboxScreen(workspace, router, capture, openTask)
+                    view == View.Inbox -> InboxScreen(workspace, router, capture, openTask, openNote)
+                    view == View.Notes ->
+                        NotesScreen(workspace, router, services.notes, signedIn.accountId, place.param(NOTE_PARAM), syncCenter)
                     view == View.Topics -> TopicsScreen(workspace, place, router, capture)
                     view == View.Settings ->
                         SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
@@ -187,7 +201,7 @@ private fun Workspace(
         }
         StatusLine(
             current = view,
-            inboxCount = workspace.inbox.size,
+            inboxCount = workspace.inboxCount,
             sync = syncText(syncState),
             capture = capture,
             destinations = workspace.topics.map { CaptureDestination(it.id.value, it.name) },
@@ -221,8 +235,27 @@ private fun Workspace(
                                 )
                             }
                         }
-                    // Notes from capture arrive in Phase 8.
-                    else -> toasts.show("Capture is not connected yet.")
+                    type == CaptureType.Note -> {
+                        val topicId = destination?.let(::TopicId)
+                        val note = workspace.createNote(topicId)
+                        if (note == null) {
+                            toasts.show("Your workspace is still loading. Try again in a moment.")
+                        } else {
+                            capture.title = ""
+                            capture.requestFocus(flash = false)
+                            // The title is the Note's first version; the Note opens with it on every device.
+                            val first =
+                                NewRevision(services.notes.newRevisionId(), null, title, RichTextDocument.EMPTY, services.notes.deviceId)
+                            launchNoteWrite(toasts, "The note “$title” was not saved. The server refused it.") {
+                                services.notes.syncRemote(signedIn.accountId).push(note.id, first)
+                            }
+                            val topic = topicId?.let { workspace.topic(it.value) }
+                            toasts.show(
+                                if (topic != null) "Note added to ${topic.name}" else "Note added to Inbox",
+                                open = { openNote(note.id) },
+                            )
+                        }
+                    }
                 }
             },
             onOpenViews = { viewsOpen = true },
@@ -249,7 +282,7 @@ private fun Workspace(
         if (viewsOpen) {
             ViewsSheet(
                 current = view,
-                inboxCount = workspace.inbox.size,
+                inboxCount = workspace.inboxCount,
                 onSearch = {
                     viewsOpen = false
                     searchOpen = true
