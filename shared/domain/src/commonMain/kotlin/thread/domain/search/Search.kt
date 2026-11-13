@@ -1,6 +1,7 @@
 package thread.domain.search
 
 import thread.domain.external.JiraIssueSummary
+import thread.domain.external.PullRequestSummary
 import thread.domain.note.NoteSummary
 import thread.domain.task.Task
 import thread.domain.topic.Topic
@@ -57,5 +58,26 @@ fun searchJiraCopies(
                 .lowercase()
                 .contains(q) ||
                 it.title.lowercase().contains(q)
+        }.take(SEARCH_GROUP_LIMIT)
+}
+
+/**
+ * Searches the pull requests saved on this device on title, number (`#12` or `12`) or `owner/repo`, ignoring case
+ * (v3 `searchAll`, "Pull requests (downloaded)"). Returns null for a blank [query].
+ */
+fun searchPullRequestCopies(
+    query: String,
+    pullRequests: List<PullRequestSummary>,
+): List<PullRequestSummary>? {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return null
+    val number = q.removePrefix("#").toIntOrNull()
+    return pullRequests
+        .filter {
+            it.title.lowercase().contains(q) ||
+                it.ref.id
+                    .lowercase()
+                    .contains(q) ||
+                it.ref.number == number
         }.take(SEARCH_GROUP_LIMIT)
 }

@@ -43,6 +43,7 @@ import org.jetbrains.compose.web.dom.TextInput
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLTextAreaElement
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.PullRequestRef
 import thread.domain.note.NoteId
 import thread.domain.reminder.ReminderTarget
 import thread.domain.task.Task
@@ -67,20 +68,22 @@ import thread.web.presentation.Place
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.rememberWide
 import thread.web.presentation.tasks.focusById
 import thread.web.presentation.trash.trashPlace
 
 /**
- * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks and Notes, with Jira and
- * Reminders beside them. Pull requests join in Phase 11. A linked ticket opens in a side panel at 1000px and wider.
+ * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks and Notes, with Jira, pull
+ * requests and Reminders beside them. A linked ticket or pull request opens in a side panel at 1000px and wider.
  * A Topic in Trash keeps its page: it says what went with it and offers Restore.
  */
 @Composable
 internal fun TopicScreen(
     workspace: WorkspaceModel,
     jira: JiraModel,
+    gitHub: GitHubModel,
     topicId: String?,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
@@ -118,7 +121,8 @@ internal fun TopicScreen(
     var notesOpen by remember(topic.id) { mutableStateOf(true) }
     var remindersOpen by remember(topic.id) { mutableStateOf(false) }
     var jiraOpen by remember(topic.id) { mutableStateOf(true) }
-    var panelKey by remember(topic.id) { mutableStateOf<JiraIssueKey?>(null) }
+    var prsOpen by remember(topic.id) { mutableStateOf(true) }
+    var panel by remember(topic.id) { mutableStateOf<LinkedPanel?>(null) }
     val wide = rememberWide()
     val scope = rememberCoroutineScope()
     var focusAddTask by remember { mutableStateOf(0) }
@@ -231,29 +235,48 @@ internal fun TopicScreen(
             classes("td-side")
             attr("aria-label", "Linked work and reminders")
         }) {
-            val shown = panelKey
-            if (shown != null && wide) {
-                TopicSidePanel(
-                    workspace,
-                    jira,
-                    topic,
-                    shown,
-                    onOpen = { panelKey = it },
-                    onClose = {
-                        panelKey = null
-                        scope.launch {
-                            delay(16)
-                            (document.querySelector(".xrow__main[data-key=\"${shown.value}\"]") as? HTMLElement)?.focus()
-                        }
-                    },
-                    onGo = onGo,
-                )
-            } else {
-                TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, panelKey?.value) { key ->
-                    if (wide) panelKey = key
-                    wide
+            val shown = panel
+            // Closing the panel puts focus back on the row it was opened from.
+            val closePanel: (String) -> Unit = { selector ->
+                panel = null
+                scope.launch {
+                    delay(16)
+                    (document.querySelector(selector) as? HTMLElement)?.focus()
                 }
-                TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, onOpenTarget)
+            }
+            when {
+                shown is LinkedPanel.Ticket && wide ->
+                    TopicSidePanel(
+                        workspace,
+                        jira,
+                        topic,
+                        shown.key,
+                        onOpen = { panel = LinkedPanel.Ticket(it) },
+                        onClose = { closePanel(".xrow__main[data-key=\"${shown.key.value}\"]") },
+                        onGo = onGo,
+                    )
+                shown is LinkedPanel.Pull && wide ->
+                    TopicPrSidePanel(
+                        workspace,
+                        gitHub,
+                        topic,
+                        shown.ref,
+                        onClose = { closePanel(".xrow__main[data-id=\"${shown.ref.id}\"]") },
+                        onGo = onGo,
+                    )
+                else -> {
+                    val openKey = (shown as? LinkedPanel.Ticket)?.key?.value
+                    TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey) { key ->
+                        if (wide) panel = LinkedPanel.Ticket(key)
+                        wide
+                    }
+                    val openId = (shown as? LinkedPanel.Pull)?.ref?.id
+                    TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId) { ref ->
+                        if (wide) panel = LinkedPanel.Pull(ref)
+                        wide
+                    }
+                    TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, onOpenTarget)
+                }
             }
         }
     }
@@ -482,3 +505,14 @@ internal fun topicProblemText(problem: EditProblem): String =
         EditProblem.NotReady -> "Topics are still loading. Try again in a moment."
         else -> "That change could not be made"
     }
+
+/** What the Topic's side panel shows: a linked Jira ticket or a linked pull request. */
+private sealed interface LinkedPanel {
+    data class Ticket(
+        val key: JiraIssueKey,
+    ) : LinkedPanel
+
+    data class Pull(
+        val ref: PullRequestRef,
+    ) : LinkedPanel
+}

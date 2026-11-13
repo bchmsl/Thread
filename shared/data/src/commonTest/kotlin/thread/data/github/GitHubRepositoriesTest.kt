@@ -214,4 +214,36 @@ class GitHubRepositoriesTest {
 
             assertEquals(PullRequestListPage(emptyList(), 0, false), page)
         }
+
+    @Test
+    fun searchStaysInsideThreadsShareOfTheSearchLimit() =
+        runTest {
+            val transport = syntheticTransport()
+            val lists = lists(transport)
+            val budget = GitHubPullRequestLists.SEARCH_BUDGET_PER_MINUTE
+
+            repeat(budget) { lists.refresh(PullRequestList.Mine, NOW + it).value() }
+            val refused = lists.refresh(PullRequestList.ReviewRequested, NOW + 30_000)
+
+            assertEquals(ExternalResult.Problem(ExternalProblem.RateLimited(NOW + 60_000)), refused)
+            assertEquals(budget, transport.requests.size, "no request goes out once the minute's budget is spent")
+            lists.refresh(PullRequestList.ReviewRequested, NOW + 60_000).value()
+            assertEquals(budget + 1, transport.requests.size)
+        }
+
+    @Test
+    fun allSavedListsTheSavedDetailsNewestFirstAndNothingWhenDisconnected() =
+        runTest {
+            val details = details(syntheticTransport())
+            details.refresh(ref("synthetic-org/synthetic-app#12"), NOW).value()
+            details.refresh(ref("synthetic-org/synthetic-lib#7"), NOW + 1_000).value()
+            store.put("not a pull request id", "x")
+
+            assertEquals(
+                listOf("synthetic-org/synthetic-lib#7", "synthetic-org/synthetic-app#12"),
+                details.allSaved().map { it.value.ref.id },
+            )
+            connections.clearGitHub()
+            assertEquals(emptyList(), details.allSaved())
+        }
 }

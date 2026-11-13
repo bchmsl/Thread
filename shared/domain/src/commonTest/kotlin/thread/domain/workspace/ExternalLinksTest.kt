@@ -3,6 +3,7 @@ package thread.domain.workspace
 import thread.domain.external.JiraCloudId
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraSite
+import thread.domain.external.PullRequestRef
 import thread.domain.topic.SEED_STATUSES
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
@@ -14,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // Every Topic, site and ticket here is SYNTHETIC test data.
@@ -118,5 +120,32 @@ class ExternalLinksTest {
         val entry = trashEntries(trashed).single()
         assertEquals(listOf(ticket), assertIs<TrashEntry.TopicEntry>(entry).externals)
         assertEquals(listOf(alpha.id, beta.id), linkedTopicIdsOf(ticket.id, trashed.externalLinks), "restore is the Topic field only")
+    }
+
+    @Test
+    fun aPullRequestReferenceIsOwnerRepoAndNumberAndReadsBack() {
+        val ref = assertNotNull(PullRequestRef.parse("synthetic-org/synthetic-app#12"))
+        val pull = assertNotNull(gitHubReference(ref))
+
+        assertEquals("github~synthetic-org~synthetic-app~12", pull.id)
+        assertEquals("synthetic-org/synthetic-app", pull.instance)
+        assertEquals("12", pull.key)
+        assertEquals("https://github.com/synthetic-org/synthetic-app/pull/12", pull.url.value)
+        assertEquals(ref, pullRequestRefOf(pull))
+        assertNull(pullRequestRefOf(ticket), "a Jira reference is not a pull request")
+    }
+
+    @Test
+    fun onePullRequestLinkedToTwoTopicsIsStoredOnceAndUnlinkKeepsIt() {
+        val pull = assertNotNull(gitHubReference(assertNotNull(PullRequestRef.parse("synthetic-org/synthetic-app#12"))))
+        val linked = empty.apply(changed(setExternalLinks(pull, listOf(alpha.id, beta.id), empty)).writes)
+        assertEquals(listOf(pull), linked.externalRefs)
+        assertEquals(listOf(pull), referencesOf(beta.id, ExternalProvider.GitHub, linked))
+        assertEquals(emptyList(), referencesOf(beta.id, ExternalProvider.Jira, linked))
+
+        val unlinked = linked.apply(changed(unlinkExternal(pull, alpha.id, linked)).writes)
+        assertEquals(listOf(pull), unlinked.externalRefs, "unlinking never deletes the reference")
+        assertEquals(listOf(beta.id), linkedTopicIdsOf(pull.id, unlinked.externalLinks))
+        assertTrue(unlinked.externalLinks.any { it.topicId == alpha.id && !it.linked })
     }
 }

@@ -306,7 +306,7 @@ internal class WorkspaceModel(
         val slot = maxOf(stored?.topics?.size ?: 0, lastColorSlot + 1)
         val topic =
             newTopic(TopicId(newId("t-")), title.trim().take(TOPIC_NAME_MAX_LENGTH), statuses, slot)
-                ?.copy(leftOff = "Created from ${reference.key}.")
+                ?.copy(leftOff = "Created from ${recordLabel(reference)}.")
                 ?: return TopicCreation.Refused(EditProblem.BlankName)
         lastColorSlot = slot
         store.write(createTopicLinkedTo(topic, reference, current))
@@ -577,3 +577,7 @@ internal fun taskProblemText(problem: EditProblem): String =
         EditProblem.NotReady -> "Your workspace is still loading. Try again in a moment."
         else -> "That change could not be made"
     }
+
+/** How a "where I left off" line names a record: the Jira key, or `owner/repo#number` for a pull request. */
+internal fun recordLabel(reference: ExternalReference): String =
+    if (reference.provider == ExternalProvider.GitHub) "${reference.instance}#${reference.key}" else reference.key

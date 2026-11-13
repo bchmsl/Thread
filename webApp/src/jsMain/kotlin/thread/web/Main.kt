@@ -7,6 +7,8 @@ import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
 import thread.data.firebase.FirestoreNoteSyncRemote
 import thread.data.firebase.FirestoreWorkspaceStore
+import thread.data.github.GitHubPullRequestDetails
+import thread.data.github.GitHubPullRequestLists
 import thread.data.http.FetchHttpTransport
 import thread.data.http.HttpTransport
 import thread.data.jira.JiraIssueRepository
@@ -18,6 +20,8 @@ import thread.data.local.randomRevisionId
 import thread.data.local.randomWorkspaceId
 import thread.data.synthetic.SyntheticConnectionStore
 import thread.data.synthetic.SyntheticHttpTransport
+import thread.data.synthetic.SyntheticScenario
+import thread.domain.external.ConnectionStore
 import thread.domain.note.LocalDraftStore
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
@@ -25,6 +29,7 @@ import thread.web.platform.readSessionFlag
 import thread.web.platform.registerOfflineShell
 import thread.web.presentation.App
 import thread.web.presentation.AppServices
+import thread.web.presentation.external.GitHubServices
 import thread.web.presentation.external.JiraServices
 import thread.web.presentation.notes.NoteServices
 
@@ -41,6 +46,8 @@ fun main() {
     if (backend.usesEmulators) installTestHooks(backend, account, testFlags)
     // SYNTHETIC providers only on the emulators, and only when a check turned them on for this tab.
     val synthetic = backend.usesEmulators && readSessionFlag(SYNTHETIC_PROVIDERS_FLAG)
+    val connections = connectionStore(synthetic)
+    val cache = externalCache(synthetic)
     val services =
         AppServices(
             account = account,
@@ -48,7 +55,8 @@ fun main() {
             workspaceStore = { accountId -> FirestoreWorkspaceStore(backend, accountId) { testFlags.failServerWrites } },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
-            jira = jiraServices(synthetic, testFlags),
+            jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),
+            gitHub = gitHubServices(synthetic, connections, cache, transport(synthetic) { testFlags.gitHubScenario }),
         )
     renderComposable(rootElementId = "root") {
         App(services)
@@ -75,37 +83,45 @@ private fun noteServices(
 }
 
 /**
- * Jira (adr/ADR-006, ADR-008, ADR-013). Real: the browser's fetch, the connection in its own IndexedDB database
- * (thread-connections) and saved copies in another. SYNTHETIC: fixture answers, an in-memory connection and a separate
- * cache database, so fixture data never mixes with real saved copies.
+ * Where the Jira and GitHub connections live (adr/ADR-006, ADR-008). Real: their own IndexedDB database
+ * (thread-connections), written durably. SYNTHETIC: in memory, starting with the fixture connections, never stored.
  */
+private fun connectionStore(synthetic: Boolean): ConnectionStore {
+    if (synthetic) return SyntheticConnectionStore()
+    val database =
+        IndexedDbKeyValueDatabase(
+            IndexedDbKeyValueDatabase.CONNECTIONS,
+            listOf(IndexedDbKeyValueDatabase.CONNECTIONS_STORE),
+            strictDurability = true,
+        )
+    return KeyValueConnectionStore(database.store(IndexedDbKeyValueDatabase.CONNECTIONS_STORE))
+}
+
+/** Saved Jira and GitHub copies. SYNTHETIC copies use a separate database, so fixture data never mixes with real copies. */
+private fun externalCache(synthetic: Boolean): IndexedDbKeyValueDatabase =
+    IndexedDbKeyValueDatabase(
+        if (synthetic) IndexedDbKeyValueDatabase.EXTERNAL_CACHE_SYNTHETIC else IndexedDbKeyValueDatabase.EXTERNAL_CACHE,
+        IndexedDbKeyValueDatabase.EXTERNAL_CACHE_STORES,
+    )
+
+/** The browser's fetch, or SYNTHETIC fixture answers that [scenario] can turn into one failure kind. */
+private fun transport(
+    synthetic: Boolean,
+    scenario: () -> SyntheticScenario,
+): HttpTransport =
+    if (synthetic) {
+        SyntheticHttpTransport(scenario, ::isOnline, ::nowMillis, latencyMillis = 400)
+    } else {
+        FetchHttpTransport()
+    }
+
+/** Jira, read-only (adr/ADR-006, ADR-008, ADR-013). */
 private fun jiraServices(
     synthetic: Boolean,
-    testFlags: TestFlags,
+    connections: ConnectionStore,
+    cache: IndexedDbKeyValueDatabase,
+    transport: HttpTransport,
 ): JiraServices {
-    val transport: HttpTransport =
-        if (synthetic) {
-            SyntheticHttpTransport({ testFlags.jiraScenario }, ::isOnline, ::nowMillis, latencyMillis = 400)
-        } else {
-            FetchHttpTransport()
-        }
-    val connections =
-        if (synthetic) {
-            SyntheticConnectionStore()
-        } else {
-            val database =
-                IndexedDbKeyValueDatabase(
-                    IndexedDbKeyValueDatabase.CONNECTIONS,
-                    listOf(IndexedDbKeyValueDatabase.CONNECTIONS_STORE),
-                    strictDurability = true,
-                )
-            KeyValueConnectionStore(database.store(IndexedDbKeyValueDatabase.CONNECTIONS_STORE))
-        }
-    val cache =
-        IndexedDbKeyValueDatabase(
-            if (synthetic) IndexedDbKeyValueDatabase.EXTERNAL_CACHE_SYNTHETIC else IndexedDbKeyValueDatabase.EXTERNAL_CACHE,
-            IndexedDbKeyValueDatabase.EXTERNAL_CACHE_STORES,
-        )
     val issues = cache.store(IndexedDbKeyValueDatabase.JIRA_ISSUES)
     val meta = cache.store(IndexedDbKeyValueDatabase.JIRA_META)
     val lists = JiraListRepository(connections, transport, meta)
@@ -119,6 +135,28 @@ private fun jiraServices(
         deleteSavedCopies = {
             issues.clear()
             meta.clear()
+        },
+    )
+}
+
+/** GitHub, read-only (adr/ADR-007, ADR-014): the two pull request lists and the pull requests opened here. */
+private fun gitHubServices(
+    synthetic: Boolean,
+    connections: ConnectionStore,
+    cache: IndexedDbKeyValueDatabase,
+    transport: HttpTransport,
+): GitHubServices {
+    val lists = cache.store(IndexedDbKeyValueDatabase.PR_LISTS)
+    val pulls = cache.store(IndexedDbKeyValueDatabase.PULL_REQUESTS)
+    return GitHubServices(
+        isSynthetic = synthetic,
+        name = if (synthetic) "GitHub (synthetic)" else "GitHub",
+        connections = connections,
+        lists = GitHubPullRequestLists(connections, transport, lists),
+        pulls = GitHubPullRequestDetails(connections, transport, pulls),
+        deleteSavedCopies = {
+            lists.clear()
+            pulls.clear()
         },
     )
 }

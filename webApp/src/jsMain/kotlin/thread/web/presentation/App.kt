@@ -23,6 +23,7 @@ import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountId
 import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
+import thread.domain.external.summary
 import thread.domain.note.NewRevision
 import thread.domain.note.NoteId
 import thread.domain.note.RichTextDocument
@@ -30,6 +31,7 @@ import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.search.searchJiraCopies
+import thread.domain.search.searchPullRequestCopies
 import thread.domain.search.searchWorkspace
 import thread.domain.task.Task
 import thread.domain.topic.TopicId
@@ -39,12 +41,17 @@ import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.external.GitHubModel
+import thread.web.presentation.external.GitHubServices
 import thread.web.presentation.external.JiraItemScreen
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraScreen
 import thread.web.presentation.external.JiraServices
+import thread.web.presentation.external.PrItemScreen
+import thread.web.presentation.external.PrScreen
 import thread.web.presentation.external.jiraPlace
 import thread.web.presentation.external.jiraSearchPlace
+import thread.web.presentation.external.prPlace
 import thread.web.presentation.notes.NOTE_PARAM
 import thread.web.presentation.notes.NoteServices
 import thread.web.presentation.notes.NotesScreen
@@ -89,6 +96,8 @@ class AppServices(
     val notes: NoteServices,
     /** Jira, read-only: the real provider or the SYNTHETIC fixtures (adr/ADR-013-jira-in-the-workspace.md). */
     val jira: JiraServices,
+    /** GitHub, read-only: the real provider or the SYNTHETIC fixtures (adr/ADR-014-github-in-the-workspace.md). */
+    val gitHub: GitHubServices,
 )
 
 @Composable
@@ -128,6 +137,7 @@ private fun Workspace(
     val capture = remember { CaptureState(CaptureType.Task) }
     val workspace = remember { WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId) }
     val jira = remember { JiraModel(services.jira) }
+    val gitHub = remember { GitHubModel(services.gitHub) }
     // Wall-clock "now" in the workspace zone, refreshed each minute (ADR-010).
     val now by rememberNow(workspace.prefs.timeZone)
     val online by rememberOnline()
@@ -156,19 +166,22 @@ private fun Workspace(
     val page = place.with(TASK_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
     val jiraItem = place.head == "item" && place.segment(1) == "jira"
-    // Opening another Note, Trash entry or Jira ticket keeps the view; those screens move focus themselves.
+    val prItem = place.head == "item" && place.segment(1) == "pr"
+    // Opening another Note, Trash entry, Jira ticket or pull request keeps the view; those screens move focus themselves.
     val focusPlace =
         when {
-            jiraItem -> page
+            jiraItem || prItem -> page
             view == View.Notes -> page.with(NOTE_PARAM, null)
             view == View.Trash -> page.with(TRASH_PARAM, null)
             view == View.Jira -> View.Jira.place
+            view == View.Prs -> View.Prs.place
             else -> page
         }
     val title =
         when {
             place.head == "topic" -> placeTopicId?.let(workspace::topic)?.name ?: "Topic"
             jiraItem -> place.segment(2) ?: view.label
+            prItem -> place.segment(4)?.let { "#$it" } ?: view.label
             else -> view.label
         }
     LaunchedEffect(title) { document.title = "$title | Thread" }
@@ -183,6 +196,7 @@ private fun Workspace(
     }
     LaunchedEffect(workspace) { workspace.run() }
     LaunchedEffect(jira) { jira.reload() }
+    LaunchedEffect(gitHub) { gitHub.reload() }
     SweepPurgedNotes(workspace, services.notes, signedIn.accountId, online)
     val workspaceReport = workspace.syncReport(online)
     SideEffect { syncCenter.report("workspace", workspaceReport) }
@@ -223,10 +237,13 @@ private fun Workspace(
                 tabIndex(-1)
             }) {
                 when {
-                    place.head == "topic" -> TopicScreen(workspace, jira, placeTopicId, openTask, openTarget, openNote, router::go)
+                    place.head == "topic" ->
+                        TopicScreen(workspace, jira, gitHub, placeTopicId, openTask, openTarget, openNote, router::go)
                     jiraItem -> JiraItemScreen(jira, workspace, router, place)
+                    prItem -> PrItemScreen(gitHub, workspace, router, place)
                     view == View.Jira -> JiraScreen(jira, workspace, router, place)
-                    view == View.Today -> TodayScreen(workspace, place.param("add") == "1", openTask, openTarget)
+                    view == View.Prs -> PrScreen(gitHub, workspace, router, place)
+                    view == View.Today -> TodayScreen(workspace, gitHub, place.param("add") == "1", openTask, openTarget)
                     view == View.Inbox -> InboxScreen(workspace, router, capture, openTask, openNote)
                     view == View.Notes ->
                         NotesScreen(workspace, router, services.notes, signedIn.accountId, place.param(NOTE_PARAM), syncCenter)
@@ -240,10 +257,10 @@ private fun Workspace(
                             place.param(TRASH_PARAM),
                             openTask,
                             openTarget,
-                        ) { reference -> externalLabel(reference, jira) }
+                        ) { reference -> externalLabel(reference, jira, gitHub) }
                     view == View.Settings ->
                         SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
-                            ConnectionsBlock(jira)
+                            ConnectionsBlock(jira, gitHub)
                             StatusesBlock(workspace)
                             PreferencesBlock(workspace, capture)
                         }
@@ -361,7 +378,7 @@ private fun Workspace(
                     },
                 search = { query ->
                     val q = query.trim().lowercase()
-                    searchGroups(query, workspace, jira, openTask = { task ->
+                    searchGroups(query, workspace, jira, gitHub, openTask = { task ->
                         searchOpen = false
                         openTask(task)
                     }) { to ->
@@ -387,13 +404,14 @@ private fun Workspace(
 }
 
 /**
- * The search groups of v3 openSearch for what is on this device: Topics, Tasks, Notes and the Jira tickets saved
- * here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013). Pull requests join in a later phase.
+ * The search groups of v3 openSearch for what is on this device: Topics, Tasks, Notes and the Jira tickets and pull
+ * requests saved here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013, ADR-014).
  */
 private fun searchGroups(
     query: String,
     workspace: WorkspaceModel,
     jira: JiraModel,
+    gitHub: GitHubModel,
     openTask: (Task) -> Unit,
     go: (Place) -> Unit,
 ): List<SearchGroup> {
@@ -434,17 +452,34 @@ private fun searchGroups(
                 }
             },
         ),
+        SearchGroup(
+            "Pull requests (downloaded)",
+            if (!gitHub.connected) {
+                emptyList()
+            } else {
+                searchPullRequestCopies(query, gitHub.saved.values.map { it.value.summary() }).orEmpty().map { pull ->
+                    val repository = "${pull.ref.owner}/${pull.ref.repo}"
+                    SearchOption("${pull.title} #${pull.ref.number}", repository, { IconView(Icon.Pr, 18) }) {
+                        go(prPlace(pull.ref, review = pull.ref in gitHub.reviewRequested))
+                    }
+                }
+            },
+        ),
     )
 }
 
-/** How Trash names a link that comes back with a Topic: the Jira key and title when known, or the PR number. */
+/** How Trash names a link that comes back with a Topic: the key or number, with the title when it is on this device. */
 private fun externalLabel(
     reference: ExternalReference,
     jira: JiraModel,
+    gitHub: GitHubModel,
 ): String =
     when (reference.provider) {
         ExternalProvider.Jira -> jira.summary(reference.key)?.let { "${reference.key} ${it.title}" } ?: reference.key
-        else -> "${reference.instance}#${reference.key}"
+        ExternalProvider.GitHub -> {
+            val id = "${reference.instance}#${reference.key}"
+            gitHub.summary(id)?.let { "$id ${it.title}" } ?: id
+        }
     }
 
 /**

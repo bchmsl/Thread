@@ -2,6 +2,8 @@ package thread.domain.search
 
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueSummary
+import thread.domain.external.PullRequestRef
+import thread.domain.external.PullRequestSummary
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
 import thread.domain.task.Task
@@ -67,5 +69,25 @@ class SearchTest {
         assertEquals(listOf("SYN-200"), searchJiraCopies("syn-200", issues)?.map { it.key.value })
         assertEquals(6, searchJiraCopies("PAYMENT", issues)?.size, "6 per group, like the other groups")
         assertEquals(emptyList(), searchJiraCopies("nothing", issues))
+    }
+
+    @Test
+    fun downloadedPullRequestsMatchOnTitleNumberOrRepository() {
+        fun pr(
+            id: String,
+            title: String,
+        ) = PullRequestSummary(requireNotNull(PullRequestRef.parse(id)), title, "synthetic-me", false, null, null)
+        val prs =
+            listOf(
+                pr("synthetic-org/synthetic-app#12", "SYNTHETIC: Add the offline shell"),
+                pr("synthetic-org/synthetic-lib#7", "SYNTHETIC: Review requested"),
+            )
+
+        assertNull(searchPullRequestCopies(" ", prs))
+        assertEquals(listOf(prs[0]), searchPullRequestCopies("OFFLINE", prs))
+        assertEquals(listOf(prs[1]), searchPullRequestCopies("#7", prs))
+        assertEquals(listOf(prs[0]), searchPullRequestCopies("12", prs))
+        assertEquals(listOf(prs[1]), searchPullRequestCopies("synthetic-lib", prs))
+        assertEquals(emptyList(), searchPullRequestCopies("#99", prs))
     }
 }

@@ -91,3 +91,8 @@ img.ProseMirror-separator {
 @media (max-width: 759px) {
   .cform .fgrid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Phase 11: GitHub. v3 has no draft state, so a draft pull request gets a quiet outlined pill in place of the
+   green Open pill; descriptions are GitHub plain text with its line breaks kept (owner-review-queue, ADR-014). */
+.pill-open--draft { background: transparent; color: var(--text-2); border: 1px solid var(--border-strong); }
+.desc--plain p { white-space: pre-line; overflow-wrap: anywhere; }

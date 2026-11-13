@@ -50,6 +50,8 @@ import thread.web.presentation.SelectBox
 import thread.web.presentation.TaskCreation
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.external.GitHubModel
+import thread.web.presentation.external.ReviewRequestedRail
 import thread.web.presentation.longDate
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.topics.HexSize
@@ -66,6 +68,7 @@ import thread.web.presentation.topics.topicStyle
 @Composable
 internal fun TodayScreen(
     workspace: WorkspaceModel,
+    gitHub: GitHubModel,
     startAdding: Boolean,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
@@ -118,7 +121,7 @@ internal fun TodayScreen(
             attr("aria-label", "Reminders and reviews")
         }) {
             RemindersRail(workspace, onOpenTarget)
-            ReviewsRail()
+            ReviewRequestedRail(gitHub)
         }
     }
     ActiveTopics(workspace)
@@ -270,22 +273,6 @@ private fun RemindersRail(
                 }
             }
         }
-    }
-}
-
-/** Review requests arrive with GitHub (Phase 11). Until then the rail says so instead of showing an empty list. */
-@Composable
-private fun ReviewsRail() {
-    Section({ attr("aria-labelledby", "rv-h") }) {
-        Div({ classes("railsec__head") }) {
-            H2({
-                classes("h2")
-                id("rv-h")
-            }) { Text("Review requested") }
-        }
-        P(
-            { classes("muted") },
-        ) { Text("Pull requests waiting for your review show here once GitHub is connected in a later phase of the build.") }
     }
 }
 

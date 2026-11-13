@@ -14,16 +14,22 @@ import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
 import thread.domain.external.PullRequestRef
+import thread.domain.external.PullRequestSource
 import thread.domain.external.Refreshed
+import thread.domain.external.RequestBudget
 import thread.domain.external.Saved
 
 private const val SCOPE = "github"
 
-/** The two v3 pull request lists from GitHub search (adr/ADR-007). One search request per refresh. */
+/**
+ * The two v3 pull request lists from GitHub search (adr/ADR-007, ADR-014). One search request per refresh, and at most
+ * [SEARCH_BUDGET_PER_MINUTE] a minute: GitHub allows 30, shared with everything else the person runs.
+ */
 class GitHubPullRequestLists(
     private val connections: ConnectionStore,
     transport: HttpTransport,
     private val lists: KeyValueStore,
+    private val searchBudget: RequestBudget = RequestBudget(SEARCH_BUDGET_PER_MINUTE, 60_000),
 ) : ExternalRecordSource<PullRequestList, PullRequestListPage> {
     private val client = GitHubClient(transport)
 
@@ -39,6 +45,7 @@ class GitHubPullRequestLists(
         nowMillis: Long,
     ): ExternalResult<Refreshed<PullRequestListPage>> {
         val connection = connections.gitHub() ?: return ExternalResult.Problem(ExternalProblem.NotConnected)
+        searchBudget.take(nowMillis)?.let { return ExternalResult.Problem(ExternalProblem.RateLimited(it)) }
         val answer =
             when (val result = client.search(connection, key, nowMillis)) {
                 is ExternalResult.Ok -> result.value
@@ -59,6 +66,11 @@ class GitHubPullRequestLists(
             PullRequestList.Mine -> "mine"
             PullRequestList.ReviewRequested -> "review-requested"
         }
+
+    companion object {
+        /** Thread's own share of GitHub's 30 search requests a minute. */
+        const val SEARCH_BUDGET_PER_MINUTE: Int = 10
+    }
 }
 
 /**
@@ -70,10 +82,21 @@ class GitHubPullRequestDetails(
     private val connections: ConnectionStore,
     transport: HttpTransport,
     private val details: KeyValueStore,
-) : ExternalRecordSource<PullRequestRef, PullRequestDetail> {
+) : PullRequestSource {
     private val client = GitHubClient(transport)
 
     override suspend fun isConnected(): Boolean = connections.gitHub() != null
+
+    override suspend fun allSaved(): List<Saved<PullRequestDetail>> {
+        if (connections.gitHub() == null) return emptyList()
+        return details
+            .all()
+            .mapNotNull { (id, raw) ->
+                val ref = PullRequestRef.parse(id) ?: return@mapNotNull null
+                val (savedAt, bundle) = SavedRecord.decode(raw, SCOPE) ?: return@mapNotNull null
+                GitHubJson.detail(bundle, ref)?.let { Saved(it, savedAt) }
+            }.sortedByDescending { it.savedAtMillis }
+    }
 
     override suspend fun readSaved(key: PullRequestRef): Saved<PullRequestDetail>? {
         val (savedAt, bundle) = SavedRecord.decode(details.get(key.id) ?: return null, SCOPE) ?: return null

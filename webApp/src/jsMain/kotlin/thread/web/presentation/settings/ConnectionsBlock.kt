@@ -30,6 +30,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
 import thread.domain.external.ConnectionStoreException
 import thread.domain.external.ExternalProblem
+import thread.domain.external.GitHubConnection
 import thread.domain.external.JiraCloudId
 import thread.domain.external.JiraConnection
 import thread.domain.external.JiraSite
@@ -39,6 +40,7 @@ import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalToasts
+import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.orFallback
 import thread.web.presentation.rememberOnline
@@ -48,19 +50,23 @@ import kotlin.math.ceil
 /**
  * Settings "Connections" (v3 settings.js `connections`, adr/ADR-013-jira-in-the-workspace.md). Jira connects with a
  * token form instead of v3's provider sign-in (owner-review-queue Q3, provisional). The token goes only into this
- * browser profile and only to Jira; it is never shown again or read back into a field. GitHub comes in Phase 11.
+ * browser profile and only to Jira; it is never shown again or read back into a field. GitHub connects the same way with
+ * a fine-grained personal access token (adr/ADR-014-github-in-the-workspace.md).
  */
 @Composable
-internal fun ConnectionsBlock(jira: JiraModel) {
+internal fun ConnectionsBlock(
+    jira: JiraModel,
+    gitHub: GitHubModel,
+) {
     SettingsBlock("connections", "Connections", "Jira and GitHub are read-only in v1.") {
-        if (!jira.checked) {
+        if (!jira.checked || !gitHub.checked) {
             P({ classes("muted") }) { Text("Reading this device…") }
             return@SettingsBlock
         }
         JiraRow(jira)
-        GitHubRow(jira)
-        SavedCopiesRow(jira)
-        if (jira.isSynthetic) {
+        GitHubRow(gitHub)
+        SavedCopiesRow(jira, gitHub)
+        if (jira.isSynthetic || gitHub.isSynthetic) {
             P({ classes("pref__hint") }) {
                 Text("Fixture mode: these SYNTHETIC connections live in memory only. Reloading the page restores them.")
             }
@@ -314,26 +320,195 @@ private fun JiraForm(
     }
 }
 
-/** GitHub connects in Phase 11. Until then the row only says whether a token from the M1 probe is on this device. */
+/** GitHub with a fine-grained personal access token: the same states as Jira (v3 settings.js `row('github')`). */
 @Composable
-private fun GitHubRow(jira: JiraModel) {
-    var saved by remember { mutableStateOf(false) }
-    LaunchedEffect(jira.version) { saved = orFallback(null) { jira.services.connections.gitHub() } != null }
+private fun GitHubRow(gitHub: GitHubModel) {
+    val toasts = LocalToasts.current
+    val scope = rememberCoroutineScope()
+    val online by rememberOnline()
+    var formOpen by remember { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf(false) }
+    val connected = gitHub.connected
+    val problem = gitHub.problem
+    val expired = connected && problem == ExternalProblem.Unauthorized
+    val (statusOn, statusIcon, status) =
+        when {
+            !connected -> Triple(false, Icon.Unlink, "Not connected")
+            expired -> Triple(false, Icon.Lock, "Access expired. Replace the token to refresh.")
+            !online -> Triple(true, Icon.CloudOff, "Connected, offline. Saved copies stay readable.")
+            problem is ExternalProblem.RateLimited && problem.retryAtMillis > nowMillis() -> {
+                val minutes = ceil((problem.retryAtMillis - nowMillis()) / 60_000.0).toInt().coerceAtLeast(1)
+                val next = if (minutes == 1) "about a minute" else "about $minutes minutes"
+                Triple(true, Icon.Clock, "Connected. GitHub is limiting requests; next refresh in $next.")
+            }
+            problem == ExternalProblem.Forbidden ->
+                Triple(true, Icon.Lock, "Connected, but GitHub refused a request. Check the token's permissions.")
+            else -> Triple(true, Icon.Check, "Connected, read-only")
+        }
     Div({ classes("conn") }) {
         Span({ classes("conn__icon") }) { IconView(Icon.Pr, 20) }
         Div({ classes("conn__body") }) {
-            P({ classes("conn__name") }) { Text(if (jira.isSynthetic) "GitHub (synthetic)" else "GitHub") }
-            P({ classes("conn__st") }) {
-                IconView(if (saved) Icon.Device else Icon.Unlink, 14)
-                Text(if (saved) " Token saved on this device. Pull requests come in the next build phase." else " Not connected")
+            P({ classes("conn__name") }) { Text(gitHub.name) }
+            P({
+                classes("conn__st")
+                if (statusOn) classes("is-on")
+                id("github-status")
+            }) {
+                IconView(statusIcon, 14)
+                Text(" $status")
             }
             P({ classes("pref__hint") }) { Text("Your open pull requests and review requests.") }
+        }
+        Button({
+            classes("btn", if (!connected || expired) "btn--line" else "btn--text")
+            type(ButtonType.Button)
+            id("github-connect")
+            attr("aria-expanded", formOpen.toString())
+            attr("aria-controls", "github-form")
+            onClick {
+                formOpen = !formOpen
+                if (formOpen) scope.launch { focusById("github-token") }
+            }
+        }) {
+            Text(
+                when {
+                    !connected -> "Connect"
+                    expired -> "Reconnect"
+                    else -> "Replace token"
+                },
+            )
+        }
+        if (connected) {
+            Button({
+                classes("btn", "btn--text", "btn--danger-text")
+                type(ButtonType.Button)
+                id("github-disconnect")
+                onClick { confirming = true }
+            }) { Text("Disconnect") }
+        }
+    }
+    if (formOpen) {
+        GitHubForm(gitHub, replacing = connected) {
+            formOpen = false
+            scope.launch {
+                delay(16)
+                focusById("github-connect")
+            }
+        }
+    }
+    if (confirming) {
+        ConfirmDialog(
+            title = "Disconnect ${gitHub.name}?",
+            body = "Topic links stay. GitHub lists and saved copies hide until you connect again.",
+            confirmLabel = "Disconnect",
+            danger = true,
+        ) { ok ->
+            confirming = false
+            if (!ok) return@ConfirmDialog
+            scope.launch {
+                try {
+                    gitHub.services.connections.clearGitHub()
+                    formOpen = false
+                    gitHub.connectionChanged()
+                    toasts.show("${gitHub.name} disconnected")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    toasts.show("Could not change this device. GitHub is still connected.")
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun SavedCopiesRow(jira: JiraModel) {
+private fun GitHubForm(
+    gitHub: GitHubModel,
+    replacing: Boolean,
+    onDone: () -> Unit,
+) {
+    val toasts = LocalToasts.current
+    val scope = rememberCoroutineScope()
+    var token by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    Form(attrs = {
+        classes("cform")
+        id("github-form")
+        attr("aria-label", "GitHub connection")
+        attr("autocomplete", "off")
+        onSubmit { event ->
+            event.preventDefault()
+            if (saving) return@onSubmit
+            if (token.isBlank()) {
+                error = "Paste the token."
+                scope.launch { focusById("github-token") }
+                return@onSubmit
+            }
+            error = null
+            val connection = GitHubConnection(SecretText(token.trim()))
+            token = ""
+            saving = true
+            scope.launch {
+                try {
+                    gitHub.services.connections.saveGitHub(connection)
+                    gitHub.connectionChanged()
+                    toasts.show("${gitHub.name} connected, read-only. The token is saved in this browser profile only.")
+                    onDone()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ConnectionStoreException) {
+                    toasts.show("Could not save on this device. Nothing changed.")
+                } catch (e: Throwable) {
+                    toasts.show("Something went wrong on this device. Nothing changed.")
+                } finally {
+                    saving = false
+                }
+            }
+        }
+    }) {
+        P({ classes("cform__h") }) { Text(if (replacing) "Replace the GitHub token" else "Connect GitHub") }
+        Div({ classes("fgrid") }) {
+            FormField(
+                "github-token",
+                "Personal access token",
+                error,
+                "Fine-grained, read-only: Pull requests, Commit statuses and Checks. It is never shown again after saving.",
+            ) {
+                PasswordInput(token) {
+                    classes("input")
+                    id("github-token")
+                    attr("autocomplete", "off")
+                    attr("spellcheck", "false")
+                    fieldAttrs("github-token", error)
+                    onInput { token = it.value }
+                }
+            }
+        }
+        Div({ classes("cform__acts") }) {
+            Button({
+                classes("btn", "btn--primary")
+                type(ButtonType.Submit)
+                id("github-save")
+                if (saving) disabled()
+            }) { Text(if (replacing) "Save the new token" else "Save and connect") }
+            Button({
+                classes("btn", "btn--text")
+                type(ButtonType.Button)
+                onClick {
+                    token = ""
+                    onDone()
+                }
+            }) { Text("Cancel") }
+        }
+    }
+}
+
+@Composable
+private fun SavedCopiesRow(
+    jira: JiraModel,
+    gitHub: GitHubModel,
+) {
     val toasts = LocalToasts.current
     val scope = rememberCoroutineScope()
     Div({ classes("conn") }) {
@@ -341,7 +516,10 @@ private fun SavedCopiesRow(jira: JiraModel) {
         Div({ classes("conn__body") }) {
             P({ classes("conn__name") }) { Text("Saved copies") }
             P({ classes("pref__hint") }) {
-                Text("Tickets and lists saved on this device for offline reading: ${jira.saved.size} saved. Connections stay.")
+                Text(
+                    "Tickets, pull requests and lists saved on this device for offline reading: ${jira.saved.size} tickets and " +
+                        "${gitHub.saved.size} pull requests saved. Connections stay.",
+                )
             }
         }
         Button({
@@ -352,7 +530,9 @@ private fun SavedCopiesRow(jira: JiraModel) {
                 scope.launch {
                     try {
                         jira.services.deleteSavedCopies()
+                        gitHub.services.deleteSavedCopies()
                         jira.connectionChanged()
+                        gitHub.connectionChanged()
                         toasts.show("Saved copies deleted from this device.")
                     } catch (e: CancellationException) {
                         throw e

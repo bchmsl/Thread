@@ -206,3 +206,13 @@ Status: **provisional**. Written in Phase 10 while the owner was away. Details: 
 - A Topic in Trash hides its Jira links; Restore brings them back. Delete forever leaves the id-only refs and links.
 - Offline or rate limited shows the saved copy with its age and makes no request. Expired access keeps copies readable. Not found forgets the saved copy.
 - Copies refresh on open and every 5 minutes while visible and online.
+
+## Phase 11 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 11 while the owner was away. Details: ADR-014 (Proposed). Checked on SYNTHETIC fixtures and the emulators only; nothing was checked against real GitHub.
+
+- Pull request references use the Phase 10 collections as ids only: `externalRefs/github~owner~repo~number` with `instance: "owner/repo"` and `key: "number"`, and `topicExternalLinks`. No rules change. One pull request is stored once, however many Topics link it. Unlink writes `linked: false`; nothing is deleted.
+- Titles, authors, branches, descriptions, reviews and CI state stay in IndexedDB on this device (`pullRequests`, and the two lists in `prLists`).
+- A Topic in Trash hides its pull request links; Restore brings them back.
+- Offline or rate limited shows the saved copy with its age and makes no request. Expired access keeps copies readable. Not found forgets the saved copy.
+- Thread sends at most 10 search requests a minute, inside GitHub's 30 for the token.

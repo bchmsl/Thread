@@ -22,6 +22,9 @@ internal class TestFlags {
 
     /** What the SYNTHETIC Jira answers, when the synthetic providers are on. */
     var jiraScenario: SyntheticScenario = SyntheticScenario.Normal
+
+    /** What the SYNTHETIC GitHub answers, when the synthetic providers are on. */
+    var gitHubScenario: SyntheticScenario = SyntheticScenario.Normal
 }
 
 private val hookScope = MainScope()
@@ -57,6 +60,12 @@ internal fun installTestHooks(
     hooks.setJiraScenario = { name: String ->
         val scenario = SyntheticScenario.entries.firstOrNull { it.name == name }
         if (scenario != null) flags.jiraScenario = scenario
+        scenario != null
+    }
+    // The same for every SYNTHETIC GitHub answer.
+    hooks.setGitHubScenario = { name: String ->
+        val scenario = SyntheticScenario.entries.firstOrNull { it.name == name }
+        if (scenario != null) flags.gitHubScenario = scenario
         scenario != null
     }
     window.asDynamic().threadTest = hooks

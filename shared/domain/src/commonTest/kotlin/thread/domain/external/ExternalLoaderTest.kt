@@ -207,4 +207,16 @@ class ExternalLoaderTest {
 
             assertEquals(ExternalView.SavedCopy(old, ExternalProblem.Failed("client-error")), views.last())
         }
+
+    @Test
+    fun aRequestBudgetLetsTheLimitThroughPerWindowThenSaysWhenTheNextMayGo() {
+        val budget = RequestBudget(limit = 2, windowMillis = 60_000)
+
+        assertEquals(null, budget.take(1_000))
+        assertEquals(null, budget.take(2_000))
+        assertEquals(61_000, budget.take(3_000), "the third waits until the first leaves the window")
+        assertEquals(61_000, budget.take(60_999))
+        assertEquals(null, budget.take(61_000))
+        assertEquals(62_000, budget.take(61_500))
+    }
 }

@@ -116,6 +116,29 @@ class RateLimitGate {
 }
 
 /**
+ * Lets at most [limit] requests go in any [windowMillis], so Thread stays inside a provider's documented limit before
+ * the provider has to refuse anything (GitHub search: 30 a minute, adr/ADR-014-github-in-the-workspace.md).
+ */
+class RequestBudget(
+    private val limit: Int,
+    private val windowMillis: Long,
+) {
+    private val sent = ArrayDeque<Long>()
+
+    init {
+        require(limit > 0 && windowMillis > 0) { "A budget needs a positive limit and window" }
+    }
+
+    /** Counts a request at [nowMillis] and returns null, or returns when the next request may go if none is left. */
+    fun take(nowMillis: Long): Long? {
+        while (sent.isNotEmpty() && sent.first() <= nowMillis - windowMillis) sent.removeFirst()
+        if (sent.size >= limit) return sent.first() + windowMillis
+        sent.addLast(nowMillis)
+        return null
+    }
+}
+
+/**
  * Cached first, then revalidate (adr/ADR-006, ADR-007): shows the copy saved on this device at once, then asks the
  * provider and shows the answer.
  *

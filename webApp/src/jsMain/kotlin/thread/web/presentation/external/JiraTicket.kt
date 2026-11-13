@@ -164,7 +164,7 @@ private fun JiraArticle(
             }
             if (heading1) H1(titleAttrs) { Text(issue.title) } else H2(titleAttrs) { Text(issue.title) }
             if (reference != null) {
-                TopicLinks(reference, workspace)
+                TopicLinks(reference, workspace, "ticket")
                 TicketActions(issue, reference, jira, workspace, onGo)
             }
         }
@@ -198,11 +198,12 @@ private fun JiraArticle(
     }
 }
 
-/** v3 `X.links`: the Topics the ticket belongs to, each with Unlink. Unlinking never changes the ticket. */
+/** v3 `X.links`: the Topics the record belongs to, each with Unlink. Unlinking never changes the [what] itself. */
 @Composable
-private fun TopicLinks(
+internal fun TopicLinks(
     reference: ExternalReference,
     workspace: WorkspaceModel,
+    what: String,
 ) {
     val toasts = LocalToasts.current
     val topics = workspace.topicsLinkedTo(reference.id)
@@ -213,7 +214,7 @@ private fun TopicLinks(
                 TopicTag(topic)
                 IconButton(Icon.X, "Unlink ${topic.name}", small = true) {
                     val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
-                    toasts.show("Unlinked from ${topic.name}. The ticket is unchanged.", undo = { workspace.undo(edit) })
+                    toasts.show("Unlinked from ${topic.name}. The $what is unchanged.", undo = { workspace.undo(edit) })
                 }
             }
         }

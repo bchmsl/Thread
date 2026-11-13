@@ -1,0 +1,210 @@
+package thread.web.presentation.topics
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.browser.document
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.web.attributes.ButtonType
+import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.B
+import org.jetbrains.compose.web.dom.Button
+import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.Li
+import org.jetbrains.compose.web.dom.P
+import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.Ul
+import org.w3c.dom.HTMLElement
+import thread.domain.external.PullRequestRef
+import thread.domain.topic.Topic
+import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.gitHubReference
+import thread.domain.workspace.pullRequestRefOf
+import thread.web.presentation.Icon
+import thread.web.presentation.IconButton
+import thread.web.presentation.IconView
+import thread.web.presentation.LocalToasts
+import thread.web.presentation.Place
+import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.external.CONNECTIONS_PLACE
+import thread.web.presentation.external.CiIndicator
+import thread.web.presentation.external.GitHubModel
+import thread.web.presentation.external.PullRequestDetailView
+import thread.web.presentation.external.ReviewIndicator
+import thread.web.presentation.external.ViewBanner
+import thread.web.presentation.external.XD_TITLE_ID
+import thread.web.presentation.external.prItemPlace
+import thread.web.presentation.external.rememberPullRequest
+import thread.web.presentation.external.savedOrNull
+
+/**
+ * The pull requests linked to the Topic (v3 topic.js `extSection('pr')`). Each row opens the pull request in the side
+ * panel at 1000px and wider, else as its own page. Unlinking removes only the link; GitHub is not changed.
+ */
+@Composable
+internal fun TopicPrSection(
+    workspace: WorkspaceModel,
+    gitHub: GitHubModel,
+    topic: Topic,
+    open: Boolean,
+    onToggle: () -> Unit,
+    openId: String?,
+    onOpen: (PullRequestRef) -> Boolean,
+) {
+    val toasts = LocalToasts.current
+    var linking by remember(topic.id) { mutableStateOf(false) }
+    val references = workspace.externalsOf(topic.id, ExternalProvider.GitHub)
+    if (!gitHub.connected) {
+        TopicSection("prs", "Pull requests", references.size.toString(), open, onToggle) {
+            P({ classes("sect__empty") }) {
+                Text("GitHub is not connected. ")
+                A(CONNECTIONS_PLACE.hash, { classes("lnk") }) { Text("Connect in Settings") }
+            }
+        }
+        return
+    }
+    TopicSection(
+        "prs",
+        "Pull requests",
+        references.size.toString(),
+        open,
+        onToggle,
+        actions = {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                id("td-link-pr")
+                onClick { linking = true }
+            }) {
+                IconView(Icon.Link, 15)
+                Text(" Link")
+            }
+        },
+    ) {
+        if (references.isEmpty()) {
+            P({ classes("sect__empty") }) { Text("Nothing linked. Link a pull request here or from its page.") }
+            return@TopicSection
+        }
+        Ul({ classes("tlist") }) {
+            references.forEach { reference ->
+                val ref = pullRequestRefOf(reference)
+                val summary = ref?.let { gitHub.summary(it.id) }
+                val detail = ref?.let { gitHub.detail(it.id) }
+                val isOpen = ref != null && openId == ref.id
+                val label = "#${reference.key}"
+                key(reference.id) {
+                    Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
+                        Span({ classes("xrow__icon") }) { IconView(Icon.Pr, 18) }
+                        if (ref != null) {
+                            A(prItemPlace(ref, topic.id.value).hash, {
+                                classes("xrow__main")
+                                attr("data-id", ref.id)
+                                if (isOpen) attr("aria-current", "true")
+                                onClick { if (onOpen(ref)) it.preventDefault() }
+                            }) {
+                                Span({ classes("xrow__key") }) {
+                                    B { Text(label) }
+                                    if (detail != null) {
+                                        CiIndicator(detail.ci)
+                                        ReviewIndicator(detail.review)
+                                    }
+                                }
+                                if (summary != null) {
+                                    Span({ classes("xrow__title") }) { Text(summary.title) }
+                                } else {
+                                    Span({ classes("xrow__snip") }) {
+                                        Text("${reference.instance} ")
+                                        Span({ classes("dl-badge") }) {
+                                            IconView(Icon.Cloud, 13)
+                                            Text("Not on this device yet")
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Div({ classes("xrow__main") }) {
+                                Span({ classes("xrow__key") }) { B { Text(label) } }
+                                Span({ classes("xrow__snip") }) { Text(reference.instance) }
+                            }
+                        }
+                        IconButton(Icon.Unlink, "Unlink $label from this Topic", small = true) {
+                            val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
+                            toasts.show("Unlinked from ${topic.name}. The pull request is unchanged.", undo = { workspace.undo(edit) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (linking) {
+        val linked = references.map { it.id }.toSet()
+        // Pull requests that can be shown here: saved on this device, or listed while online (v3 prAvailable).
+        val items =
+            gitHub
+                .known()
+                .filter { pull -> gitHubReference(pull.ref)?.id !in linked && gitHub.canShow(pull.ref.id) }
+                .map { PickItem(it.ref.id, Icon.Pr, "${it.title} #${it.ref.number}", "${it.ref.owner}/${it.ref.repo}") }
+        ItemPickerDialog(
+            title = "Link a pull request",
+            items = items,
+            empty = "Nothing else is available on this device. Search Jira or open Pull requests to find more.",
+            onPick = { picked ->
+                linking = false
+                val reference = PullRequestRef.parse(picked)?.let(gitHub::reference) ?: return@ItemPickerDialog
+                val edit = workspace.linkToTopic(reference, topic.id) ?: return@ItemPickerDialog
+                toasts.show("Linked", undo = { workspace.undo(edit) })
+            },
+            onCancel = { linking = false },
+        )
+    }
+}
+
+/** The v3 side panel for a linked pull request: next to the Topic at 1000px and wider, with "Back to sections". */
+@Composable
+internal fun TopicPrSidePanel(
+    workspace: WorkspaceModel,
+    gitHub: GitHubModel,
+    topic: Topic,
+    ref: PullRequestRef,
+    onClose: () -> Unit,
+    onGo: (Place) -> Unit,
+) {
+    var refresh by remember { mutableStateOf(0) }
+    val view = rememberPullRequest(gitHub, ref, refresh)
+    val titleShown = view?.savedOrNull != null
+    LaunchedEffect(ref, titleShown) {
+        if (titleShown) {
+            delay(16)
+            (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
+        }
+    }
+    Div({
+        classes("side-panel")
+        attr("role", "region")
+        attr("aria-label", "Linked item")
+    }) {
+        Div({ classes("side-panel__bar") }) {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                id("td-panel-close")
+                onClick { onClose() }
+            }) {
+                IconView(Icon.ChevLeft, 15)
+                Text(" Back to sections")
+            }
+            A(prItemPlace(ref, topic.id.value).hash, { classes("btn", "btn--text", "btn--sm") }) {
+                Text("Open as page ")
+                IconView(Icon.External, 14)
+            }
+        }
+        if (view != null) ViewBanner(view, gitHub.name, "pull requests") { onGo(CONNECTIONS_PLACE) }
+        PullRequestDetailView(gitHub, workspace, view, heading1 = false, onRefresh = { refresh++ }, onGo = onGo)
+    }
+}

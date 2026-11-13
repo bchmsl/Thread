@@ -3,6 +3,7 @@ package thread.domain.workspace
 import thread.domain.external.JiraCloudId
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraSite
+import thread.domain.external.PullRequestRef
 import thread.domain.note.LinkHref
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicId
@@ -58,6 +59,16 @@ fun jiraReference(
     LinkHref.parse("https://${site.host}/browse/${key.value}")?.let { url ->
         ExternalReference(ExternalProvider.Jira, cloudId.value, key.value, url)
     }
+
+/** The reference of pull request [ref]. Its URL is the pull request page on github.com. */
+fun gitHubReference(ref: PullRequestRef): ExternalReference? =
+    LinkHref.parse("https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number}")?.let { url ->
+        ExternalReference(ExternalProvider.GitHub, "${ref.owner}/${ref.repo}", ref.number.toString(), url)
+    }
+
+/** The pull request a GitHub reference points to, or null for a Jira reference or one that does not parse. */
+fun pullRequestRefOf(reference: ExternalReference): PullRequestRef? =
+    if (reference.provider == ExternalProvider.GitHub) PullRequestRef.parse("${reference.instance}#${reference.key}") else null
 
 /** One Topic's link to one external record. Unlinking writes [linked] false; the document stays. */
 data class TopicExternalLink(

@@ -52,6 +52,12 @@ data class PullRequestListPage(
     val isIncomplete: Boolean,
 )
 
+/** Pull requests: the provider's API and the copies saved on this device. */
+interface PullRequestSource : ExternalRecordSource<PullRequestRef, PullRequestDetail> {
+    /** Every pull request saved on this device, newest save first. Empty when GitHub is not connected. */
+    suspend fun allSaved(): List<Saved<PullRequestDetail>>
+}
+
 data class PullRequestDetail(
     val ref: PullRequestRef,
     val title: String,
@@ -67,6 +73,9 @@ data class PullRequestDetail(
     val review: ReviewState,
     val ci: CiSummary,
 )
+
+/** The list row of a saved pull request. */
+fun PullRequestDetail.summary(): PullRequestSummary = PullRequestSummary(ref, title, author, isDraft, updatedAtMillis, webUrl)
 
 data class Reviewer(
     val name: String,
