@@ -29,6 +29,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
 import thread.domain.external.ConnectionStoreException
+import thread.domain.external.ConnectionSyncState
 import thread.domain.external.ExternalProblem
 import thread.domain.external.GitHubConnection
 import thread.domain.external.JiraCloudId
@@ -40,6 +41,7 @@ import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalToasts
+import thread.web.presentation.external.ConnectionSyncModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.orFallback
@@ -51,20 +53,23 @@ import kotlin.math.ceil
  * Settings "Connections" (v3 settings.js `connections`, adr/ADR-013-jira-in-the-workspace.md). Jira connects with a
  * token form instead of v3's provider sign-in (owner-review-queue Q3, provisional). The token goes only into this
  * browser profile and only to Jira; it is never shown again or read back into a field. GitHub connects the same way with
- * a fine-grained personal access token (adr/ADR-014-github-in-the-workspace.md).
+ * a fine-grained personal access token (adr/ADR-014-github-in-the-workspace.md). With sync on, every change here also
+ * replaces the account's encrypted copy (adr/ADR-016-encrypted-connection-sync.md).
  */
 @Composable
 internal fun ConnectionsBlock(
     jira: JiraModel,
     gitHub: GitHubModel,
+    sync: ConnectionSyncModel,
 ) {
     SettingsBlock("connections", "Connections", "Jira and GitHub are read-only in v1.") {
         if (!jira.checked || !gitHub.checked) {
             P({ classes("muted") }) { Text("Reading this device…") }
             return@SettingsBlock
         }
-        JiraRow(jira)
-        GitHubRow(gitHub)
+        JiraRow(jira, sync)
+        GitHubRow(gitHub, sync)
+        ConnectionSyncRow(sync)
         SavedCopiesRow(jira, gitHub)
         if (jira.isSynthetic || gitHub.isSynthetic) {
             P({ classes("pref__hint") }) {
@@ -74,15 +79,18 @@ internal fun ConnectionsBlock(
         P({ classes("callout") }) {
             IconView(Icon.Lock, 15)
             Text(
-                " Tokens stay in this browser profile and go only to Jira or GitHub. They are never synced, logged or sent " +
-                    "to Thread's server. Use a read-only token.",
+                " Tokens go only to Jira or GitHub and never into logs. Without sync they stay in this browser profile. With " +
+                    "sync on, your account stores only an encrypted copy that your passphrase opens. Use a read-only token.",
             )
         }
     }
 }
 
 @Composable
-private fun JiraRow(jira: JiraModel) {
+private fun JiraRow(
+    jira: JiraModel,
+    sync: ConnectionSyncModel,
+) {
     val toasts = LocalToasts.current
     val scope = rememberCoroutineScope()
     val online by rememberOnline()
@@ -152,7 +160,7 @@ private fun JiraRow(jira: JiraModel) {
         }
     }
     if (formOpen) {
-        JiraForm(jira, replacing = site != null) {
+        JiraForm(jira, sync, replacing = site != null) {
             formOpen = false
             scope.launch {
                 delay(16)
@@ -174,7 +182,7 @@ private fun JiraRow(jira: JiraModel) {
                     jira.services.connections.clearJira()
                     formOpen = false
                     jira.connectionChanged()
-                    toasts.show("${jira.name} disconnected")
+                    toasts.show("${jira.name} disconnected${disconnectedWhere(sync, sync.connectionsChanged())}")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
@@ -188,6 +196,7 @@ private fun JiraRow(jira: JiraModel) {
 @Composable
 private fun JiraForm(
     jira: JiraModel,
+    sync: ConnectionSyncModel,
     replacing: Boolean,
     onDone: () -> Unit,
 ) {
@@ -235,7 +244,7 @@ private fun JiraForm(
                 try {
                     jira.services.connections.saveJira(connection)
                     jira.connectionChanged()
-                    toasts.show("${jira.name} connected, read-only. The token is saved in this browser profile only.")
+                    toasts.show("${jira.name} connected, read-only. ${savedWhere(sync, sync.connectionsChanged())}")
                     onDone()
                 } catch (e: CancellationException) {
                     throw e
@@ -322,7 +331,10 @@ private fun JiraForm(
 
 /** GitHub with a fine-grained personal access token: the same states as Jira (v3 settings.js `row('github')`). */
 @Composable
-private fun GitHubRow(gitHub: GitHubModel) {
+private fun GitHubRow(
+    gitHub: GitHubModel,
+    sync: ConnectionSyncModel,
+) {
     val toasts = LocalToasts.current
     val scope = rememberCoroutineScope()
     val online by rememberOnline()
@@ -388,7 +400,7 @@ private fun GitHubRow(gitHub: GitHubModel) {
         }
     }
     if (formOpen) {
-        GitHubForm(gitHub, replacing = connected) {
+        GitHubForm(gitHub, sync, replacing = connected) {
             formOpen = false
             scope.launch {
                 delay(16)
@@ -410,7 +422,7 @@ private fun GitHubRow(gitHub: GitHubModel) {
                     gitHub.services.connections.clearGitHub()
                     formOpen = false
                     gitHub.connectionChanged()
-                    toasts.show("${gitHub.name} disconnected")
+                    toasts.show("${gitHub.name} disconnected${disconnectedWhere(sync, sync.connectionsChanged())}")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
@@ -424,6 +436,7 @@ private fun GitHubRow(gitHub: GitHubModel) {
 @Composable
 private fun GitHubForm(
     gitHub: GitHubModel,
+    sync: ConnectionSyncModel,
     replacing: Boolean,
     onDone: () -> Unit,
 ) {
@@ -453,7 +466,7 @@ private fun GitHubForm(
                 try {
                     gitHub.services.connections.saveGitHub(connection)
                     gitHub.connectionChanged()
-                    toasts.show("${gitHub.name} connected, read-only. The token is saved in this browser profile only.")
+                    toasts.show("${gitHub.name} connected, read-only. ${savedWhere(sync, sync.connectionsChanged())}")
                     onDone()
                 } catch (e: CancellationException) {
                     throw e
@@ -546,7 +559,7 @@ private fun SavedCopiesRow(
 }
 
 @Composable
-private fun FormField(
+internal fun FormField(
     id: String,
     label: String,
     error: String?,
@@ -564,13 +577,41 @@ private fun FormField(
     }
 }
 
-private fun AttrsScope<*>.fieldAttrs(
+internal fun AttrsScope<*>.fieldAttrs(
     id: String,
     error: String?,
 ) {
     attr("aria-describedby", "$id-hint")
     if (error != null) attr("aria-invalid", "true")
 }
+
+/** Where a new token is saved, for the toast after connecting: [state] is what sync answered after the change. */
+private fun savedWhere(
+    sync: ConnectionSyncModel,
+    state: ConnectionSyncState?,
+): String =
+    when {
+        state == ConnectionSyncState.On(waiting = false) -> "The token is saved in this browser and, encrypted, to your account."
+        state ==
+            ConnectionSyncState.On(
+                waiting = true,
+            )
+        -> "The token is saved in this browser. The encrypted copy updates when you are back online."
+        state == null && sync.problem != null -> "The token is saved in this browser. Sync could not update the encrypted copy."
+        else -> "The token is saved in this browser profile only."
+    }
+
+/** The end of the toast after a disconnect. */
+private fun disconnectedWhere(
+    sync: ConnectionSyncModel,
+    state: ConnectionSyncState?,
+): String =
+    when {
+        state == ConnectionSyncState.On(waiting = false) -> " here and in the encrypted copy."
+        state == ConnectionSyncState.On(waiting = true) -> ". The encrypted copy updates when you are back online."
+        state == null && sync.problem != null -> " here. Sync could not update the encrypted copy."
+        else -> ""
+    }
 
 /** "1 ticket", "3 tickets". */
 private fun countOf(

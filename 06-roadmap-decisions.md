@@ -58,6 +58,7 @@ The visual design reference is the owner-approved v3 prototype, not ChatGPT.
 | D44 | 2026-11-13: No week-start setting in the pilot, because no pilot screen uses a week view. Reason: v3 proposal 10, accepted. Files: the v3 prototype. |
 | D45 | 2026-11-13: The Focus timer opens as a small panel from the status line, with no dashboard block. It is delivered after the pilot (D34). Reason: v3 proposal 11, accepted. Files: 02-ux-design.md. |
 | D46 | 2026-11-13: "Open in Jira" and "Open in GitHub" open the original page in a new tab. Reason: v3 proposal 12, accepted. Files: 02-ux-design.md. |
+| D47 | 2026-11-14: The Jira and GitHub connections (Jira site, Cloud ID, e-mail and token; GitHub token) can sync through the account, encrypted in the browser with a key made from a passphrase the owner sets in Settings. Firestore stores only the encrypted copy. On a new device: sign in and enter the passphrase once. Saved Jira and PR copies stay on the device. Owner's words: "How can we save credentials to remote? (jira token, clientid, github token)", then "Lets do A". Supersedes the "Never in Firestore" line of ADR-008 for the connection records. The details are queued (Q62 to Q72). Files: adr/ADR-016-encrypted-connection-sync.md, adr/ADR-008-offline-shell-and-token-storage.md, 03-architecture.md, 04-data-and-sync.md. |
 
 ## Proposed milestone sequence
 

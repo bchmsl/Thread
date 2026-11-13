@@ -80,6 +80,17 @@ internal external interface WriteBatch {
     fun commit(): Promise<Unit>
 }
 
+internal external interface Transaction {
+    fun get(reference: DocumentReference): Promise<DocumentSnapshot>
+
+    fun set(
+        reference: DocumentReference,
+        data: dynamic,
+    ): Transaction
+
+    fun delete(reference: DocumentReference): Transaction
+}
+
 internal external interface Timestamp {
     fun toMillis(): Double
 }

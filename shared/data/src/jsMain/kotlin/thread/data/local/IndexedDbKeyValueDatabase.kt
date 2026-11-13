@@ -12,7 +12,8 @@ import kotlin.coroutines.resumeWithException
 /**
  * An IndexedDB database of simple string stores, for connections and saved copies of Jira and GitHub records
  * (adr/ADR-006, ADR-007, ADR-008), and each account's record of workspace changes on their way to the server
- * (adr/ADR-009). Each store holds records `{key, value}` with key path `key`.
+ * (adr/ADR-009). Each store holds records `{key, value}` with key path `key`. The connection sync key is the one
+ * value that is not a string ([getObject], adr/ADR-016).
  *
  * It is separate from the Note drafts database (thread-local and thread-drafts-*), so clearing saved copies can
  * never touch a Note. [strictDurability] makes writes wait until the browser reports them on disk; connections use
@@ -29,6 +30,31 @@ class IndexedDbKeyValueDatabase(
     fun store(storeName: String): KeyValueStore {
         require(storeName in storeNames) { "Unknown store" }
         return Store(storeName)
+    }
+
+    /**
+     * The value of [key] in [storeName] as IndexedDB stored it, or null. For values a string cannot hold, such as a
+     * non-extractable WebCrypto key, which IndexedDB keeps as it is (structured clone, adr/ADR-016).
+     */
+    internal suspend fun getObject(
+        storeName: String,
+        key: String,
+    ): dynamic {
+        require(storeName in storeNames) { "Unknown store" }
+        val record: dynamic = request(storeName, READONLY) { it.get(key) }
+        return if (record == null || record == undefined) null else record[VALUE]
+    }
+
+    internal suspend fun putObject(
+        storeName: String,
+        key: String,
+        value: dynamic,
+    ) {
+        require(storeName in storeNames) { "Unknown store" }
+        val record = newJsObject()
+        record[KEY] = key
+        record[VALUE] = value
+        request(storeName, READWRITE) { it.put(record) }
     }
 
     private inner class Store(
@@ -183,6 +209,11 @@ class IndexedDbKeyValueDatabase(
         fun workspaceOutboxFor(accountId: AccountId): String = "thread-outbox-${accountId.value}"
 
         const val WORKSPACE_OUTBOX_STORE: String = "changes"
+
+        /** One account's connection sync key on this device (adr/ADR-016-encrypted-connection-sync.md). */
+        fun vaultFor(accountId: AccountId): String = "thread-vault-${accountId.value}"
+
+        const val VAULT_STORE: String = "keys"
     }
 }
 

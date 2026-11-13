@@ -3,7 +3,7 @@ rules_version = '2';
 // Thread talks to Firestore straight from the browser, so these rules are the security boundary
 // (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
 // users/{uid}. Only the shapes below can be written; anything not matched is denied. Only the saved versions of a Note
-// deleted forever can be deleted.
+// deleted forever, and the encrypted connections when sync is turned off, can be deleted.
 // Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes), adr/ADR-009-workspace-entities-and-sync.md
 // (statuses, Topics, preferences), adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders),
 // adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links) and adr/ADR-012-trash-and-search.md
@@ -303,6 +303,28 @@ service cloud.firestore {
     match /users/{uid}/prefs/{prefsId} {
       allow read: if signedInAs(uid);
       allow create, update: if signedInAs(uid) && prefsId == 'main' && validPrefs(request.resource.data);
+    }
+
+    // users/{uid}/vault/connections: the account's Jira and GitHub connections, encrypted in the browser with a key made
+    // from the person's passphrase (adr/ADR-016-encrypted-connection-sync.md). Only base64 of the salt, the IV and the
+    // AES-GCM ciphertext, and how to derive the key again; never a token, e-mail, site or passphrase in plain text.
+    // Turning sync off deletes it.
+    function validVault(vault) {
+      return vault.keys().hasOnly(['schemaVersion', 'kdf', 'iterations', 'salt', 'iv', 'ciphertext', 'updatedAt'])
+        && vault.keys().hasAll(['schemaVersion', 'kdf', 'iterations', 'salt', 'iv', 'ciphertext', 'updatedAt'])
+        && vault.schemaVersion == 1
+        && vault.kdf == 'PBKDF2-SHA-256'
+        && vault.iterations is int && vault.iterations >= 600000 && vault.iterations <= 10000000
+        && vault.salt is string && vault.salt.matches('[A-Za-z0-9+/]{22}==')
+        && vault.iv is string && vault.iv.matches('[A-Za-z0-9+/]{16}')
+        && vault.ciphertext is string && vault.ciphertext.size() >= 24 && vault.ciphertext.size() <= 8192
+        && vault.ciphertext.matches('[A-Za-z0-9+/]+={0,2}')
+        && vault.updatedAt == request.time;
+    }
+
+    match /users/{uid}/vault/{vaultId} {
+      allow read, delete: if signedInAs(uid) && vaultId == 'connections';
+      allow create, update: if signedInAs(uid) && vaultId == 'connections' && validVault(request.resource.data);
     }
   }
 }

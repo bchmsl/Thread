@@ -101,3 +101,8 @@ img.ProseMirror-separator {
    the line and its red state (owner-review-queue Q14, adr/ADR-009-workspace-entities-and-sync.md). */
 .syncp__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .syncp__acts { display: flex; gap: 4px; flex-wrap: wrap; margin-left: -10px; }
+
+/* Encrypted connection sync: v3 has no such row, so "Sync across devices" follows the Jira and GitHub rows and their
+   form. A state that needs the person (locked, damaged) uses the paused color (adr/ADR-016-encrypted-connection-sync.md). */
+.conn__st.is-warn { color: var(--warning); }
+.cform__intro { margin: -6px 0 12px; max-width: 62ch; }

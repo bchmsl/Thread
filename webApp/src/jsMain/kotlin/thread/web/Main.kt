@@ -7,6 +7,7 @@ import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
 import thread.data.firebase.FirestoreNoteSyncRemote
+import thread.data.firebase.FirestoreVaultRemote
 import thread.data.firebase.FirestoreWorkspaceStore
 import thread.data.github.GitHubPullRequestDetails
 import thread.data.github.GitHubPullRequestLists
@@ -22,8 +23,12 @@ import thread.data.local.randomWorkspaceId
 import thread.data.synthetic.SyntheticConnectionStore
 import thread.data.synthetic.SyntheticHttpTransport
 import thread.data.synthetic.SyntheticScenario
+import thread.data.vault.IndexedDbDeviceVaultStore
+import thread.data.vault.VaultConnectionSync
+import thread.data.vault.WebCryptoVault
 import thread.domain.account.AccountId
 import thread.domain.external.ConnectionStore
+import thread.domain.external.ConnectionSync
 import thread.domain.note.LocalDraftStore
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
@@ -61,6 +66,7 @@ fun main() {
             notes = noteServices(backend, testFlags),
             jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),
             gitHub = gitHubServices(synthetic, connections, cache, transport(synthetic) { testFlags.gitHubScenario }),
+            connectionSync = connectionSync(synthetic, backend, connections),
         )
     renderComposable(rootElementId = "root") {
         App(services)
@@ -99,6 +105,30 @@ private fun connectionStore(synthetic: Boolean): ConnectionStore {
             strictDurability = true,
         )
     return KeyValueConnectionStore(database.store(IndexedDbKeyValueDatabase.CONNECTIONS_STORE))
+}
+
+/**
+ * The encrypted sync of [connections] for one account (adr/ADR-016-encrypted-connection-sync.md): WebCrypto, the key in
+ * this account's own IndexedDB database, and one Firestore record. Not available with the SYNTHETIC fixtures, which
+ * never leave memory.
+ */
+private fun connectionSync(
+    synthetic: Boolean,
+    backend: FirebaseBackend,
+    connections: ConnectionStore,
+): ((AccountId) -> ConnectionSync)? {
+    if (synthetic) return null
+    val crypto = WebCryptoVault()
+    return { accountId ->
+        VaultConnectionSync(
+            accountId = accountId,
+            connections = connections,
+            crypto = crypto,
+            remote = FirestoreVaultRemote(backend, accountId),
+            device = IndexedDbDeviceVaultStore(accountId),
+            isOnline = ::isOnline,
+        )
+    }
 }
 
 /** This account's record of workspace changes on their way to the server, so a refused one survives a reload (Q14). */

@@ -78,8 +78,9 @@ data class GitHubConnection(
 )
 
 /**
- * Where this browser keeps its connections. Only on this device: never synced and never written to the server
- * (adr/ADR-008-offline-shell-and-token-storage.md).
+ * Where this browser keeps its connections (adr/ADR-008-offline-shell-and-token-storage.md). This store never writes
+ * to the server. With sync on, [ConnectionSync] saves an encrypted copy to the account
+ * (adr/ADR-016-encrypted-connection-sync.md).
  */
 interface ConnectionStore {
     suspend fun jira(): JiraConnection?

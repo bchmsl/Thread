@@ -23,6 +23,7 @@ import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountId
 import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
+import thread.domain.external.ConnectionSync
 import thread.domain.external.summary
 import thread.domain.note.NewRevision
 import thread.domain.note.NoteId
@@ -42,6 +43,7 @@ import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.copyText
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.external.ConnectionSyncModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.GitHubServices
 import thread.web.presentation.external.JiraItemScreen
@@ -99,6 +101,11 @@ class AppServices(
     val jira: JiraServices,
     /** GitHub, read-only: the real provider or the SYNTHETIC fixtures (adr/ADR-014-github-in-the-workspace.md). */
     val gitHub: GitHubServices,
+    /**
+     * The encrypted sync of the Jira and GitHub connections for one account, or null when it is not available, as with
+     * the SYNTHETIC fixtures (adr/ADR-016-encrypted-connection-sync.md).
+     */
+    val connectionSync: ((AccountId) -> ConnectionSync)?,
 )
 
 @Composable
@@ -139,6 +146,13 @@ private fun Workspace(
     val workspace = remember { WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId) }
     val jira = remember { JiraModel(services.jira) }
     val gitHub = remember { GitHubModel(services.gitHub) }
+    val connectionSync =
+        remember {
+            ConnectionSyncModel(services.connectionSync?.invoke(signedIn.accountId)) {
+                jira.connectionChanged()
+                gitHub.connectionChanged()
+            }
+        }
     // Wall-clock "now" in the workspace zone, refreshed each minute (ADR-010).
     val now by rememberNow(workspace.prefs.timeZone)
     val online by rememberOnline()
@@ -198,6 +212,8 @@ private fun Workspace(
     LaunchedEffect(workspace) { workspace.run() }
     LaunchedEffect(jira) { jira.reload() }
     LaunchedEffect(gitHub) { gitHub.reload() }
+    // On sign-in and each time the network comes or goes: save a change waiting here, or take another device's.
+    LaunchedEffect(connectionSync, online) { connectionSync.check() }
     SweepPurgedNotes(workspace, services.notes, signedIn.accountId, online)
     val workspaceReport = workspace.syncReport(online)
     SideEffect { syncCenter.report("workspace", workspaceReport) }
@@ -261,7 +277,7 @@ private fun Workspace(
                         ) { reference -> externalLabel(reference, jira, gitHub) }
                     view == View.Settings ->
                         SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
-                            ConnectionsBlock(jira, gitHub)
+                            ConnectionsBlock(jira, gitHub, connectionSync)
                             StatusesBlock(workspace)
                             PreferencesBlock(workspace, capture)
                         }

@@ -43,7 +43,7 @@ Names are illustrative, not existing classes.
 | External identifiers and canonical links | Proposed minimal Firebase references | Yes |
 | Jira descriptions, comments, detailed fields | Do not mirror into Firebase | API-derived cache |
 | GitHub detailed payloads | Proposed: same API + local-cache model | Yes |
-| Integration credentials | Dedicated secure auth mechanism, if needed | Platform-appropriate protected handling |
+| Integration credentials | Optional: one encrypted record, `users/{uid}/vault/connections`, sealed in the browser with the owner's passphrase (ADR-016); never plain text | Per browser profile (`thread-connections`, ADR-008); the sync key in `thread-vault-{uid}` |
 
 Jira API + local cache is explicitly confirmed.
 GitHub cache policy and exact minimal cloud metadata fields are proposed; settle before implementation.

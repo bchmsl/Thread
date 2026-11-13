@@ -68,6 +68,18 @@ internal external fun writeBatch(firestore: Firestore): WriteBatch
 /** Reads the documents of [query] from the server only. Rejects offline. */
 internal external fun getDocsFromServer(query: CollectionReference): Promise<QuerySnapshot>
 
+/** Reads one document from the server only. Rejects offline. */
+internal external fun getDocFromServer(reference: DocumentReference): Promise<DocumentSnapshot>
+
+/**
+ * Runs [updateFunction] against the server: its reads come from the server, and its writes apply together only if
+ * nothing it read changed meanwhile (it runs again then). Never queued; rejects offline.
+ */
+internal external fun runTransaction(
+    firestore: Firestore,
+    updateFunction: (Transaction) -> Promise<dynamic>,
+): Promise<dynamic>
+
 /** The server's time of the write. Shown as the device's estimate until acknowledged (with `serverTimestamps`). */
 internal external fun serverTimestamp(): dynamic
 

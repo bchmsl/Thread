@@ -4,6 +4,8 @@ Status: Proposed (2026-11-13). Written in Phase 3 (M1-C). The offline shell is c
 
 Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued.
 
+2026-11-14: the owner chose encrypted sync of the connections (option A). ADR-016 supersedes the "Never in Firestore" part of the Never row for the connection records only: with sync on, the account stores one encrypted copy that only the owner's passphrase opens. Everything else here still holds.
+
 ## Context
 
 - Thread must open with no network and show the last local content (D02, local-first). Until now a reload while offline gave the browser's error page.
@@ -48,9 +50,9 @@ load 2                  page asks waiting B: TAKE_OVER_IF_ALONE
 | Writes | `durability: "strict"`, so "Connected" shows only after the browser reports the record on disk |
 | Damaged or unknown record | Reads as "not connected"; the person connects again |
 | In memory | `SecretText`. `toString()` gives `SecretText(hidden)`. `reveal()` is used only to build the `Authorization` header and to write the record. Storage errors use fixed texts that never contain the record. |
-| Never | In Firestore, in the request log, in the console, in a URL, in the service worker cache, or in the repository |
+| Never | In Firestore as plain text, in the request log, in the console, in a URL, in the service worker cache, or in the repository. With sync on, Firestore holds only the encrypted copy (ADR-016). |
 | Disconnect | Deletes the record. Saved copies stay, but are hidden until that provider is connected again (v3). |
-| Firebase sign-out | Does not touch connections or saved copies, because they belong to the browser profile, not to the Firebase account (decision 4) |
+| Firebase sign-out | Does not touch connections or saved copies, because they belong to the browser profile, not to the Firebase account (decision 4). The sync key of ADR-016 stays too. |
 | Fixture mode | In-memory connections and the `thread-external-cache-synthetic` database. A per-tab flag (`sessionStorage`) turns it on, so it never survives into a fresh tab. |
 
 The Note drafts (`thread-local`, `thread-drafts-*`) are separate databases. Clearing connections or saved copies can never touch a Note.
@@ -62,6 +64,7 @@ The Note drafts (`thread-local`, `thread-drafts-*`) are separate databases. Clea
 - Clearing site data in the browser removes the tokens, the saved copies and the unsynced Note drafts together. The browser shows that as one action.
 - A deploy needs the production build with the generated `sw.js`. Hosting must not cache `sw.js` for long; browsers re-check it at least every 24 hours anyway.
 - Phase 4 decides the product scope of tokens and saved copies. This storage works for either choice. Phase 4 proposal (provisional, in the owner review queue): they stay per browser profile. A token is typed once per browser, and saved copies never follow the Firebase account. The alternative, per account, would need the tokens or copies in Firestore or a server, which D08 and the token rules rule out.
+- Superseded in part on 2026-11-14: with ADR-016's encrypted sync turned on, connections follow the account, encrypted with the owner's passphrase. Saved copies still stay per browser profile (D08).
 
 ## Not verified
 

@@ -111,6 +111,7 @@ Cloud Run is a possible deployment target, not a confirmed provisioned service.
 Do not select Firebase Cloud Functions as a Kotlin runtime by assumption.
 For v1, verify Jira/GitHub auth and browser CORS before deciding whether this service is needed.
 No credentials in source code, client bundles, logs, Notes, or ordinary Firestore records.
+The one exception is the owner's choice of 2026-11-14 (option A, adr/ADR-016-encrypted-connection-sync.md): with sync turned on, `users/{uid}/vault/connections` holds the Jira and GitHub connections encrypted in the browser with a key made from the owner's passphrase. The passphrase and the key never leave the device, and the rules accept only the encrypted shape.
 
 ## Rich-text editor boundary
 
