@@ -3,10 +3,12 @@ package thread.data.local
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
+import thread.domain.account.AccountId
 import thread.domain.note.LocalDraft
 import thread.domain.note.LocalDraftStore
 import thread.domain.note.LocalDraftStoreException
 import thread.domain.note.NoteId
+import thread.domain.note.RevisionId
 import thread.domain.note.RichTextFormatException
 import thread.domain.note.RichTextJson
 import kotlin.coroutines.resume
@@ -16,7 +18,10 @@ import kotlin.coroutines.resumeWithException
  * [LocalDraftStore] on the browser's IndexedDB (adr/ADR-003-editor-and-richtext.md).
  *
  * Database [databaseName], version 1, object store `noteDrafts` with key path `noteId`. One record per Note:
- * `{noteId, recordVersion: 1, title, body}`, where `body` is the [RichTextJson] string.
+ * `{noteId, recordVersion: 2, title, body, baseRevisionId}`, where `body` is the [RichTextJson] string and
+ * `baseRevisionId` is a string or null (adr/ADR-004-note-revisions-and-conflicts.md). Records of version 1 (Phase 1,
+ * without `baseRevisionId`) are still read, with no base. The signed-in account's drafts live in their own database
+ * ([databaseNameFor]).
  *
  * A write uses durability `"strict"` and returns only on the transaction's `complete` event, so a returned write is
  * on disk as far as the browser can tell. When the database is already open, the write is issued before the first
@@ -156,6 +161,7 @@ class IndexedDbDraftStore(
         record[KEY_RECORD_VERSION] = RECORD_VERSION
         record[KEY_TITLE] = draft.title
         record[KEY_BODY] = RichTextJson.encode(draft.body)
+        record[KEY_BASE_REVISION_ID] = draft.baseRevisionId?.value
         return record
     }
 
@@ -163,12 +169,15 @@ class IndexedDbDraftStore(
         noteId: NoteId,
         record: dynamic,
     ): LocalDraft {
-        if (record[KEY_RECORD_VERSION] != RECORD_VERSION) {
+        val version: dynamic = record[KEY_RECORD_VERSION]
+        if (version != RECORD_VERSION && version != RECORD_VERSION_WITHOUT_BASE) {
             throw LocalDraftStoreException("Unsupported local draft record version")
         }
         val title: dynamic = record[KEY_TITLE]
         val body: dynamic = record[KEY_BODY]
-        if (jsTypeOf(title) != "string" || jsTypeOf(body) != "string") {
+        val base: dynamic = if (version == RECORD_VERSION) record[KEY_BASE_REVISION_ID] else null
+        val baseIsValid = base == null || (jsTypeOf(base) == "string" && base.unsafeCast<String>().isNotBlank())
+        if (jsTypeOf(title) != "string" || jsTypeOf(body) != "string" || !baseIsValid) {
             throw LocalDraftStoreException("The local draft record is damaged")
         }
         val document =
@@ -177,18 +186,25 @@ class IndexedDbDraftStore(
             } catch (e: RichTextFormatException) {
                 throw LocalDraftStoreException("The local draft cannot be read: ${e.message}", e)
             }
-        return LocalDraft(noteId, title.unsafeCast<String>(), document)
+        val baseRevisionId = if (base == null) null else RevisionId(base.unsafeCast<String>())
+        return LocalDraft(noteId, title.unsafeCast<String>(), document, baseRevisionId)
     }
 
     companion object {
+        /** Drafts made while signed out. They stay on the device and are not synced. */
         const val DEFAULT_DATABASE_NAME: String = "thread-local"
         internal const val DATABASE_VERSION: Int = 1
         internal const val STORE_DRAFTS: String = "noteDrafts"
-        internal const val RECORD_VERSION: Int = 1
+        internal const val RECORD_VERSION: Int = 2
+        internal const val RECORD_VERSION_WITHOUT_BASE: Int = 1
         internal const val KEY_NOTE_ID: String = "noteId"
         internal const val KEY_RECORD_VERSION: String = "recordVersion"
         internal const val KEY_TITLE: String = "title"
         internal const val KEY_BODY: String = "body"
+        internal const val KEY_BASE_REVISION_ID: String = "baseRevisionId"
+
+        /** The database for [accountId]'s drafts, so two accounts on one browser never share a draft. */
+        fun databaseNameFor(accountId: AccountId): String = "thread-drafts-${accountId.value}"
     }
 }
 

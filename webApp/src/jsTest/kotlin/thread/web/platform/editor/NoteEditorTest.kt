@@ -124,6 +124,25 @@ class NoteEditorTest {
     }
 
     @Test
+    fun replacingTheContentShowsItWithoutReportingAnEdit() {
+        val editor = createEditor(RichTextDocument(listOf(paragraph(text("synthetic text from this device")))))
+        val other =
+            RichTextDocument(
+                listOf(
+                    paragraph(text("synthetic text from another device")),
+                    RichTextBlock.TaskList(listOf(TaskItem(checked = true, blocks = listOf(paragraph(text("done elsewhere")))))),
+                ),
+            )
+
+        editor.replaceContent(other)
+        editor.focus()
+
+        assertEquals(other, editor.document)
+        assertTrue("synthetic text from another device" in editor.text)
+        assertTrue(changes.all { it == other }, "Changes: $changes")
+    }
+
+    @Test
     fun pasteFromAWebPageKeepsOnlySchemaContent() =
         runTest {
             val editor = createEditor(RichTextDocument.EMPTY)

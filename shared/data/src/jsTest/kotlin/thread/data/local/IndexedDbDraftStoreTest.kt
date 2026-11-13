@@ -7,6 +7,7 @@ import thread.domain.note.ListItem
 import thread.domain.note.LocalDraft
 import thread.domain.note.LocalDraftStoreException
 import thread.domain.note.NoteId
+import thread.domain.note.RevisionId
 import thread.domain.note.RichTextBlock
 import thread.domain.note.RichTextDocument
 import thread.domain.note.RichTextInline
@@ -84,9 +85,31 @@ class IndexedDbDraftStoreTest {
 
             val record = rawGet(name, noteId.value)
             assertEquals(noteId.value, record.noteId)
-            assertEquals(1, record.recordVersion)
+            assertEquals(2, record.recordVersion)
             assertEquals("Synthetic title", record.title)
             assertEquals(RichTextJson.encode(draft("shape").body), record.body)
+            assertEquals(null, record.baseRevisionId)
+        }
+
+    @Test
+    fun baseRevisionIsStoredWithTheDraft() =
+        withDatabase { name ->
+            val based = draft("based").copy(baseRevisionId = RevisionId("synthetic-revision"))
+            IndexedDbDraftStore(name).write(based)
+
+            assertEquals(based, IndexedDbDraftStore(name).read(noteId))
+        }
+
+    @Test
+    fun phaseOneRecordIsReadWithoutABase() =
+        withDatabase { name ->
+            IndexedDbDraftStore(name).write(draft("phase one"))
+            val record = rawGet(name, noteId.value)
+            record.recordVersion = 1
+            js("(function (o) { delete o.baseRevisionId; })")(record)
+            rawPut(name, record)
+
+            assertEquals(draft("phase one"), IndexedDbDraftStore(name).read(noteId))
         }
 
     @Test
@@ -122,7 +145,7 @@ class IndexedDbDraftStoreTest {
         withDatabase { name ->
             IndexedDbDraftStore(name).write(draft("valid"))
             val record = rawGet(name, noteId.value)
-            record.recordVersion = 2
+            record.recordVersion = 3
             rawPut(name, record)
 
             assertFailsWith<LocalDraftStoreException> { IndexedDbDraftStore(name).read(noteId) }

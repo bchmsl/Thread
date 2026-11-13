@@ -12,6 +12,11 @@ kotlin {
                 useKarma {
                     useChromeHeadless()
                 }
+                // Tests named *Emulator* need the Firebase emulators. They run only with -Pthread.emulatorTests,
+                // inside firebase/emulators.sh exec (adr/ADR-005-auth-and-security-rules.md).
+                if (!providers.gradleProperty("thread.emulatorTests").isPresent) {
+                    filter.excludeTestsMatching("*Emulator*")
+                }
             }
         }
     }
@@ -23,6 +28,26 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
+        }
+        jsMain.dependencies {
+            // Modular SDK: only firebase/app, firebase/auth and firebase/firestore are imported. Apache-2.0.
+            implementation(
+                npm(
+                    "firebase",
+                    libs.versions.firebase.js
+                        .get(),
+                ),
+            )
+        }
+        jsTest.dependencies {
+            // Security rules tests against the Firestore emulator. Apache-2.0. Test only.
+            implementation(
+                npm(
+                    "@firebase/rules-unit-testing",
+                    libs.versions.firebase.rules.testing
+                        .get(),
+                ),
+            )
         }
     }
 }

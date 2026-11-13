@@ -88,6 +88,33 @@ class DraftAutosaver(
         if (durableRevision < editRevision) issue()
     }
 
+    /**
+     * Records that the newest content now comes from [revisionId] (sync wrote or adopted that revision). This is not
+     * an edit: the content and [status] stay as they are. A write that is still waiting stores the new base with it.
+     * When nothing is waiting, the base is written now. A failure of that write changes nothing: the content was
+     * stored before, and the next start finds the right base again by comparing content
+     * (adr/ADR-004-note-revisions-and-conflicts.md).
+     */
+    fun rebase(revisionId: RevisionId?) {
+        if (latest.baseRevisionId == revisionId) return
+        latest = latest.copy(baseRevisionId = revisionId)
+        if (issuedRevision < editRevision) return
+        val revision = editRevision
+        val draft = latest
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                store.write(draft)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                return@launch
+            }
+            // The write holds the newest content too, so it also stores it after an earlier failure.
+            durableRevision = maxOf(durableRevision, revision)
+            publish()
+        }
+    }
+
     private fun schedule() {
         debounceJob?.cancel()
         debounceJob =

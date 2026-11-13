@@ -6,6 +6,10 @@ serialization = "1.13.0"
 ktlint-plugin = "14.2.0"
 # Note editor (adr/ADR-003-editor-and-richtext.md). All Tiptap packages share one version.
 tiptap = "3.33.1"
+# Firebase JS SDK and its rules test helper, npm packages (adr/ADR-002-local-store-and-sync.md). The emulators run
+# through firebase-tools, pinned in firebase/emulators.sh.
+firebase-js = "13.3.0"
+firebase-rules-testing = "6.0.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }

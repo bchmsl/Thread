@@ -16,9 +16,9 @@ import org.jetbrains.compose.web.dom.Main
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Text
 import org.w3c.dom.events.Event
-import thread.domain.note.LocalDraftStore
 import thread.web.platform.installSearchShortcut
 import thread.web.presentation.m1spike.M1SpikeScreen
+import thread.web.presentation.m1spike.SpikeServices
 import thread.web.presentation.m1spike.SpikeTestHooks
 
 /** Hash routes. Real screens and routing come in later phases. */
@@ -37,7 +37,7 @@ internal enum class Route(
 
 @Composable
 fun App(
-    draftStore: LocalDraftStore,
+    spikeServices: SpikeServices,
     spikeTestHooks: SpikeTestHooks,
 ) {
     var route by remember { mutableStateOf(Route.fromHash(window.location.hash)) }
@@ -58,7 +58,7 @@ fun App(
     Main({ id("main") }) {
         when (route) {
             Route.Home -> HomeScreen()
-            Route.M1Spike -> M1SpikeScreen(draftStore, spikeTestHooks, toasts)
+            Route.M1Spike -> M1SpikeScreen(spikeServices, spikeTestHooks, toasts)
         }
     }
     ToastHost(toasts)
@@ -69,7 +69,7 @@ private fun HomeScreen() {
     Div({ classes("ph") }) {
         Div {
             H1({ classes("ph__title") }) { Text("Thread") }
-            P({ classes("ph__sub") }) { Text("Phase 1 build. The real screens come in later phases.") }
+            P({ classes("ph__sub") }) { Text("Phase 2 build. The real screens come in later phases.") }
         }
     }
     A(Route.M1Spike.hash, { classes("btn", "btn--line") }) { Text("Open the M1 spike") }

@@ -281,6 +281,53 @@ class DraftAutosaverTest {
             assertFalse(saver.status.value == Saving)
         }
 
+    @Test
+    fun rebaseWhenNothingWaitsWritesTheBaseWithoutAnEdit() =
+        runTest {
+            val store = FakeStore()
+            val saver = autosaver(store)
+
+            saver.rebase(RevisionId("synthetic-revision"))
+
+            assertEquals(listOf(draft("a").copy(baseRevisionId = RevisionId("synthetic-revision"))), store.writtenDrafts)
+            assertEquals(Saved, saver.status.value, "The content did not change")
+            store.failNext()
+            runCurrent()
+            assertEquals(Saved, saver.status.value, "The content was stored before")
+        }
+
+    @Test
+    fun rebaseWhileAWriteWaitsGoesWithThatWrite() =
+        runTest {
+            val store = FakeStore()
+            val saver = autosaver(store)
+
+            saver.edit(draft("b"))
+            saver.rebase(RevisionId("synthetic-revision"))
+            assertTrue(store.writes.isEmpty())
+            advanceTimeBy(301)
+
+            assertEquals(listOf(draft("b").copy(baseRevisionId = RevisionId("synthetic-revision"))), store.writtenDrafts)
+        }
+
+    @Test
+    fun successfulRebaseWriteAfterAFailureStoresTheContent() =
+        runTest {
+            val store = FakeStore()
+            val saver = autosaver(store)
+            saver.edit(draft("b"))
+            saver.flush()
+            store.failNext()
+            runCurrent()
+            assertEquals(NeedsAttention, saver.status.value)
+
+            saver.rebase(RevisionId("synthetic-revision"))
+            store.completeNext()
+            runCurrent()
+
+            assertEquals(Saved, saver.status.value)
+        }
+
     /** Writes wait until the test completes or fails them, like a real asynchronous store. */
     private class FakeStore : LocalDraftStore {
         class PendingWrite(

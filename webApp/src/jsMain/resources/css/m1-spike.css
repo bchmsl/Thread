@@ -63,6 +63,15 @@ main { max-width: 1240px; margin: 0 auto; padding: 36px 40px 40px; }
 .btn--text { color: var(--text-2); padding: 0 10px; }
 .btn--text:hover { color: var(--text); background: var(--ink-800); }
 .btn--sm { height: 32px; padding: 0 12px; font-size: var(--fs-13); }
+.btn--primary {
+  height: var(--primary-h); padding: 0 22px; background: var(--action); color: var(--on-action);
+  font-weight: 700; font-size: var(--fs-15);
+}
+.btn--primary:hover { background: var(--action-hover); }
+.btn--primary:active { background: var(--action-pressed); }
+.btn--primary.btn--sm { height: 32px; padding: 0 12px; font-size: var(--fs-13); } /* Spike: v3 has no small primary button */
+.btn--danger-text { color: var(--danger); }
+.btn--danger-text:hover { color: #ffa0a0; }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 
 .input {
@@ -109,6 +118,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 36px 40px 40px; }
 /* ---------------- Note page (v3 Notes) ---------------- */
 .npane { min-width: 0; }
 .pagebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; max-width: 780px; margin: 0 auto 14px; min-height: 32px; }
+.pagebar__sp { flex: 1; }
 .pagedemo { max-width: 780px; margin: 16px auto 0; }
 .savest { display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-13); font-weight: 650; }
 .savest.tone-ok { color: var(--cat-done); }
@@ -183,10 +193,38 @@ main { max-width: 1240px; margin: 0 auto; padding: 36px 40px 40px; }
 .nbanner > .icon > svg { margin-top: 2px; }
 .nbanner--bad { background: rgba(255, 123, 123, 0.08); border-color: rgba(255, 123, 123, 0.45); }
 .nbanner--bad > .icon > svg { color: var(--danger); }
+.nbanner--warn { background: rgba(245, 166, 91, 0.08); border-color: rgba(245, 166, 91, 0.45); }
+.nbanner--warn > .icon > svg { color: var(--cat-paused); }
+.nbanner--info { background: rgba(130, 182, 255, 0.06); border-color: rgba(130, 182, 255, 0.35); }
+.nbanner--info > .icon > svg { color: var(--cat-active); }
 .nbanner__body { flex: 1; min-width: 200px; }
 .nbanner__title { font-weight: 700; }
 .nbanner__text { color: var(--text-2); font-size: var(--fs-14); margin-top: 2px; }
 .nbanner__acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------------- Account (Spike: v3 shows this on the sign-in page, .signin__state) ---------------- */
+.acct {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; max-width: 780px; margin: 0 auto 20px;
+  padding: 10px 14px; border-radius: 12px; background: var(--ink-850); border: 1px solid var(--border); font-size: var(--fs-14);
+}
+.acct > .icon > svg { color: var(--text-2); }
+.acct__text { flex: 1; min-width: 200px; }
+
+/* ---------------- Conflict compare (v3) ---------------- */
+.h2 { font: 500 var(--fs-20)/1.2 var(--font-display); display: flex; align-items: baseline; gap: 10px; }
+button.back { background: none; border: 0; cursor: pointer; font-family: inherit; }
+.editor--ro { min-height: 0; font-size: var(--fs-15); }
+.editor--ro ul[data-type="taskList"] > li > label { padding-top: 2px; }
+.cmp-wrap { max-width: 1100px; margin: 0 auto; }
+.cmp-intro { margin-bottom: 16px; }
+.cmp-intro__text { margin-top: 6px; }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cmp__col { background: var(--page-bg); border: 1px solid var(--page-edge); border-radius: 8px; padding: 18px 22px 22px; min-width: 0; }
+.cmp__head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--page-edge); }
+.cmp__dev { font: 500 var(--fs-17) var(--font-display); display: flex; gap: 8px; align-items: center; }
+.cmp__title { font: 500 20px/1.25 var(--font-display); color: var(--text); margin-bottom: 10px; }
+.cmp__acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+.cmp__hint { font-size: var(--fs-13); color: var(--text-3); flex-basis: 100%; }
 
 /* ---------------- Narrow screens (v3) ---------------- */
 @media (max-width: 759px) {
@@ -194,6 +232,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 36px 40px 40px; }
   .ph__title { font-size: 30px; }
   .page { padding: 40px 20px 48px; margin: 0 -6px; }
   .tb { margin: 0 -8px 18px; }
+  .cmp { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ---------------- ProseMirror base (copied from @tiptap/core 3.33.1, injected CSS) ---------------- */

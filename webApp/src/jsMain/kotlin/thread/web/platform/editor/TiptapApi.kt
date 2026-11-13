@@ -39,5 +39,11 @@ internal external interface TiptapChain {
 
     fun insertContent(value: dynamic): TiptapChain
 
+    /** Replaces the whole document. `options.emitUpdate = false` skips the update event. */
+    fun setContent(
+        content: dynamic,
+        options: dynamic,
+    ): TiptapChain
+
     fun run(): Boolean
 }

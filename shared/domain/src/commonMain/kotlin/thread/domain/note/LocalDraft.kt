@@ -13,12 +13,25 @@ value class NoteId(
     override fun toString(): String = value
 }
 
-/** The newest content of a Note on this device. It may not be synced yet. */
+/**
+ * The newest content of a Note on this device. It may not be synced yet.
+ *
+ * [baseRevisionId] is the newest server-acknowledged revision this content was edited from, or null before the
+ * Note first synced (adr/ADR-004-note-revisions-and-conflicts.md). The next revision this device writes uses it as
+ * its parent.
+ */
 data class LocalDraft(
     val noteId: NoteId,
     val title: String,
     val body: RichTextDocument,
-)
+    val baseRevisionId: RevisionId? = null,
+) {
+    /** True when title and body are the same. The base revision is not compared. */
+    fun hasSameContentAs(other: LocalDraft): Boolean = title == other.title && body == other.body
+
+    /** True when title and body are the same as [revision]'s. */
+    fun hasSameContentAs(revision: NoteRevision): Boolean = title == revision.title && body == revision.body
+}
 
 /**
  * Device-local, durable storage for [LocalDraft]s. Platform code implements it (IndexedDB on the web).

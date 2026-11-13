@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Thread talks to Firestore straight from the browser, so these rules are the security boundary
+// (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
+// users/{uid}. Only the shapes below can be written; anything not matched is denied, and nothing can be deleted.
+// Document shapes: adr/ADR-004-note-revisions-and-conflicts.md.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedInAs(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // users/{uid}/notes/{noteId}: the Note's current head and Trash state. Writes merge, so a write that does not
+    // name deletedAt never moves a Note out of Trash.
+    function validNote(note) {
+      return note.keys().hasOnly(['title', 'headRevisionId', 'updatedAt', 'schemaVersion', 'deletedAt', 'copiedFrom'])
+        && note.schemaVersion == 1
+        && note.updatedAt == request.time
+        && (!('title' in note) || note.title is string)
+        && (!('headRevisionId' in note) || (note.headRevisionId is string && note.headRevisionId.size() > 0))
+        && (!('deletedAt' in note) || note.deletedAt == null || note.deletedAt is timestamp)
+        && (!('copiedFrom' in note) || validCopiedFrom(note.copiedFrom));
+    }
+
+    function validCopiedFrom(source) {
+      return source is map
+        && source.keys().hasOnly(['noteId', 'revisionId'])
+        && source.noteId is string
+        && (source.get('revisionId', null) == null || source.revisionId is string);
+    }
+
+    // users/{uid}/notes/{noteId}/revisions/{revisionId}: one saved version, never changed after it is written.
+    function validRevision(revision) {
+      return revision.keys().hasOnly(['parentRevisionId', 'title', 'body', 'schemaVersion', 'deviceId', 'createdAt', 'discardedAt'])
+        && revision.keys().hasAll(['parentRevisionId', 'title', 'body', 'schemaVersion', 'deviceId', 'createdAt'])
+        && revision.schemaVersion == 1
+        && (revision.parentRevisionId == null || (revision.parentRevisionId is string && revision.parentRevisionId.size() > 0))
+        && revision.title is string
+        && revision.body is string
+        && revision.deviceId is string && revision.deviceId.size() > 0
+        && revision.createdAt is timestamp
+        && (revision.get('discardedAt', null) == null || revision.discardedAt is timestamp);
+    }
+
+    // A conflict resolution marks a revision discarded (D41). Two devices that resolve the same way write the same
+    // copy of a version again, which changes only createdAt.
+    function validRevisionChange(after, before) {
+      let changed = after.diff(before).affectedKeys();
+      return changed.hasOnly(['discardedAt', 'createdAt'])
+        && (!('createdAt' in changed) || after.createdAt == request.time)
+        && (!('discardedAt' in changed) || after.get('discardedAt', null) == request.time);
+    }
+
+    match /users/{uid}/notes/{noteId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validNote(request.resource.data);
+
+      match /revisions/{revisionId} {
+        allow read: if signedInAs(uid);
+        allow create: if signedInAs(uid)
+          && validRevision(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && !('discardedAt' in request.resource.data);
+        allow update: if signedInAs(uid)
+          && validRevision(request.resource.data)
+          && validRevisionChange(request.resource.data, resource.data);
+      }
+    }
+  }
+}

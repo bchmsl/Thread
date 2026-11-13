@@ -153,6 +153,10 @@ The owner accepted the proposed default for each question ("1. Default 2. Defaul
 | 2. Typing shortcuts (`# `, `- `, `1. `, `[ ] `): keep or turn off? | Keep them on. No change. |
 | 3. Store the editor's trailing empty paragraph, or trim it? | Trim it in `RichTextEditorJson`, with tests. Done (see "Editor"). |
 
+## Later changes
+
+- Phase 2 (M1-B) changed the local draft store. The record is now version 2 with `baseRevisionId`, and version 1 records are still read. Each signed-in account has its own database, `thread-drafts-<uid>`; `thread-local` is now the signed-out database. See ADR-002 and ADR-004 (both Proposed).
+
 ## Proposed document updates
 
 - `03-architecture.md`: name RichText v1 and `RichTextJson` as the stored Note body format, and `LocalDraftStore` as the domain boundary for device-local drafts.

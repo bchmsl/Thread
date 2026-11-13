@@ -145,6 +145,15 @@ internal class NoteEditor(
         editor.chain().focus().run()
     }
 
+    /**
+     * Shows [body] in place of the current content, for content that came from elsewhere, such as another device's
+     * newer version. Does not call onChange: the body is already saved where it came from.
+     */
+    fun replaceContent(body: RichTextDocument) {
+        if (failed || editor.isDestroyed) return
+        editor.chain().setContent(RichTextEditorJson.toEditor(body), jsObjectOf("emitUpdate" to false)).run()
+    }
+
     fun destroy() {
         if (!editor.isDestroyed) editor.destroy()
     }
