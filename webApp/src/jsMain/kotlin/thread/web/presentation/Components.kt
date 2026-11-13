@@ -6,13 +6,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.browser.document
 import org.jetbrains.compose.web.attributes.ButtonType
+import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
 import org.jetbrains.compose.web.dom.H3
 import org.jetbrains.compose.web.dom.Header
+import org.jetbrains.compose.web.dom.Input
 import org.jetbrains.compose.web.dom.Option
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Select
@@ -20,6 +23,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.TagElement
 import org.jetbrains.compose.web.dom.Text
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.HTMLSelectElement
 
 /**
@@ -113,5 +117,71 @@ internal fun SelectBox(
     }
     SideEffect {
         element?.let { if (it.value != value) it.value = value }
+    }
+}
+
+/**
+ * A checkbox that shows [checked]. Like [SelectBox], the element's state is set directly after each composition, so
+ * it always follows what the store says, also after the person clicks it.
+ */
+@Composable
+internal fun CheckBox(
+    checked: Boolean,
+    label: String?,
+    classes: List<String> = listOf("check"),
+    id: String? = null,
+    indeterminate: Boolean = false,
+    switch: Boolean = false,
+    onChange: (Boolean) -> Unit,
+) {
+    var element by remember { mutableStateOf<HTMLInputElement?>(null) }
+    Input(InputType.Checkbox) {
+        classes(*classes.toTypedArray())
+        if (id != null) id(id)
+        if (switch) attr("role", "switch")
+        if (label != null) attr("aria-label", label)
+        ref {
+            element = it
+            onDispose { element = null }
+        }
+        onChange { event -> onChange(event.value) }
+    }
+    SideEffect {
+        element?.let {
+            if (it.checked != checked) it.checked = checked
+            if (it.indeterminate != indeterminate) it.indeterminate = indeterminate
+        }
+    }
+}
+
+/**
+ * A date or time input that shows [value] and reports a finished change. While it has focus it keeps what the
+ * person is typing; when focus leaves, it shows the stored value again.
+ */
+@Composable
+internal fun StoredValueInput(
+    type: InputType<String>,
+    value: String,
+    classes: List<String>,
+    id: String? = null,
+    label: String? = null,
+    onChange: (String) -> Unit,
+) {
+    var element by remember { mutableStateOf<HTMLInputElement?>(null) }
+    var focused by remember { mutableStateOf(false) }
+    Input(type) {
+        classes(*classes.toTypedArray())
+        if (id != null) id(id)
+        if (label != null) attr("aria-label", label)
+        ref {
+            element = it
+            onDispose { element = null }
+        }
+        onFocus { focused = true }
+        onBlur { focused = false }
+        onChange { event -> onChange(event.value) }
+    }
+    SideEffect {
+        element?.let { if (!focused && document.activeElement != it && it.value != value) it.value = value }
     }
 }

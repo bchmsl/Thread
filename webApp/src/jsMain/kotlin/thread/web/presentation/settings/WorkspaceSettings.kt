@@ -46,6 +46,7 @@ import thread.domain.workspace.changeStatusCategory
 import thread.domain.workspace.deleteStatus
 import thread.domain.workspace.moveStatus
 import thread.domain.workspace.renameStatus
+import thread.web.presentation.CheckBox
 import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
@@ -350,6 +351,15 @@ internal fun PreferencesBlock(
                         onClick { workspace.setPrefs(workspace.prefs.copy(topicsView = option)) }
                     }) { Text(if (option == TopicsView.List) "List" else "Board") }
                 }
+            }
+        }
+        Div({ classes("pref") }) {
+            Div {
+                Label("pref-keep", { classes("pref__label") }) { Text("Keep completed tasks in Today") }
+                P({ classes("pref__hint") }) { Text("They stay, struck through, until the end of the day.") }
+            }
+            CheckBox(prefs.keepCompleted, label = null, classes = listOf("switch"), id = "pref-keep", switch = true) { on ->
+                workspace.setPrefs(workspace.prefs.copy(keepCompleted = on))
             }
         }
         Div({ classes("pref") }) {

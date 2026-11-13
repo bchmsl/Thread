@@ -3,8 +3,8 @@ rules_version = '2';
 // Thread talks to Firestore straight from the browser, so these rules are the security boundary
 // (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
 // users/{uid}. Only the shapes below can be written; anything not matched is denied, and nothing can be deleted.
-// Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes) and adr/ADR-009-workspace-entities-and-sync.md
-// (statuses, Topics, preferences).
+// Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes), adr/ADR-009-workspace-entities-and-sync.md
+// (statuses, Topics, preferences) and adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(uid) {
@@ -82,14 +82,67 @@ service cloud.firestore {
       return text is string && text.size() <= 10000;
     }
 
-    // users/{uid}/prefs/main: the workspace preferences.
+    // users/{uid}/prefs/main: the workspace preferences. keepCompleted and timeZone arrived in Phase 7, so a document
+    // saved before may lack them.
     function validPrefs(prefs) {
-      return prefs.keys().hasOnly(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
+      return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'updatedAt', 'schemaVersion'])
         && prefs.keys().hasAll(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
         && prefs.schemaVersion == 1
         && prefs.updatedAt == request.time
         && prefs.topicsView in ['list', 'board']
-        && prefs.captureType in ['task', 'note', 'topic'];
+        && prefs.captureType in ['task', 'note', 'topic']
+        && (!('keepCompleted' in prefs) || prefs.keepCompleted is bool)
+        && (!('timeZone' in prefs) || (prefs.timeZone is string && prefs.timeZone.size() > 0 && prefs.timeZone.size() <= 64));
+    }
+
+    // A calendar day, YYYY-MM-DD, and a deadline, a day with an optional HH:MM. Never instants, so they never shift.
+    function validDay(value) {
+      return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
+    }
+
+    function validDeadline(value) {
+      return value is string && value.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2})?');
+    }
+
+    function nullOrTimestamp(map, key) {
+      return map.get(key, null) == null || map[key] is timestamp;
+    }
+
+    // users/{uid}/tasks/{taskId}: one personal Task. Trash is a deletedAt write; an undone capture is also discarded.
+    function validTask(task) {
+      return task.keys().hasOnly(['title', 'topicId', 'done', 'completedOn', 'plannedDay', 'deadline', 'inbox', 'createdAt',
+          'updatedAt', 'deletedAt', 'discarded', 'schemaVersion'])
+        && task.keys().hasAll(['title', 'topicId', 'done', 'completedOn', 'plannedDay', 'deadline', 'inbox', 'createdAt',
+          'updatedAt', 'schemaVersion'])
+        && task.schemaVersion == 1
+        && task.updatedAt == request.time
+        && task.title is string && task.title.size() > 0 && task.title.size() <= 500
+        && (task.topicId == null || (task.topicId is string && task.topicId.size() > 0))
+        && task.done is bool
+        && task.inbox is bool
+        && (task.completedOn == null || validDay(task.completedOn))
+        && (task.plannedDay == null || validDay(task.plannedDay))
+        && (task.deadline == null || validDeadline(task.deadline))
+        && task.createdAt is timestamp
+        && nullOrTimestamp(task, 'deletedAt')
+        && (!('discarded' in task) || task.discarded is bool);
+    }
+
+    // users/{uid}/reminders/{reminderId}: one in-app reminder at a wall-clock time in its time zone.
+    function validReminder(reminder) {
+      return reminder.keys().hasOnly(['at', 'zone', 'text', 'targetKind', 'targetId', 'dismissedAt', 'createdAt', 'updatedAt',
+          'deletedAt', 'schemaVersion'])
+        && reminder.keys().hasAll(['at', 'zone', 'text', 'targetKind', 'targetId', 'createdAt', 'updatedAt', 'schemaVersion'])
+        && reminder.schemaVersion == 1
+        && reminder.updatedAt == request.time
+        && reminder.at is string && reminder.at.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}')
+        && reminder.zone is string && reminder.zone.size() > 0 && reminder.zone.size() <= 64
+        && reminder.text is string && reminder.text.size() > 0 && reminder.text.size() <= 500
+        && reminder.targetKind in ['task', 'note', 'topic']
+        && reminder.targetId is string && reminder.targetId.size() > 0
+        && reminder.createdAt is timestamp
+        && nullOrTimestamp(reminder, 'dismissedAt')
+        && nullOrTimestamp(reminder, 'deletedAt');
     }
 
     match /users/{uid}/notes/{noteId} {
@@ -120,6 +173,26 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time;
       allow update: if signedInAs(uid)
         && validTopic(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{uid}/tasks/{taskId} {
+      allow read: if signedInAs(uid);
+      allow create: if signedInAs(uid)
+        && validTask(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedInAs(uid)
+        && validTask(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{uid}/reminders/{reminderId} {
+      allow read: if signedInAs(uid);
+      allow create: if signedInAs(uid)
+        && validReminder(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedInAs(uid)
+        && validReminder(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt;
     }
 

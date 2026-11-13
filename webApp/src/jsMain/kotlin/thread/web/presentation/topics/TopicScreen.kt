@@ -1,6 +1,7 @@
 package thread.web.presentation.topics
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +23,7 @@ import org.jetbrains.compose.web.attributes.required
 import org.jetbrains.compose.web.attributes.rows
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Fieldset
@@ -39,6 +41,8 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextArea
 import org.jetbrains.compose.web.dom.TextInput
 import org.w3c.dom.HTMLTextAreaElement
+import thread.domain.reminder.ReminderTarget
+import thread.domain.task.Task
 import thread.domain.topic.StatusId
 import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
 import thread.domain.topic.TOPIC_TEXT_MAX_LENGTH
@@ -58,15 +62,18 @@ import thread.web.presentation.ModalDialog
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.tasks.focusById
 
 /**
- * Topic details (v3 topic.html): identity and status on top, then "Pick up here". Tasks, notes, Jira, pull requests,
- * reminders and Move to Trash join in later phases.
+ * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks and Reminders. Notes, Jira,
+ * pull requests and Move to Trash join in later phases.
  */
 @Composable
 internal fun TopicScreen(
     workspace: WorkspaceModel,
     topicId: String?,
+    onOpenTask: (Task) -> Unit,
+    onOpenTarget: (ReminderTarget) -> Unit,
 ) {
     if (!workspace.loaded) {
         if (workspace.readFailed) EmptyState(Icon.Alert, "Topics could not load", "Reload the page to try again.")
@@ -81,6 +88,11 @@ internal fun TopicScreen(
     }
     val toasts = LocalToasts.current
     var editing by remember { mutableStateOf(false) }
+    // v3 opens Tasks and closes Reminders by default; the choice lasts while the page is open.
+    var tasksOpen by remember(topic.id) { mutableStateOf(true) }
+    var remindersOpen by remember(topic.id) { mutableStateOf(false) }
+    var focusAddTask by remember { mutableStateOf(0) }
+    LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("td-new-task") }
     val statuses = workspace.statuses
     val status = statusOf(topic, statuses)
 
@@ -114,7 +126,7 @@ internal fun TopicScreen(
                 val edit = workspace.apply(moveTopic(topic, StatusId(picked), statuses))
                 if (edit != null && to != null) toasts.show("Status changed to ${to.name}", undo = { workspace.undo(edit) })
             }
-            TopicProgress(topic)
+            TopicProgress(topic, workspace.progress(topic.id))
         }
         P({ classes("td-goal") }) {
             if (topic.goal.isNotEmpty()) {
@@ -132,6 +144,14 @@ internal fun TopicScreen(
                 IconView(Icon.Edit, 16)
                 Text(" Edit")
             }
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--primary")
+                onClick {
+                    tasksOpen = true
+                    focusAddTask++
+                }
+            }) { Text("Add task") }
         }
     }
     Section({
@@ -148,6 +168,17 @@ internal fun TopicScreen(
         }
         PickUpField("Next step", topic.nextStep, "The first thing to do when you come back") { text ->
             workspace.topic(topic.id.value)?.let { workspace.apply(editPickUp(it, nextStep = text)) }
+        }
+    }
+    Div({ classes("td-grid") }) {
+        Div({ classes("td-main") }) {
+            TopicTasksSection(workspace, topic, tasksOpen, { tasksOpen = !tasksOpen }, onOpenTask)
+        }
+        Aside({
+            classes("td-side")
+            attr("aria-label", "Linked work and reminders")
+        }) {
+            TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, onOpenTarget)
         }
     }
     if (editing) {

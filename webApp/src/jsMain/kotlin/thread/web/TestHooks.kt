@@ -5,6 +5,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.promise
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
+import thread.web.platform.WallClock
 
 /** Failure switches for automated checks. Only the emulator test hooks change them. */
 internal class TestFlags {
@@ -36,5 +37,7 @@ internal fun installTestHooks(
     hooks.goOnline = { hookScope.promise { backend.goOnlineForTesting() } }
     hooks.setFailLocalSaves = { on: Boolean -> flags.failLocalSaves = on }
     hooks.setFailServerWrites = { on: Boolean -> flags.failServerWrites = on }
+    // Moves the app's clock, so reminder and day-change behaviour can be checked without waiting.
+    hooks.setClockOffset = { millis: Double -> WallClock.shiftForTesting(millis) }
     window.asDynamic().threadTest = hooks
 }

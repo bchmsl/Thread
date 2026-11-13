@@ -3,6 +3,9 @@ package thread.domain.workspace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import thread.domain.note.NoteSaveState
+import thread.domain.reminder.Reminder
+import thread.domain.task.Task
+import thread.domain.time.DEFAULT_WORKSPACE_ZONE
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicStatus
 
@@ -37,6 +40,10 @@ enum class CaptureKind(
 data class WorkspacePrefs(
     val topicsView: TopicsView = TopicsView.List,
     val captureType: CaptureKind = CaptureKind.Task,
+    /** Settings, "Keep completed tasks in Today". On by default, as in v3. */
+    val keepCompleted: Boolean = true,
+    /** The IANA time zone that defines today, overdue and reminder times. No screen changes it in the pilot. */
+    val timeZone: String = DEFAULT_WORKSPACE_ZONE,
 )
 
 /**
@@ -64,6 +71,20 @@ sealed interface WorkspaceWrite {
         val prefs: WorkspacePrefs,
         val before: WorkspacePrefs? = null,
     ) : WorkspaceWrite
+
+    /** Saves [task]. [isNew] marks its first write, which also stores when it was created. */
+    data class PutTask(
+        val task: Task,
+        val isNew: Boolean = false,
+        val before: Task? = null,
+    ) : WorkspaceWrite
+
+    /** Saves [reminder]. [isNew] marks its first write, which also stores when it was created. */
+    data class PutReminder(
+        val reminder: Reminder,
+        val isNew: Boolean = false,
+        val before: Reminder? = null,
+    ) : WorkspaceWrite
 }
 
 /** What this device knows of the workspace: its own changes included, acknowledged or not. */
@@ -71,6 +92,10 @@ data class WorkspaceData(
     /** Every stored status, deleted ones included. Empty before the workspace is seeded. */
     val statuses: List<TopicStatus> = emptyList(),
     val topics: List<Topic> = emptyList(),
+    /** Every stored Task, those in Trash and discarded ones included. */
+    val tasks: List<Task> = emptyList(),
+    /** Every stored Reminder, those in Trash included. */
+    val reminders: List<Reminder> = emptyList(),
     val prefs: WorkspacePrefs = WorkspacePrefs(),
     /** True when the account has a stored preferences document. Until then [prefs] are the defaults. */
     val prefsStored: Boolean = false,
@@ -83,7 +108,8 @@ data class WorkspaceData(
 )
 
 /**
- * Topics, statuses and preferences of one signed-in account (adr/ADR-009-workspace-entities-and-sync.md). Platform
+ * Topics, statuses, Tasks, Reminders and preferences of one signed-in account (adr/ADR-009-workspace-entities-and-sync.md,
+ * adr/ADR-010-tasks-reminders-and-dates.md). Platform
  * code implements it (Firestore on the web). The store's local copy is this device's only copy and outbox: there is
  * no second queue.
  */

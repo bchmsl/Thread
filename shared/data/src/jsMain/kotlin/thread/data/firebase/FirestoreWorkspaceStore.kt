@@ -10,6 +10,16 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import thread.data.local.newJsObject
 import thread.domain.account.AccountId
+import thread.domain.reminder.Reminder
+import thread.domain.reminder.ReminderId
+import thread.domain.reminder.ReminderTarget
+import thread.domain.reminder.TargetKind
+import thread.domain.task.Deadline
+import thread.domain.task.Task
+import thread.domain.task.TaskId
+import thread.domain.time.DEFAULT_WORKSPACE_ZONE
+import thread.domain.time.LocalDay
+import thread.domain.time.WallTime
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
 import thread.domain.topic.Topic
@@ -29,12 +39,18 @@ class WorkspaceReadException(
 ) : Exception(message)
 
 /**
- * [WorkspaceStore] on Cloud Firestore for one account (adr/ADR-009-workspace-entities-and-sync.md).
+ * [WorkspaceStore] on Cloud Firestore for one account (adr/ADR-009-workspace-entities-and-sync.md,
+ * adr/ADR-010-tasks-reminders-and-dates.md).
  *
  * - `users/{uid}/statuses/{statusId}`: `{name, category, sortOrder, deletedAt, updatedAt, schemaVersion: 1}`.
  * - `users/{uid}/topics/{topicId}`: `{name, color, statusId, goal, leftOff, nextStep, createdAt, updatedAt,
  *   schemaVersion: 1}`.
- * - `users/{uid}/prefs/main`: `{topicsView, captureType, updatedAt, schemaVersion: 1}`.
+ * - `users/{uid}/tasks/{taskId}`: `{title, topicId, done, completedOn, plannedDay, deadline, inbox, createdAt,
+ *   updatedAt, deletedAt, discarded, schemaVersion: 1}`. Days and deadlines are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`
+ *   strings in the workspace time zone, never instants.
+ * - `users/{uid}/reminders/{reminderId}`: `{at, zone, text, targetKind, targetId, dismissedAt, createdAt, updatedAt,
+ *   deletedAt, schemaVersion: 1}`.
+ * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, updatedAt, schemaVersion: 1}`.
  *
  * The Firestore persistent cache is the device copy and the outbox. A write goes into it at once, also offline, and
  * the snapshot metadata says whether the server acknowledged it. A refused write is dropped from the cache by the SDK;
@@ -64,12 +80,16 @@ class FirestoreWorkspaceStore internal constructor(
         callbackFlow {
             var statuses: QuerySnapshot? = null
             var topics: QuerySnapshot? = null
+            var tasks: QuerySnapshot? = null
+            var reminders: QuerySnapshot? = null
             var prefs: DocumentSnapshot? = null
             val emitWhenComplete = {
                 val s = statuses
                 val t = topics
+                val k = tasks
+                val r = reminders
                 val p = prefs
-                if (s != null && t != null && p != null) trySend(toWorkspaceData(s, t, p))
+                if (s != null && t != null && k != null && r != null && p != null) trySend(toWorkspaceData(s, t, k, r, p))
             }
             val stop = { error: FirestoreError ->
                 close(WorkspaceReadException("Listening failed (${error.code})"))
@@ -87,6 +107,16 @@ class FirestoreWorkspaceStore internal constructor(
                     topics = it
                     emitWhenComplete()
                 }, stop)
+            val stopTasks =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, TASKS), options, {
+                    tasks = it
+                    emitWhenComplete()
+                }, stop)
+            val stopReminders =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, REMINDERS), options, {
+                    reminders = it
+                    emitWhenComplete()
+                }, stop)
             val stopPrefs =
                 onDocumentSnapshot(prefsRef(), options, {
                     prefs = it
@@ -95,6 +125,8 @@ class FirestoreWorkspaceStore internal constructor(
             awaitClose {
                 stopStatuses()
                 stopTopics()
+                stopTasks()
+                stopReminders()
                 stopPrefs()
             }
         }.conflate()
@@ -109,6 +141,8 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutStatus -> statusData(write.status, write.before)
                     is WorkspaceWrite.PutTopic -> topicData(write.topic, write.isNew, write.before)
                     is WorkspaceWrite.PutPrefs -> prefsData(write.prefs, write.before)
+                    is WorkspaceWrite.PutTask -> taskData(write.task, write.isNew, write.before)
+                    is WorkspaceWrite.PutReminder -> reminderData(write.reminder, write.isNew, write.before)
                 }
             if (reject) data.rejectedForTesting = true
             batch.set(reference(write), data, merge())
@@ -122,6 +156,8 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutStatus -> doc(firestore, USERS, accountId.value, STATUSES, write.status.id.value)
             is WorkspaceWrite.PutTopic -> doc(firestore, USERS, accountId.value, TOPICS, write.topic.id.value)
             is WorkspaceWrite.PutPrefs -> prefsRef()
+            is WorkspaceWrite.PutTask -> doc(firestore, USERS, accountId.value, TASKS, write.task.id.value)
+            is WorkspaceWrite.PutReminder -> doc(firestore, USERS, accountId.value, REMINDERS, write.reminder.id.value)
         }
 
     private fun prefsRef() = doc(firestore, USERS, accountId.value, PREFS, PREFS_ID)
@@ -168,6 +204,52 @@ class FirestoreWorkspaceStore internal constructor(
         val data = newJsObject()
         if (before == null || before.topicsView != prefs.topicsView) data.topicsView = prefs.topicsView.id
         if (before == null || before.captureType != prefs.captureType) data.captureType = prefs.captureType.id
+        if (before == null || before.keepCompleted != prefs.keepCompleted) data.keepCompleted = prefs.keepCompleted
+        if (before == null || before.timeZone != prefs.timeZone) data.timeZone = prefs.timeZone
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
+    private fun taskData(
+        task: Task,
+        isNew: Boolean,
+        before: Task?,
+    ): dynamic {
+        val data = newJsObject()
+        val base = before.takeUnless { isNew }
+        if (base == null || base.title != task.title) data.title = task.title
+        if (base == null || base.topicId != task.topicId) data.topicId = task.topicId?.value
+        if (base == null || base.done != task.done) data.done = task.done
+        if (base == null || base.completedOn != task.completedOn) data.completedOn = task.completedOn?.toString()
+        if (base == null || base.plannedDay != task.plannedDay) data.plannedDay = task.plannedDay?.toString()
+        if (base == null || base.deadline != task.deadline) data.deadline = task.deadline?.toString()
+        if (base == null || base.inbox != task.inbox) data.inbox = task.inbox
+        if (base == null || base.deleted != task.deleted) data.deletedAt = if (task.deleted) serverTimestamp() else null
+        if ((base == null && task.discarded) || (base != null && base.discarded != task.discarded)) data.discarded = task.discarded
+        if (isNew) data.createdAt = serverTimestamp()
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
+    private fun reminderData(
+        reminder: Reminder,
+        isNew: Boolean,
+        before: Reminder?,
+    ): dynamic {
+        val data = newJsObject()
+        val base = before.takeUnless { isNew }
+        if (base == null || base.at != reminder.at) data.at = reminder.at.toString()
+        if (base == null || base.zone != reminder.zone) data.zone = reminder.zone
+        if (base == null || base.text != reminder.text) data.text = reminder.text
+        if (base == null || base.target != reminder.target) {
+            data.targetKind = reminder.target.kind.id
+            data.targetId = reminder.target.id
+        }
+        if (base == null || base.dismissed != reminder.dismissed) data.dismissedAt = if (reminder.dismissed) serverTimestamp() else null
+        if (base == null || base.deleted != reminder.deleted) data.deletedAt = if (reminder.deleted) serverTimestamp() else null
+        if (isNew) data.createdAt = serverTimestamp()
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -184,6 +266,8 @@ class FirestoreWorkspaceStore internal constructor(
         const val STATUSES = "statuses"
         const val TOPICS = "topics"
         const val PREFS = "prefs"
+        const val TASKS = "tasks"
+        const val REMINDERS = "reminders"
         const val PREFS_ID = "main"
         const val SCHEMA_VERSION = 1
     }
@@ -192,19 +276,28 @@ class FirestoreWorkspaceStore internal constructor(
 private fun toWorkspaceData(
     statuses: QuerySnapshot,
     topics: QuerySnapshot,
+    tasks: QuerySnapshot,
+    reminders: QuerySnapshot,
     prefs: DocumentSnapshot,
 ): WorkspaceData {
     val decodedStatuses = statuses.docs.map(::decodeStatus)
     val decodedTopics = topics.docs.map(::decodeTopic)
+    val decodedTasks = tasks.docs.map(::decodeTask)
+    val decodedReminders = reminders.docs.map(::decodeReminder)
+    val all = listOf(statuses, topics, tasks, reminders)
     return WorkspaceData(
         statuses = decodedStatuses.filterNotNull(),
         topics = decodedTopics.filterNotNull(),
+        tasks = decodedTasks.filterNotNull(),
+        reminders = decodedReminders.filterNotNull(),
         prefs = decodePrefs(prefs),
         prefsStored = prefs.exists(),
         // Only the server can say that an account has no status at all. The cache may just not have them yet.
         needsSeed = !statuses.metadata.fromCache && statuses.docs.isEmpty(),
-        pendingWrites = statuses.metadata.hasPendingWrites || topics.metadata.hasPendingWrites || prefs.metadata.hasPendingWrites,
-        unreadable = decodedStatuses.count { it == null } + decodedTopics.count { it == null },
+        pendingWrites = all.any { it.metadata.hasPendingWrites } || prefs.metadata.hasPendingWrites,
+        unreadable =
+            decodedStatuses.count { it == null } + decodedTopics.count { it == null } +
+                decodedTasks.count { it == null } + decodedReminders.count { it == null },
     )
 }
 
@@ -245,6 +338,52 @@ private fun decodeTopic(snapshot: DocumentSnapshot): Topic? {
     )
 }
 
+/** The Task in [snapshot], or null when this app cannot read it. Days that do not parse make it unreadable. */
+private fun decodeTask(snapshot: DocumentSnapshot): Task? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val title = stringOrNull(data.title)?.takeIf { it.isNotBlank() } ?: return null
+    val done = booleanOrNull(data.done) ?: return null
+    val inbox = booleanOrNull(data.inbox) ?: return null
+    val completedOn = optional(data.completedOn, LocalDay::parse) ?: return null
+    val plannedDay = optional(data.plannedDay, LocalDay::parse) ?: return null
+    val deadline = optional(data.deadline, Deadline::parse) ?: return null
+    return Task(
+        id = TaskId(snapshot.id),
+        title = title,
+        topicId = stringOrNull(data.topicId)?.takeIf { it.isNotBlank() }?.let(::TopicId),
+        done = done,
+        completedOn = completedOn.value,
+        plannedDay = plannedDay.value,
+        deadline = deadline.value,
+        inbox = inbox,
+        createdAtMillis = millisOrNull(data.createdAt),
+        deleted = data.deletedAt != null,
+        discarded = data.discarded == true,
+    )
+}
+
+/** The Reminder in [snapshot], or null when this app cannot read it. */
+private fun decodeReminder(snapshot: DocumentSnapshot): Reminder? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val at = stringOrNull(data.at)?.let(WallTime::parse) ?: return null
+    val zone = stringOrNull(data.zone)?.takeIf { it.isNotBlank() } ?: return null
+    val text = stringOrNull(data.text)?.takeIf { it.isNotBlank() } ?: return null
+    val kind = TargetKind.fromId(stringOrNull(data.targetKind)) ?: return null
+    val targetId = stringOrNull(data.targetId)?.takeIf { it.isNotBlank() } ?: return null
+    return Reminder(
+        id = ReminderId(snapshot.id),
+        at = at,
+        zone = zone,
+        text = text,
+        target = ReminderTarget(kind, targetId),
+        dismissed = data.dismissedAt != null,
+        deleted = data.deletedAt != null,
+        createdAtMillis = millisOrNull(data.createdAt),
+    )
+}
+
 /** Missing or unknown values fall back to the defaults, field by field. */
 private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
     val data: dynamic = if (snapshot.exists()) snapshot.data(estimatedTimestamps()) else null
@@ -252,8 +391,28 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
     return WorkspacePrefs(
         topicsView = TopicsView.fromId(stringOrNull(data.topicsView)) ?: TopicsView.List,
         captureType = CaptureKind.fromId(stringOrNull(data.captureType)) ?: CaptureKind.Task,
+        keepCompleted = booleanOrNull(data.keepCompleted) ?: true,
+        timeZone = stringOrNull(data.timeZone)?.takeIf { it.isNotBlank() } ?: DEFAULT_WORKSPACE_ZONE,
     )
 }
+
+/** A nullable stored value: [Optional] of null when absent or null, null when present but unreadable. */
+private class Optional<T>(
+    val value: T?,
+)
+
+private fun <T> optional(
+    value: dynamic,
+    parse: (String) -> T?,
+): Optional<T>? {
+    if (value == null) return Optional(null)
+    val text = stringOrNull(value) ?: return null
+    return parse(text)?.let { Optional(it) }
+}
+
+private fun booleanOrNull(value: dynamic): Boolean? = if (jsTypeOf(value) == "boolean") value.unsafeCast<Boolean>() else null
+
+private fun millisOrNull(value: dynamic): Long? = if (value == null) null else value.unsafeCast<Timestamp>().toMillis().toLong()
 
 private fun stringOrNull(value: dynamic): String? = if (jsTypeOf(value) == "string") value.unsafeCast<String>() else null
 

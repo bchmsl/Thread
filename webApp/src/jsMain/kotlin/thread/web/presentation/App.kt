@@ -20,6 +20,10 @@ import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountId
 import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
+import thread.domain.reminder.ReminderTarget
+import thread.domain.reminder.TargetKind
+import thread.domain.task.Task
+import thread.domain.topic.TopicId
 import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
@@ -35,6 +39,10 @@ import thread.web.presentation.shell.StatusLine
 import thread.web.presentation.shell.SyncPanel
 import thread.web.presentation.shell.ViewsSheet
 import thread.web.presentation.shell.focusStatusLine
+import thread.web.presentation.tasks.InboxScreen
+import thread.web.presentation.tasks.ReminderBanners
+import thread.web.presentation.tasks.TaskSheet
+import thread.web.presentation.tasks.TodayScreen
 import thread.web.presentation.topics.TopicScreen
 import thread.web.presentation.topics.TopicsScreen
 import thread.web.presentation.topics.topicPlace
@@ -86,6 +94,8 @@ private fun Workspace(
     val syncCenter = remember { SyncCenter() }
     val capture = remember { CaptureState(CaptureType.Task) }
     val workspace = remember { WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId) }
+    // Wall-clock "now" in the workspace zone, refreshed each minute (ADR-010).
+    val now by rememberNow(workspace.prefs.timeZone)
     val online by rememberOnline()
     var searchOpen by remember { mutableStateOf(false) }
     var syncOpen by remember { mutableStateOf(false) }
@@ -108,11 +118,13 @@ private fun Workspace(
         SideEffect { router.replace(View.Today.place) }
     }
     val view = View.of(place)
+    // The Task sheet rides on any page as `?task=`, so the page under it is the place without that parameter.
+    val page = place.with(TASK_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
     val title = if (place.head == "topic") placeTopicId?.let(workspace::topic)?.name ?: "Topic" else view.label
     LaunchedEffect(title) { document.title = "$title | Thread" }
     var firstPlace by remember { mutableStateOf(true) }
-    LaunchedEffect(place) {
+    LaunchedEffect(page) {
         // Announce a new view by moving focus to its title, but not on first load.
         if (firstPlace) {
             firstPlace = false
@@ -135,111 +147,152 @@ private fun Workspace(
         if (captureTypeReady) workspace.setPrefs(workspace.prefs.copy(captureType = capture.type.kind))
     }
     val syncState = syncCenter.overall(online)
-
-    A("#line", {
-        classes("skip")
-        onClick { event ->
-            event.preventDefault()
-            focusStatusLine()
-        }
-    }) { Text("Skip to workspace bar") }
-    Div({ classes("app") }) {
-        Div({ id("banner") })
-        Main({
-            id("main")
-            tabIndex(-1)
-        }) {
-            when {
-                place.head == "topic" -> TopicScreen(workspace, placeTopicId)
-                view == View.Topics -> TopicsScreen(workspace, place, router, capture)
-                view == View.Settings ->
-                    SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
-                        StatusesBlock(workspace)
-                        PreferencesBlock(workspace, capture)
-                    }
-                else -> NotBuiltYet(view)
-            }
+    val openTask: (Task) -> Unit = { task -> router.replace(taskPlace(router.place, task.id)) }
+    val openTarget: (ReminderTarget) -> Unit = { target ->
+        when (target.kind) {
+            TargetKind.Task -> workspace.task(target.id)?.let(openTask)
+            TargetKind.Topic -> workspace.topic(target.id)?.let { router.go(topicPlace(it)) }
+            // Notes arrive in Phase 8.
+            TargetKind.Note -> Unit
         }
     }
-    StatusLine(
-        current = view,
-        inboxCount = 0,
-        sync = syncText(syncState),
-        capture = capture,
-        destinations = workspace.topics.map { CaptureDestination(it.id.value, it.name) },
-        // On a Topic's page, capture files into that Topic unless the person picks another place (v3).
-        defaultDestination = placeTopicId,
-        onCapture = { type, title, _ ->
-            when {
-                title.isEmpty() -> {
-                    capture.requestFocus(flash = false)
-                    toasts.show("Type a title first.")
-                }
-                type == CaptureType.Topic ->
-                    when (val created = workspace.createTopic(title)) {
-                        is TopicCreation.Refused -> toasts.show(topicProblemText(created.problem))
-                        is TopicCreation.Created -> {
-                            capture.title = ""
-                            capture.requestFocus(flash = false)
-                            toasts.show("Topic added to Topics", open = { router.go(topicPlace(created.topic)) })
+
+    CompositionLocalProvider(LocalNow provides now) {
+        A("#line", {
+            classes("skip")
+            onClick { event ->
+                event.preventDefault()
+                focusStatusLine()
+            }
+        }) { Text("Skip to workspace bar") }
+        Div({ classes("app") }) {
+            Div({ id("banner") }) { ReminderBanners(workspace, openTarget) }
+            Main({
+                id("main")
+                tabIndex(-1)
+            }) {
+                when {
+                    place.head == "topic" -> TopicScreen(workspace, placeTopicId, openTask, openTarget)
+                    view == View.Today -> TodayScreen(workspace, place.param("add") == "1", openTask, openTarget)
+                    view == View.Inbox -> InboxScreen(workspace, router, capture, openTask)
+                    view == View.Topics -> TopicsScreen(workspace, place, router, capture)
+                    view == View.Settings ->
+                        SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
+                            StatusesBlock(workspace)
+                            PreferencesBlock(workspace, capture)
                         }
-                    }
-                // Tasks and Notes from capture arrive in Phases 7 and 8.
-                else -> toasts.show("Capture is not connected yet.")
+                    else -> NotBuiltYet(view)
+                }
             }
-        },
-        onOpenViews = { viewsOpen = true },
-        onOpenSearch = { searchOpen = true },
-        onOpenSync = { syncOpen = true },
-    )
-    if (dialogs.isEmpty) ToastHost(toasts)
-
-    if (viewsOpen) {
-        ViewsSheet(
+        }
+        StatusLine(
             current = view,
-            inboxCount = 0,
-            onSearch = {
-                viewsOpen = false
-                searchOpen = true
-            },
-            onSync = {
-                viewsOpen = false
-                syncOpen = true
-            },
-            onClose = { viewsOpen = false },
-        )
-    }
-    if (syncOpen) {
-        SyncPanel(syncState, syncCenter.problems, services.usesEmulators) { syncOpen = false }
-    }
-    if (searchOpen) {
-        SearchPalette(
-            initialQuery = "",
-            goTo =
-                View.entries.map { target ->
-                    SearchOption(target.label, "", { IconView(target.icon, 18) }) {
-                        searchOpen = false
-                        router.go(target.place)
+            inboxCount = workspace.inbox.size,
+            sync = syncText(syncState),
+            capture = capture,
+            destinations = workspace.topics.map { CaptureDestination(it.id.value, it.name) },
+            // On a Topic's page, capture files into that Topic unless the person picks another place (v3).
+            defaultDestination = placeTopicId,
+            onCapture = { type, title, destination ->
+                when {
+                    title.isEmpty() -> {
+                        capture.requestFocus(flash = false)
+                        toasts.show("Type a title first.")
                     }
-                },
-            search = { query ->
-                val q = query.trim().lowercase()
-                listOf(
-                    thread.web.presentation.shell.SearchGroup(
-                        "Go to",
-                        View.entries.filter { it.label.lowercase().contains(q) }.map { target ->
-                            SearchOption(target.label, "", { IconView(target.icon, 18) }) {
-                                searchOpen = false
-                                router.go(target.place)
+                    type == CaptureType.Topic ->
+                        when (val created = workspace.createTopic(title)) {
+                            is TopicCreation.Refused -> toasts.show(topicProblemText(created.problem))
+                            is TopicCreation.Created -> {
+                                capture.title = ""
+                                capture.requestFocus(flash = false)
+                                toasts.show("Topic added to Topics", open = { router.go(topicPlace(created.topic)) })
                             }
-                        },
-                    ),
-                )
+                        }
+                    type == CaptureType.Task ->
+                        when (val created = workspace.createTask(title, destination?.let(::TopicId))) {
+                            is TaskCreation.Refused -> toasts.show(taskProblemText(created.problem))
+                            is TaskCreation.Created -> {
+                                capture.title = ""
+                                capture.requestFocus(flash = false)
+                                val topic = created.task.topicId?.let { workspace.topic(it.value) }
+                                toasts.show(
+                                    if (topic != null) "Task added to ${topic.name}" else "Task added to Inbox",
+                                    open = { openTask(created.task) },
+                                )
+                            }
+                        }
+                    // Notes from capture arrive in Phase 8.
+                    else -> toasts.show("Capture is not connected yet.")
+                }
             },
-            noResults = { query -> NoSearchResults(query) },
-            onQueryChange = {},
-            onClose = { searchOpen = false },
+            onOpenViews = { viewsOpen = true },
+            onOpenSearch = { searchOpen = true },
+            onOpenSync = { syncOpen = true },
         )
+        if (dialogs.isEmpty) ToastHost(toasts)
+
+        val sheetTaskId = place.param(TASK_PARAM)
+        if (sheetTaskId != null && workspace.loaded) {
+            val sheetTask = workspace.task(sheetTaskId)
+            if (sheetTask == null) {
+                // A link to a Task that was trashed, discarded or never synced here.
+                LaunchedEffect(sheetTaskId) {
+                    toasts.show("That task is not here any more. It may be in Trash.")
+                    router.replace(router.place.with(TASK_PARAM, null))
+                }
+            } else {
+                key(sheetTask.id.value) {
+                    TaskSheet(workspace, sheetTask, placeTopicId) { router.replace(router.place.with(TASK_PARAM, null)) }
+                }
+            }
+        }
+        if (viewsOpen) {
+            ViewsSheet(
+                current = view,
+                inboxCount = workspace.inbox.size,
+                onSearch = {
+                    viewsOpen = false
+                    searchOpen = true
+                },
+                onSync = {
+                    viewsOpen = false
+                    syncOpen = true
+                },
+                onClose = { viewsOpen = false },
+            )
+        }
+        if (syncOpen) {
+            SyncPanel(syncState, syncCenter.problems, services.usesEmulators) { syncOpen = false }
+        }
+        if (searchOpen) {
+            SearchPalette(
+                initialQuery = "",
+                goTo =
+                    View.entries.map { target ->
+                        SearchOption(target.label, "", { IconView(target.icon, 18) }) {
+                            searchOpen = false
+                            router.go(target.place)
+                        }
+                    },
+                search = { query ->
+                    val q = query.trim().lowercase()
+                    listOf(
+                        thread.web.presentation.shell.SearchGroup(
+                            "Go to",
+                            View.entries.filter { it.label.lowercase().contains(q) }.map { target ->
+                                SearchOption(target.label, "", { IconView(target.icon, 18) }) {
+                                    searchOpen = false
+                                    router.go(target.place)
+                                }
+                            },
+                        ),
+                    )
+                },
+                noResults = { query -> NoSearchResults(query) },
+                onQueryChange = {},
+                onClose = { searchOpen = false },
+            )
+        }
     }
 }
 

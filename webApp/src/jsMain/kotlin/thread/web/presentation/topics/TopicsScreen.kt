@@ -20,6 +20,7 @@ import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
+import thread.domain.task.TaskProgress
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
 import thread.domain.topic.Topic
@@ -102,7 +103,7 @@ internal fun TopicsScreen(
         !workspace.loaded -> Unit
         topics.isEmpty() -> EmptyState(Icon.Topics, "No Topics yet", "Create one with New topic. It starts as Planned.")
         view == TopicsView.Board -> TopicsBoard(workspace, statuses, topics)
-        else -> TopicsList(statuses, topics)
+        else -> TopicsList(workspace, statuses, topics)
     }
 }
 
@@ -115,6 +116,7 @@ private fun topicsIn(
 
 @Composable
 private fun TopicsList(
+    workspace: WorkspaceModel,
     statuses: List<TopicStatus>,
     topics: List<Topic>,
 ) {
@@ -145,7 +147,7 @@ private fun TopicsList(
                                     TopicHex(topic.name, topic.color, HexSize.Md)
                                     Span({ classes("trow2__name") }) { Text(topic.name) }
                                     Span({ classes("trow2__next") }) { Text(nextStepText(topic, status)) }
-                                    Span({ classes("trow2__side") }) { TopicProgress(topic) }
+                                    Span({ classes("trow2__side") }) { TopicProgress(topic, workspace.progress(topic.id)) }
                                 }
                             }
                         }
@@ -225,6 +227,7 @@ private fun TopicsBoard(
                                 key(topic.id) {
                                     BoardCard(
                                         topic = topic,
+                                        progress = workspace.progress(topic.id),
                                         statuses = statuses,
                                         dragging = dragging == topic.id,
                                         onDragStart = { dragging = topic.id },
@@ -247,6 +250,7 @@ private fun TopicsBoard(
 @Composable
 private fun BoardCard(
     topic: Topic,
+    progress: TaskProgress,
     statuses: List<TopicStatus>,
     dragging: Boolean,
     onDragStart: () -> Unit,
@@ -277,7 +281,7 @@ private fun BoardCard(
         }
         if (topic.nextStep.isNotEmpty()) P({ classes("bcard__next") }) { Text("Next: ${topic.nextStep}") }
         Div({ classes("bcard__foot") }) {
-            TopicProgress(topic)
+            TopicProgress(topic, progress)
             Span({ classes("bcard__move") }) {
                 Label("mv-${topic.id}", { classes("vh") }) { Text("Move ${topic.name} to") }
                 SelectBox(

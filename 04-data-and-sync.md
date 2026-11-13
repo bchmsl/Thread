@@ -164,3 +164,14 @@ Status: **provisional**. Written in Phase 6 while the owner was away. Details: A
 - Status delete is a `deletedAt` write that moves its Topics in the same batch. Nothing is hard-deleted.
 - Edits write only the changed fields. Different fields edited on two devices both survive. The same field: the last write to reach the server wins.
 - The Firestore persistent cache is the outbox. Save state comes from snapshot metadata. A refused write shows Sync failed and is named in the sync panel.
+
+## Phase 7 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 7 while the owner was away. Details: ADR-010 (Proposed).
+
+- Tasks are `users/{uid}/tasks/{id}` (`k-` ids) with `title`, `topicId`, `done`, `completedOn`, `plannedDay`, `deadline`, `inbox`, `createdAt`, optional `deletedAt` and `discarded`. Reminders are `users/{uid}/reminders/{id}` (`r-` ids) with `at`, `zone`, `text`, `targetKind`, `targetId`, optional `dismissedAt` and `deletedAt`.
+- `plannedDay`, `completedOn` and a date-only `deadline` are calendar strings (`yyyy-MM-dd`), never timestamps. A deadline time is `yyyy-MM-ddTHH:mm`. A reminder is a wall time plus its zone.
+- Today, Overdue and "due now" compare wall times in the workspace zone (`prefs.timeZone`, default Asia/Tbilisi, no Settings field yet). The web layer reads the clock through `Intl.DateTimeFormat`; the domain has its own date types and no platform code.
+- Inbox is a flag on the Task. Triage clears it, and sets the Topic when linking. Nothing is copied or deleted.
+- Trash is `deletedAt`; Undo of a fresh capture writes `discarded`. Nothing is hard-deleted.
+- `prefs/main` gains `keepCompleted` (default true) and `timeZone`.

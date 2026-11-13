@@ -3,12 +3,16 @@ package thread.web.presentation.topics
 import androidx.compose.runtime.Composable
 import kotlinx.browser.document
 import org.jetbrains.compose.web.attributes.AttrsScope
+import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.ElementBuilder
 import org.jetbrains.compose.web.dom.ElementScope
+import org.jetbrains.compose.web.dom.I
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.TagElement
 import org.jetbrains.compose.web.dom.Text
 import org.w3c.dom.Element
+import thread.domain.task.TaskProgress
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
@@ -108,12 +112,81 @@ internal fun StatusLabel(status: TopicStatus) {
     }
 }
 
-/** Task progress (v3 T.progress). Tasks arrive in Phase 7; until then every Topic has none. */
+/** An empty sticker, for "No Topic" (v3 T.hexEmpty). */
 @Composable
-@Suppress("UNUSED_PARAMETER")
-internal fun TopicProgress(topic: Topic) {
-    Span({ classes("prog", "prog--none") }) { Text("No tasks yet") }
+internal fun TopicHexEmpty(size: HexSize) {
+    SvgTag("svg", {
+        attr("class", "hex hex--${size.id} hex--none")
+        attr("viewBox", "-12 -12 124 124")
+        attr("width", size.px.toString())
+        attr("height", size.px.toString())
+        attr("aria-hidden", "true")
+        attr("focusable", "false")
+    }) {
+        SvgTag("polygon", {
+            attr("class", "hex__fill")
+            attr("points", HEX_POINTS)
+        })
+    }
 }
+
+/** A Topic's tag (v3 T.topicTag): a link to the Topic, or [noneLabel] for a Task without one. */
+@Composable
+internal fun TopicTag(
+    topic: Topic?,
+    noneLabel: String = "Standalone",
+) {
+    if (topic == null) {
+        Span({ classes("ttag", "ttag--none") }) {
+            TopicHexEmpty(HexSize.Xs)
+            Span { Text(noneLabel) }
+        }
+        return
+    }
+    A(topicPlace(topic).hash, {
+        classes("ttag")
+        attr("style", topicStyle(topic.color))
+    }) {
+        TopicHex(topic.name, topic.color, HexSize.Xs)
+        Span { Text(topic.name) }
+    }
+}
+
+/**
+ * The Topic's personal Task progress (v3 T.progress): one segment per Task, done ones first, or a bar above twelve.
+ * Linked Jira tickets never count (D21).
+ */
+@Composable
+internal fun TopicProgress(
+    topic: Topic,
+    progress: TaskProgress,
+) {
+    if (progress.total == 0) {
+        Span({ classes("prog", "prog--none") }) { Text("No tasks yet") }
+        return
+    }
+    Span({
+        classes("prog")
+        attr("style", topicStyle(topic.color))
+    }) {
+        Span({
+            classes("prog__segs")
+            attr("aria-hidden", "true")
+        }) {
+            if (progress.total <= PROGRESS_SEGMENTS_MAX) {
+                repeat(progress.total) { index -> I({ if (index < progress.done) classes("on") }) }
+            } else {
+                B({ attr("style", "--p:${progress.done.toDouble() / progress.total}") })
+            }
+        }
+        Span({ classes("prog__txt") }) {
+            Text("${progress.done} of ${progress.total}")
+            Span({ classes("vh") }) { Text(" personal tasks done") }
+        }
+    }
+}
+
+private const val PROGRESS_SEGMENTS_MAX = 12
 
 internal fun categoryLabel(category: StatusCategory): String =
     when (category) {

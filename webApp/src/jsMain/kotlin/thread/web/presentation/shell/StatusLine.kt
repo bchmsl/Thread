@@ -65,7 +65,12 @@ internal class CaptureState(
 
     /** The picked Topic id, or null for Inbox. Null until the person picks one. */
     var destination by mutableStateOf<String?>(null)
-    var destinationTouched by mutableStateOf(false)
+
+    /**
+     * The page the destination was picked on, or null when none was picked. A pick holds only on that page: each v3
+     * page load starts again from the page's own destination.
+     */
+    var destinationPage by mutableStateOf<String?>(null)
 
     /** Counts requests to focus the capture field. */
     var focusRequests by mutableStateOf(0)
@@ -121,8 +126,9 @@ internal fun StatusLine(
         }
         inputElement?.focus()
     }
+    val page = "${current.id}/${defaultDestination.orEmpty()}"
     val destination =
-        (if (capture.destinationTouched) capture.destination else defaultDestination)
+        (if (capture.destinationPage == page) capture.destination else defaultDestination)
             ?.takeIf { id -> destinations.any { it.id == id } }
 
     Div({
@@ -229,7 +235,7 @@ internal fun StatusLine(
                     hidden = isTopic,
                 ) { picked ->
                     capture.destination = picked.takeIf { it != INBOX }
-                    capture.destinationTouched = true
+                    capture.destinationPage = page
                 }
                 Span({
                     classes("cap__fixed")
