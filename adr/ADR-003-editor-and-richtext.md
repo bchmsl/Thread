@@ -1,6 +1,6 @@
 # ADR-003: Note editor and RichText v1
 
-Status: Proposed (Phase 1, M1-A spike, 2026-11-13). The owner started the phase with "Start Phase 1". The choices below become Accepted only after the owner reviews this record.
+Status: Accepted (2026-11-13). Written in Phase 1 (M1-A spike). The owner answered the open questions ("1. Default 2. Default 3. Default") and accepted this record ("Accept all"), both relayed by the orchestrator session.
 
 ## Context
 
@@ -42,6 +42,7 @@ Phase 1 proves the editor and local drafts on one route. Not in this phase: Fire
 - StarterKit with headings 1 to 3. Blockquote, code, code block, horizontal rule, strike and underline are off. Link is replaced by a Link that keeps only `href`, and OrderedList by one that keeps only `start`. TaskList and TaskItem (nested) are added.
 - `enableContentCheck` is on. If a stored body does not fit the schema, the editor refuses it instead of dropping parts. `NoteEditor` then turns editing off and the page shows "This note cannot be edited here" with Copy text, so a damaged body is never saved over a good one.
 - `RichTextEditorJson` maps editor JSON both ways. Reading from the editor also normalizes: a link with a refused address loses the link but keeps its text, a non-integer list start becomes 1, and next-door text runs with the same marks merge.
+- The editor's trailing empty paragraph is not stored (owner answer 3). Tiptap's TrailingNode adds an empty paragraph whenever the last block is not a paragraph, so the cursor can reach the end. `RichTextEditorJson` leaves out exactly that case: a last empty paragraph that follows a heading, list or checklist. The editor adds it again when the note opens, so the note looks the same and opening it is not an edit. An empty paragraph after a paragraph is the user's and is stored.
 - `injectCSS` is off. The ProseMirror base rules are copied into the spike stylesheet instead.
 - ⌘Enter or Ctrl+Enter in a checklist item ticks it, as in v3. The checkbox label is "Checklist item: …" (Tiptap's default says "Task item", which would confuse checklist items with Tasks).
 - The editor is created in a Compose `ref` and destroyed in its `onDispose`.
@@ -60,11 +61,11 @@ The editor schema is the paste filter. Only schema nodes and marks survive. Seen
 | Table | Cell text kept as paragraphs. Cells in one row merge into one run ("HeadCell"). |
 | `<ol type="a" start="4">` | Ordered list starting at 4. The numbering type is dropped. |
 | `style`, `class`, `title`, `target`, `rel` | Dropped. Links keep only `href`. |
-| Link with `https`, `http` or `mailto` | Kept as a link |
+| Link with `https`, `http` or `mailto` | Kept as a link (owner answer 1) |
 | `javascript:` link | Text kept, link dropped |
 | Relative link | Chrome writes absolute URLs to the clipboard on copy, so it arrives as `http(s)://…` and is kept |
 
-Autolink and link-on-paste are off. StarterKit's typing shortcuts stay on (`# ` heading, `- ` bullet, `1. ` ordered list, `[ ] ` checklist): they only create schema content.
+Autolink and link-on-paste are off. StarterKit's typing shortcuts stay on (`# ` heading, `- ` bullet, `1. ` ordered list, `[ ] ` checklist; owner answer 2): they only create schema content.
 
 ### Links
 
@@ -108,7 +109,7 @@ Unit and build checks:
 | `./gradlew build ktlintCheck` | Passed (102 tasks). Includes the production bundle (`thread.js`, 1.25 MiB minified, up from 514 KiB in Phase 0, mostly Tiptap and ProseMirror). |
 | `:shared:domain` tests (`jsNodeTest`, and the same common tests on `iosSimulatorArm64Test`) | 34 passed on each: RichTextJson 16 (round trip of every node and mark, stable and documented encoding, refusal of other schema versions, unknown nodes, marks and keys, duplicate marks, editor JSON, heading levels outside 1 to 3, refused links and broken structure, errors name the JSON path), LinkHref 3, DraftAutosaver 15 (debounce, max wait, flush starts the write at once, Saved only after the store confirms, Needs attention while storage fails, retry) |
 | `:shared:data:jsBrowserTest` (Chrome headless, real IndexedDB) | 7 passed: missing note reads as null, a write is read back also by a new connection, a write replaces the previous draft, the record has the documented shape, a failed write (test hook) throws and keeps the previous draft, a damaged record is reported instead of dropped, a newer record version is refused |
-| `:webApp:jsBrowserTest` (Chrome headless, real Tiptap) | 12 passed: RichTextEditorJson 6, NoteEditor 5 (every v1 construct survives the editor unchanged, web-page paste keeps only schema content, ⌘Enter ticks, link insert, destroy removes the editor), search shortcut 1 (⌘K, Ctrl+K, Georgian layout, Dvorak layout; no match without the modifier, with Shift, during composition) |
+| `:webApp:jsBrowserTest` (Chrome headless, real Tiptap) | 15 passed: RichTextEditorJson 8, NoteEditor 6 (every v1 construct survives the editor unchanged, the trailing paragraph is not stored and opening is not an edit, web-page paste keeps only schema content, ⌘Enter ticks, link insert, destroy removes the editor), search shortcut 1 (⌘K, Ctrl+K, Georgian layout, Dvorak layout; no match without the modifier, with Shift, during composition). The 3 trailing-paragraph tests were added after the owner's answers; `./gradlew build ktlintCheck` passed again afterwards. |
 | Licences | 42 npm packages, all MIT |
 | `tokens.css` | SHA-256 matches the v3 file |
 | Secrets | No key-format matches in the new code |
@@ -141,13 +142,16 @@ Browser checks: a scripted run in headless Chrome 157 over the DevTools protocol
 - No offline app shell: an offline reload cannot open the app until a service worker exists.
 - `navigator.storage.persist()` is not requested, so the browser may evict local drafts under storage pressure.
 - Two tabs editing the same note: last write wins, with no warning.
-- Tiptap's TrailingNode keeps an empty paragraph at the end of the body, and it is stored.
 
-## Open questions
+## Owner answers (2026-11-13)
 
-1. Pasted links: keep allowed links from pasted content (current), or keep only their text so links come only from the toolbar?
-2. Typing shortcuts (`# `, `- `, `1. `, `[ ] `): keep them (current) or turn them off?
-3. Should the editor be allowed to store the trailing empty paragraph, or should `RichTextEditorJson` trim it?
+The owner accepted the proposed default for each question ("1. Default 2. Default 3. Default", relayed by the orchestrator session).
+
+| Question | Answer |
+|---|---|
+| 1. Pasted links: keep allowed links, or keep only their text? | Keep them as links. Only `http`, `https` and `mailto`, with `href` only. No change. |
+| 2. Typing shortcuts (`# `, `- `, `1. `, `[ ] `): keep or turn off? | Keep them on. No change. |
+| 3. Store the editor's trailing empty paragraph, or trim it? | Trim it in `RichTextEditorJson`, with tests. Done (see "Editor"). |
 
 ## Proposed document updates
 

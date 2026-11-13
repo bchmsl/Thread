@@ -103,6 +103,27 @@ class NoteEditorTest {
     }
 
     @Test
+    fun editorsTrailingParagraphIsNotStoredAndOpeningIsNotAnEdit() {
+        val note =
+            RichTextDocument(
+                listOf(
+                    paragraph(text("intro")),
+                    RichTextBlock.TaskList(listOf(TaskItem(checked = false, blocks = listOf(paragraph(text("last thing")))))),
+                ),
+            )
+        val editor = createEditor(note)
+
+        // Any transaction lets Tiptap's TrailingNode add its empty paragraph after the checklist.
+        editor.focus()
+
+        val lastBlock = editor.dom().lastElementChild
+        assertEquals("P", lastBlock?.tagName, "The editor shows an empty paragraph after the checklist")
+        assertEquals("", lastBlock?.textContent)
+        assertEquals(note, editor.document)
+        assertTrue(changes.all { it == note }, "Changes: $changes")
+    }
+
+    @Test
     fun pasteFromAWebPageKeepsOnlySchemaContent() =
         runTest {
             val editor = createEditor(RichTextDocument.EMPTY)

@@ -15,16 +15,29 @@ import kotlin.math.floor
  * node or mark outside that schema is a programming error and throws [IllegalStateException].
  *
  * Reading from the editor also normalizes: a link whose address Notes do not allow loses the link but keeps its
- * text, an ordered list start that is not a whole number becomes 1, and adjacent text runs with the same formatting
- * merge into one.
+ * text, an ordered list start that is not a whole number becomes 1, adjacent text runs with the same formatting
+ * merge into one, and the editor's trailing empty paragraph is left out ([withoutTrailingParagraph]).
  */
 internal object RichTextEditorJson {
     fun toEditor(document: RichTextDocument): dynamic = node("doc", content = document.blocks.map(::blockToEditor))
 
     fun fromEditor(doc: dynamic): RichTextDocument {
         check(doc.type == "doc") { "Expected an editor document, got \"${doc.type}\"" }
-        val blocks = children(doc).map(::blockFromEditor)
+        val blocks = withoutTrailingParagraph(children(doc).map(::blockFromEditor))
         return if (blocks.isEmpty()) RichTextDocument.EMPTY else RichTextDocument(blocks)
+    }
+
+    /**
+     * Leaves out the empty paragraph that the editor keeps after a last block that is not a paragraph (Tiptap's
+     * TrailingNode, so the cursor can always reach the end). The editor adds it again when the note is opened, so the
+     * note looks the same and opening it is not an edit. An empty paragraph after a paragraph is the user's and stays.
+     */
+    private fun withoutTrailingParagraph(blocks: List<RichTextBlock>): List<RichTextBlock> {
+        val last = blocks.lastOrNull()
+        val beforeLast = blocks.getOrNull(blocks.lastIndex - 1)
+        val isTrailingParagraph =
+            last is RichTextBlock.Paragraph && last.content.isEmpty() && beforeLast != null && beforeLast !is RichTextBlock.Paragraph
+        return if (isTrailingParagraph) blocks.dropLast(1) else blocks
     }
 
     private fun blockToEditor(block: RichTextBlock): dynamic =

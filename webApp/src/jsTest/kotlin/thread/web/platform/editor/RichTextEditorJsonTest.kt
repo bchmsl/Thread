@@ -75,6 +75,53 @@ class RichTextEditorJsonTest {
     }
 
     @Test
+    fun trailingEmptyParagraphAfterABlockThatIsNotAParagraphIsLeftOut() {
+        val item = """{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"x"}]}]}"""
+        val lastBlocks =
+            mapOf(
+                "heading" to """{"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"x"}]}""",
+                "bullet list" to """{"type":"bulletList","content":[$item]}""",
+                "ordered list" to """{"type":"orderedList","attrs":{"start":1},"content":[$item]}""",
+                "checklist" to
+                    """{"type":"taskList","content":[{"type":"taskItem","attrs":{"checked":false},""" +
+                    """"content":[{"type":"paragraph","content":[{"type":"text","text":"x"}]}]}]}""",
+            )
+
+        for ((name, block) in lastBlocks) {
+            val withTrailing = editorJson("""{"type":"doc","content":[$block,{"type":"paragraph"}]}""")
+            val without = editorJson("""{"type":"doc","content":[$block]}""")
+
+            assertEquals(RichTextEditorJson.fromEditor(without), RichTextEditorJson.fromEditor(withTrailing), name)
+            assertEquals(1, RichTextEditorJson.fromEditor(withTrailing).blocks.size, name)
+        }
+    }
+
+    @Test
+    fun emptyParagraphsTheUserKeepsAreNotLeftOut() {
+        val afterAParagraph =
+            editorJson("""{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"x"}]},{"type":"paragraph"}]}""")
+        val inTheMiddle =
+            editorJson(
+                """{"type":"doc","content":[{"type":"heading","attrs":{"level":1}},{"type":"paragraph"},""" +
+                    """{"type":"paragraph","content":[{"type":"text","text":"x"}]}]}""",
+            )
+        val afterAListWithText =
+            editorJson(
+                """{"type":"doc","content":[{"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph"}]}]},""" +
+                    """{"type":"paragraph","content":[{"type":"text","text":"x"}]}]}""",
+            )
+
+        assertEquals(
+            listOf(RichTextBlock.Paragraph(listOf(RichTextInline.Text("x"))), RichTextBlock.Paragraph(emptyList())),
+            RichTextEditorJson.fromEditor(afterAParagraph).blocks,
+        )
+        assertEquals(3, RichTextEditorJson.fromEditor(inTheMiddle).blocks.size)
+        assertEquals(2, RichTextEditorJson.fromEditor(afterAListWithText).blocks.size)
+        val onlyAnEmptyParagraph = editorJson("""{"type":"doc","content":[{"type":"paragraph"}]}""")
+        assertEquals(RichTextDocument.EMPTY, RichTextEditorJson.fromEditor(onlyAnEmptyParagraph))
+    }
+
+    @Test
     fun nodesAndMarksOutsideRichTextV1AreRefused() {
         val unknownBlock = editorJson("""{"type":"doc","content":[{"type":"blockquote","content":[{"type":"paragraph"}]}]}""")
         val unknownInline = paragraphDoc("""{"type":"image","attrs":{"src":"https://example.com/x.png"}}""")
