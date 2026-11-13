@@ -59,6 +59,17 @@ Do not ask Claude to build the entire application in a single prompt.
 
 After an approved decision changes, update its authoritative document and add a dated entry to the decision register. Keep pending questions and completed work explicit.
 
+## Deploy
+
+- The web app is deployed to GitHub Pages at https://bchmsl.github.io/Thread/ by [.github/workflows/pages.yml](.github/workflows/pages.yml), on every push to `master` or by hand from the Actions tab.
+- The workflow writes `firebase/web-config.properties` from four repository secrets: `THREAD_FIREBASE_API_KEY`, `THREAD_FIREBASE_AUTH_DOMAIN`, `THREAD_FIREBASE_PROJECT_ID` and `THREAD_FIREBASE_APP_ID`. If one is missing, the job stops, so a build for the local emulators is never deployed.
+- The Firebase web config is public in the bundle by design. It names the project and is not a secret. Sign-in and the Firestore rules protect the data.
+- Jira and GitHub tokens are stored in the browser, per origin. On https://bchmsl.github.io they must be entered again in Settings. The tokens saved on 127.0.0.1 are not copied.
+- Every GitHub Pages site of the account shares the https://bchmsl.github.io origin and its browser storage, tokens included. Host no other untrusted pages under this account.
+- One-time setup: Pages source "GitHub Actions" in the repository settings, and `bchmsl.github.io` in the Firebase Auth authorized domains.
+- GitHub Pages cannot set HTTP headers, so `frame-ancestors`, `X-Content-Type-Options` and `Referrer-Policy` stay unset (adr/ADR-015-pilot-hardening.md).
+- Paths are relative, so the same build runs at / on 127.0.0.1 and at /Thread/ on Pages.
+
 ## What comes next
 
 The [v3 prototype](design/claude-pilot-prototype-v3/README.md) is the approved design reference for all pilot surfaces (D33). It replaces the v0.5 baseline. The pilot boundary is confirmed (D34): read-only Jira and GitHub are in the pilot, and the Focus timer comes after it.

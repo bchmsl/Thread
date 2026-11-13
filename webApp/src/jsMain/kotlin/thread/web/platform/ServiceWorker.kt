@@ -11,6 +11,8 @@ import kotlin.js.json
  * Registers the offline app shell worker (webApp/serviceWorker/sw.js, adr/ADR-008-offline-shell-and-token-storage.md).
  * Only the production distribution has the worker, so development builds skip this. Every load also asks the
  * browser to look for a new build, which installs in the background and waits. The app works the same without it.
+ * The path is relative, so the worker's scope is the folder the app is served from: / on 127.0.0.1 and /Thread/ on
+ * GitHub Pages.
  */
 fun registerOfflineShell() {
     if (!isProductionBuild() || !hasServiceWorkers()) return
