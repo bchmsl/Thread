@@ -136,3 +136,17 @@ Test rules and failure modes, not architecture scaffolding:
 Use a minimal end-to-end vertical slice before implementing all features.
 No dependency versions, successful builds, or API compatibility have yet been verified.
 
+## M1 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 4 while the owner was away. It summarizes ADR-001 to ADR-008. Only ADR-003 is Accepted; the rest wait for the owner's review. Evidence: `adr/M1-RESULTS.md`, "M1 exit review".
+
+- Framework and versions (ADR-001): plain Compose HTML, Kotlin 2.4.21, Gradle 9.7.0. Builds and runs.
+- Modules (ADR-001): `shared/domain` (JS plus compile-only iOS targets), `shared/data` (JS), `webApp`. Layers are modules, features are packages.
+- Firebase (ADR-002, ADR-005): hand-written Kotlin externals over the Firebase JS SDK in `shared/data`. No wrapper library. Google sign-in only.
+- Two device stores for Notes (ADR-002): the app's IndexedDB draft store says "Saved locally"; the Firestore persistent cache is the outbox. Domain ports `LocalDraftStore` and `NoteSyncRemote`.
+- Other app data (proposed for Phase 6, not yet tested): the Firestore persistent cache only, with no second queue.
+- Rich text (ADR-003, Accepted): Tiptap behind an adapter in `webApp/platform`; RichText v1 JSON in the domain.
+- Security rules (ADR-005): owner-only paths, no deletes, unknown fields refused. Every new collection gets its rules and rules tests before the client writes to it.
+- Integrations (ADR-006, ADR-007): no integration service is needed for read-only Jira and GitHub. The browser calls `api.atlassian.com` and `api.github.com` directly with tokens the owner types in.
+- Tokens and offline shell (ADR-008): tokens in the browser profile's IndexedDB only; a hand-written service worker keeps the app shell offline.
+

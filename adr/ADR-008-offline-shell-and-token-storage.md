@@ -2,6 +2,8 @@
 
 Status: Proposed (2026-11-13). Written in Phase 3 (M1-C). The offline shell is checked in headless Chrome (S1, S2). Token storage is checked with fixtures and fake values in headless Chrome. At gate P3-G2 the owner stored real tokens in their own Chrome, and every live call used them. Evidence: `adr/M1-RESULTS.md`, "M1-C" and "M1-C live".
 
+Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued.
+
 ## Context
 
 - Thread must open with no network and show the last local content (D02, local-first). Until now a reload while offline gave the browser's error page.
@@ -59,7 +61,7 @@ The Note drafts (`thread-local`, `thread-drafts-*`) are separate databases. Clea
 - Anyone with access to the unlocked browser profile can use the tokens. Thread does not encrypt them: the key would sit in the same profile.
 - Clearing site data in the browser removes the tokens, the saved copies and the unsynced Note drafts together. The browser shows that as one action.
 - A deploy needs the production build with the generated `sw.js`. Hosting must not cache `sw.js` for long; browsers re-check it at least every 24 hours anyway.
-- Phase 4 decides the product scope of tokens and saved copies. This storage works for either choice.
+- Phase 4 decides the product scope of tokens and saved copies. This storage works for either choice. Phase 4 proposal (provisional, in the owner review queue): they stay per browser profile. A token is typed once per browser, and saved copies never follow the Firebase account. The alternative, per account, would need the tokens or copies in Firestore or a server, which D08 and the token rules rule out.
 
 ## Not verified
 

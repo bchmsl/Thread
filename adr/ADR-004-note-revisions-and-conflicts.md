@@ -2,6 +2,8 @@
 
 Status: Proposed (2026-11-13). Written in Phase 2 (M1-B), emulator only. Evidence: `adr/M1-RESULTS.md`. The owner accepted the revision model ("Writes" below) on 2026-11-13. The whole record is reviewed at Phase 4, the M1 review gate.
 
+Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued. The Notes feature (Phase 8) builds on this record as written.
+
 ## Context
 
 A Note can be edited on several devices, also offline. Sync must never overwrite text silently, never duplicate a write that is retried, and never bring a Note back from Trash because an old offline edit arrived late. Conflicts are resolved by the person with the v3 compare view (D41): keep this device's version, keep the other one, or keep both. The version not kept goes to Trash.

@@ -119,6 +119,7 @@ Ideas the owner wants to keep (2026-11-13). These are ideas, not planned work:
 - Board defaults for completed Topics.
 
 ### Resolve in M1
+Proposed answers for each item: `adr/M1-RESULTS.md`, "M1 exit review" (Phase 4, 2026-11-13). They are not decisions until the owner reviews the ADRs; no D47+ row is added before that.
 - Compose HTML framework choice (plain setup vs compatible framework).
 - Kotlin, Gradle, SDK versions.
 - Firebase platform adapters vs third-party wrapper.

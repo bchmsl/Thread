@@ -2,6 +2,8 @@
 
 Status: Proposed (2026-11-13). Written in Phase 2 (M1-B), emulator only. Evidence: `adr/M1-RESULTS.md`.
 
+Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued. Later phases add a collection only together with its rules and rules tests (see "Consequences").
+
 ## Context
 
 The web app talks to Firestore straight from the browser. There is no app server, so Firebase Auth and the Firestore security rules are the whole security boundary. The owner chose Google sign-in (O3, relayed by the orchestrator session). Phase 2 runs only against the local emulators with the `demo-thread` project: no `firebase login`, no real project, no billing.

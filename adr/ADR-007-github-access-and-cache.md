@@ -2,6 +2,8 @@
 
 Status: Proposed (2026-11-13). Written in Phase 3 (M1-C). Checked on synthetic fixtures, then live at gate P3-G2: G1 to G3 passed. Evidence: `adr/M1-RESULTS.md`, "M1-C" and "M1-C live".
 
+Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued. Phase 11 builds on it, with `review-requested:@me` as the review query.
+
 ## Context
 
 - GitHub is read-only in v1. The v3 design shows two lists, "Mine" and "Review requested", and one pull request with its reviews and CI state.

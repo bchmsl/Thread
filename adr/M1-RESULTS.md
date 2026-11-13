@@ -1,6 +1,6 @@
 # M1 results
 
-Real output of the M1 experiments. Every run used synthetic data only.
+Real output of the M1 experiments. Every run used synthetic data, except "M1-C live", where the owner used their own Jira site, GitHub account and tokens.
 
 | Part | Where |
 |---|---|
@@ -8,6 +8,63 @@ Real output of the M1 experiments. Every run used synthetic data only.
 | M1-B (Phase 2): Firebase sync and conflicts, E1–E4, C1–C3 | This file |
 | M1-C (Phase 3): offline shell S1–S2; Jira J2–J4 and GitHub G1–G3 on SYNTHETIC fixtures | This file, "M1-C" |
 | M1-C live: J1 (Jira CORS) and live Jira and GitHub reads, gate P3-G2 | This file, "M1-C live" |
+| M1 exit review (Phase 4): every experiment, answers to "Resolve in M1", spike code | This file, "M1 exit review" |
+
+## M1 exit review (Phase 4, 2026-11-13)
+
+Written while the owner was away, from the evidence in this file and the ADRs. No new experiment ran in Phase 4. Every ADR except ADR-003 stays **Proposed** until the owner reviews it.
+
+Data labels: **synthetic** = made-up data or SYNTHETIC fixtures; **real** = the owner's own Jira site, GitHub account and tokens, in the owner's Chrome.
+
+### Every experiment
+
+| ID | What it checks | Steps (where) | Result | Data |
+|---|---|---|---|---|
+| E1 | An offline edit survives a reload or reopen | Phase 1: edit offline, reload once online (ADR-003). Phase 2: edit offline, close the tab offline, reopen online ("M1-B"). Phase 3: reload while offline (S1d) | Passed. Never "Synced" while offline. The offline reload itself needed the Phase 3 shell. | Synthetic |
+| E2 | Closing the tab right after typing loses nothing | Phase 1: close 0 and 50 ms after the last key. Phase 2: close 0 ms after the last key | Passed | Synthetic |
+| E3 | The server refuses a pending write | Phase 2, test hook: the write carries a field the rules refuse | Passed. "Needs attention / Saved locally, sync failed", text kept, Retry sync works | Synthetic, emulator |
+| E4 | Local storage fails | Phase 1 and Phase 2, test hook aborts the IndexedDB write | Passed. Never "Saved locally" while failing | Synthetic |
+| C1 | Two devices edit one Note offline | Phase 2: C1, C1b, C1c (each D41 choice) and the narrow compare view | Passed. Both versions recoverable in every choice | Synthetic, emulator |
+| C2 | Repeated reconnects make no duplicates | Phase 2: 5 rounds, 10 edits | Passed for Note revisions (5 revisions, no shared parents). Tasks and links did not exist yet | Synthetic, emulator |
+| C3 | Trash plus a stale offline edit | Phase 2: one device trashes, the other edits offline, then reconnects | Passed. The Note stays in Trash with the edit inside | Synthetic, emulator |
+| Rules | One account cannot reach another's data | Phase 2: 8 rules tests, 1 client test, 1 browser check | Passed, with emulator tokens only | Synthetic, emulator |
+| S1 | Offline reload shows the shell and the last Note | Phase 3: S1a to S1e on the production build | Passed | Synthetic |
+| S2 | A new build takes over predictably | Phase 3: S2a to S2d, three builds, one and two tabs | Passed. A new build shows on the second load | Synthetic |
+| J1 | Jira answers a browser call with a token (CORS) | Phase 3 live, gate P3-G2 | **Passed** through `api.atlassian.com`. Error answers are readable. Cloud ID look-up got no answer | **Real** |
+| J2 | One ticket: fields, ADF description, comments | Fixtures J2a to J2i. Live: one ticket and its comments answered 200 | Fixtures passed. Live content and look were not reported | Synthetic; real (status codes only) |
+| J3 | Saved copy first, then refresh | Fixtures J3a, J3b | Passed on fixtures. Live: `/field` cache worked (1 request for 3 opens) | Synthetic; real (cache count) |
+| J4 | 401, 403, 404, 429, offline with and without a copy | Fixtures J4a to J4k. Live: two 404s (mistyped keys) | Passed on fixtures. Live: only 404, readable | Synthetic; real (404 only) |
+| G1 | "Mine" and "Review requested" lists | Fixtures G1a to G1d. Live: both searches 200 | Passed. Live rows not reported | Synthetic; real (status codes) |
+| G2 | One pull request with reviews, statuses and check runs | Fixtures G2a to G2g. Live: 4 calls 200 | Passed. Live look not reported | Synthetic; real (status codes) |
+| G3 | Needed permissions and rate-limit headers | Fixtures G3a to G3d. Live headers | Passed for headers and separate limits. Why check runs were readable is not determined | Synthetic; real (headers) |
+
+### Answers to "Resolve in M1" (`06-roadmap-decisions.md`)
+
+| Question | Proposed answer | Evidence | State |
+|---|---|---|---|
+| Compose HTML framework | Plain Compose HTML. No Kobweb. The `org.jetbrains.compose` Gradle plugin is not applied. | ADR-001; builds and browser checks in Phases 0 to 3 | Answered, Proposed |
+| Kotlin, Gradle, SDK versions | Kotlin 2.4.21, Gradle 9.7.0, Compose runtime and `html-core` 1.12.2, coroutines 1.11.0, serialization 1.13.0, ktlint plugin 14.2.0, Firebase JS 13.3.0, Tiptap 3.33.1 (`gradle/libs.versions.toml`) | ADR-001 to ADR-003; `./gradlew build` passed after Phase 3 | Answered, Proposed |
+| Firebase adapters or a wrapper | Hand-written Kotlin externals for `firebase/app`, `auth` and `firestore` in `shared/data` (jsMain). No GitLive. The iOS adapter is chosen at the iOS spike. | ADR-002, ADR-005; 14 emulator tests | Answered for web, Proposed |
+| Local store and sync ownership | Notes: the app's IndexedDB draft store for "Saved locally", the Firestore persistent cache as the outbox. Jira and GitHub: separate IndexedDB caches that never reach Firestore. Other app data (Topics, Tasks, links): the Firestore persistent cache only, no second queue. | ADR-002 (Notes, tested), ADR-006 to ADR-008 (external). Other app data is a Phase 6 proposal, not yet tested | Answered for Notes and external data. Other app data: proposed, to be checked in Phase 6 |
+| Rich-text library, schema and iOS path | Tiptap 3 with RichText v1 JSON (`schemaVersion` 1). Jira ADF maps into the same blocks. iOS renders RichText v1 itself and never needs Tiptap. | ADR-003 (**Accepted**), ADR-006 | Answered. iOS rendering not built |
+| Firebase sign-in provider | Google only, popup | ADR-005; owner's O3 | Answered, Proposed. Real popup not run (no real project) |
+| Jira auth and service boundary | A scoped, read-only API token typed into the app, Basic auth to the `api.atlassian.com` gateway. No proxy and no server. Cloud ID typed by hand. | ADR-006; J1 passed live | Answered, Proposed |
+| GitHub credentials and cache policy | A fine-grained, read-only token typed into the app. Lists and details cached on the device only, refreshed on open and with Refresh. Nothing in Firestore. | ADR-007, ADR-008; G1 to G3 | Answered, Proposed |
+| External metadata in cloud references | Proposed default: provider, instance (Jira Cloud ID or GitHub `owner/repo`), key or number, canonical URL. No title or other content. | None yet; built in Phase 10 | **Still open**: owner decision O11. The default is provisional |
+| Guaranteed offline download for active Topics | App-owned data: Thread listens to whole collections of one account, so the Firestore cache should hold all of it. Jira and PR details: only items opened on this device. No explicit download. | Notes only (E1, S1). Other app data from Phase 6 | **Still open** for external details: not built and not tested. App-owned part to be checked in Phases 6 to 8 |
+
+### Spike code: kept or deleted
+
+| Code | Phase 5 action |
+|---|---|
+| `shared/domain` note and external packages (RichText, DraftAutosaver, NoteSyncer, revisions, save state, ExternalLoader, RateLimitGate, PullRequestStates, ids, SecretText) | Keep. Product code |
+| `shared/data` IndexedDB stores, Firebase externals and remotes, HTTP, Jira, GitHub, connection store | Keep. Product code |
+| `shared/data` SYNTHETIC providers and the fixture flag | Keep for automated checks only. Never on by default |
+| `webApp` editor (`NoteEditor`, `RichTextEditorJson`), service worker and its Gradle task, network and ⌘K helpers | Keep |
+| `NoteSession`, `NoteToolbar`, `ConflictCompare`, the external rich text view and problem texts | Keep and move into the Notes, Jira and PR features |
+| `#/m1-spike`, `#/m1-connections`, the spike home page, `SpikeNote`, the spike token form | Delete in Phase 5. Settings replaces the token form (Phases 10 and 11) and keeps the same `thread-connections` records |
+| `css/m1-spike.css`, `css/m1-external.css` | Delete. Replaced by the v3 `app.css` |
+| Test hooks (ADR-005 table) and their buttons | Buttons deleted. Hooks stay only behind the emulator configuration, never in a build for a real project |
 
 ## M1-B, 2026-11-13
 

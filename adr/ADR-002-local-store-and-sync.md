@@ -66,7 +66,12 @@ Firestore receives only Notes the person wrote: title, RichText body, revision m
 - Signing out keeps the Firestore cache and the drafts on the device. Fine for a personal device; a shared device needs a "remove this device's data" action later.
 - Drafts written while signed out do not move to the account on sign-in. They stay in `thread-local` and show again after sign-out. The signed-in Note opens from the server version. Whether to offer "add this device's notes to your account" is a later product decision.
 - `navigator.storage.persist()` is still not requested (ADR-003).
-- No offline app shell, so an offline reload cannot open the app (ADR-003).
+- No offline app shell, so an offline reload cannot open the app (ADR-003). Solved in Phase 3 by ADR-008 (S1).
+
+## Phase 4 review (2026-11-13)
+
+- Checked against ADR-003 to ADR-008 for consistency. Still Proposed. The owner review is in the Phase 4 review queue.
+- Proposed extension for Phase 6: Topics, statuses, Tasks, links, Reminders, Inbox entries and preferences use the Firestore persistent cache as their only device store and outbox. They get no second queue (`03-architecture.md`). Their status comes from snapshot metadata. That part is not tested yet; Phase 6 records it in its own ADR.
 
 ## Proposed document updates
 

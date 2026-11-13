@@ -2,6 +2,8 @@
 
 Status: Proposed (Phase 0, 2026-11-13). The owner approved the phase plan and Phase 0 on 2026-11-13 ("Approve, start P0"). The choices below become Accepted only after the owner reviews this record (Phase 4).
 
+Phase 4 review (2026-11-13, owner away): checked for consistency with ADR-002 to ADR-008. Still Proposed; the owner review is queued. Later additions: Firebase JS 13.3.0 (ADR-002), Tiptap 3.33.1 (ADR-003), kotlinx-serialization 1.13.0, see `gradle/libs.versions.toml`.
+
 ## Context
 
 Thread is a Kotlin/JS + Compose HTML web app with shared Kotlin domain and data code, built so a SwiftUI app can reuse them later (D03–D06, `03-architecture.md`). Phase 0 creates the repository and a minimal build. It contains no feature code.

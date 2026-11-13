@@ -141,3 +141,16 @@ Cross-device simultaneous timers and timer takeover semantics remain open.
 - Revoked external access -> stop retry loops; apply a defined cache cleanup policy.
 - Local quota failure -> no false Saved indicator.
 
+## M1 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 4 while the owner was away. Details and evidence: ADR-002, ADR-004, ADR-006 to ADR-008 and `adr/M1-RESULTS.md`. Only the per-push revision model below has the owner's words ("Accept all", ADR-004).
+
+- Note shapes: `users/{uid}/notes/{noteId}` with `headRevisionId` and `deletedAt`, and immutable `revisions/{revisionId}` with `parentRevisionId` (ADR-004).
+- One revision per sync push (after 2 s idle, at least every 10 s), not one per editing session. Owner-accepted on 2026-11-13.
+- More than one current version (leaf) is a conflict. D41 resolution writes in one batch. Trash is a `deletedAt` field, so a late edit never takes a Note out of Trash.
+- Status order: Needs attention (device), Saving, Local only, Conflict, Sync failed, Synced, Offline, Syncing. "Synced" only after server acknowledgement.
+- Drafts: `thread-local` when signed out, `thread-drafts-<uid>` per signed-in account (ADR-002).
+- External data: Jira and GitHub copies in the IndexedDB database `thread-external-cache`, per browser profile, never in Firestore. Tokens in `thread-connections`, per browser profile (ADR-008).
+- Cloud references for Jira and PR links: proposed default is provider, instance, key or number, and canonical URL, with no title (owner decision O11 open).
+- Dates (proposed for Phase 7): `plannedDate` and a date-only deadline are calendar dates in the workspace time zone, never instants.
+
