@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
+    <!-- Strict Content Security Policy (Phase 12, ADR-015). No inline or evaluated script. Hosts:
+         Firebase Auth and Firestore (googleapis.com), Google sign-in popup (apis.google.com script,
+         the project's firebaseapp.com auth iframe), read-only Jira (api.atlassian.com) and GitHub
+         (api.github.com), and the local emulators on 127.0.0.1. data: images are the CSS check marks;
+         www.google.com serves the 1-pixel image Firestore's connection test loads when the network fails. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com; style-src 'self'; img-src 'self' data: https://www.google.com; font-src 'self'; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://api.atlassian.com https://api.github.com http://127.0.0.1:9099 http://127.0.0.1:8085; frame-src https://*.firebaseapp.com https://apis.google.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
     <title>Thread</title>
     <!-- No app icon yet. An empty icon stops the browser from requesting /favicon.ico. -->
     <link rel="icon" href="data:,">

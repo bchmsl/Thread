@@ -73,7 +73,7 @@ internal fun JiraTicket(
         view == null || view == ExternalView.Loading -> P({ classes("muted") }) { Text("Loading the ticket…") }
         view is ExternalView.Missing -> MissingTicket(view.problem, jira.name, onRefresh)
         copy != null -> {
-            CacheBar(view, onRefresh)
+            CacheBar(view, "Refresh this ticket", onRefresh)
             JiraArticle(copy.value, view.isOnDevice, jira, workspace, heading1, relatedHref, onOpenRelated, onGo)
         }
     }

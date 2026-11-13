@@ -11,7 +11,6 @@ import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
 import thread.domain.note.NoteSummary
 import thread.domain.note.NoteTopicLink
-import thread.domain.note.UNTITLED_NOTE
 import thread.domain.note.linkedTopicIds
 import thread.domain.note.liveNotes
 import thread.domain.note.newNote
@@ -52,6 +51,7 @@ import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspaceEdit
@@ -74,8 +74,6 @@ import thread.domain.workspace.seedWrites
 import thread.domain.workspace.setExternalLinks
 import thread.domain.workspace.unlinkExternal
 import thread.domain.workspace.workspaceSaveStates
-import thread.web.presentation.notes.notePlace
-import thread.web.presentation.topics.topicPlace
 import thread.domain.note.inboxNotes as inboxNotesOf
 import thread.domain.trash.trashTopic as trashTopicEdit
 
@@ -132,7 +130,8 @@ internal class WorkspaceModel(
     var readFailed: Boolean by mutableStateOf(false)
         private set
 
-    var refused: List<WorkspaceWrite> by mutableStateOf(emptyList())
+    /** Changes the server refused, kept on this device until retried or discarded (owner-review-queue Q14). */
+    var refused: List<RefusedChange> by mutableStateOf(emptyList())
         private set
 
     val loaded: Boolean get() = data != null
@@ -462,6 +461,15 @@ internal class WorkspaceModel(
         savePrefs(data, next)?.let { store.write(listOf(it)) }
     }
 
+    /** Sync panel Retry: sends a refused change again. */
+    fun retryRefused(change: RefusedChange) = store.retry(change)
+
+    /** Sync panel Discard: forgets a refused change on this device. */
+    fun discardRefused(change: RefusedChange) = store.discard(change)
+
+    /** The Undo of [discardRefused]. */
+    fun keepRefused(change: RefusedChange) = store.keep(change)
+
     /** What the status line chip and the sync panel show for the workspace. */
     fun syncReport(online: Boolean): SyncReport {
         val current = stored
@@ -488,78 +496,6 @@ internal class WorkspaceModel(
             }
         return SyncReport(states, problems)
     }
-
-    private fun refusedProblem(write: WorkspaceWrite): SyncProblem =
-        when (write) {
-            is WorkspaceWrite.PutTopic ->
-                SyncProblem(
-                    "Topic “${write.topic.name}” was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    topicPlace(write.topic),
-                )
-            is WorkspaceWrite.PutStatus ->
-                SyncProblem(
-                    "Status “${write.status.name}” was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    Place.of("settings", "statuses"),
-                )
-            is WorkspaceWrite.PutPrefs ->
-                SyncProblem(
-                    "Preferences were not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    Place.of("settings", "prefs"),
-                )
-            is WorkspaceWrite.PutTask ->
-                SyncProblem(
-                    "Task “${write.task.title}” was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    if (write.isNew) null else taskPlace(View.Today.place, write.task.id),
-                )
-            is WorkspaceWrite.PutReminder ->
-                SyncProblem(
-                    "Reminder “${write.reminder.text}” was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    null,
-                )
-            is WorkspaceWrite.PutNote -> {
-                val title = note(write.note.id.value)?.title?.ifBlank { null } ?: UNTITLED_NOTE
-                SyncProblem(
-                    "Where “$title” is filed was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    if (write.isNew) null else notePlace(write.note.id),
-                )
-            }
-            is WorkspaceWrite.PutNoteLink -> {
-                val title = note(write.link.noteId.value)?.title?.ifBlank { null } ?: UNTITLED_NOTE
-                val topic = storedTopic(write.link.topicId.value)?.name ?: "a Topic"
-                SyncProblem(
-                    "The link between “$title” and $topic was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    notePlace(write.link.noteId),
-                )
-            }
-            is WorkspaceWrite.PutExternalRef ->
-                SyncProblem(
-                    "The link to ${write.reference.key} was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    null,
-                )
-            is WorkspaceWrite.PutExternalLink -> {
-                val topic = storedTopic(write.link.topicId.value)
-                val key = write.link.referenceId.substringAfterLast('~')
-                SyncProblem(
-                    "The link between $key and ${topic?.name?.let { "“$it”" } ?: "a Topic"} was not saved. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    topic?.let(::topicPlace),
-                )
-            }
-            is WorkspaceWrite.DeleteForever ->
-                SyncProblem(
-                    "“${write.title}” was not deleted forever. The server refused the change.",
-                    NoteSaveState.SyncFailed,
-                    View.Trash.place,
-                )
-        }
 }
 
 /** [base] with the Task sheet open on [id] (v3 `?task=`). */

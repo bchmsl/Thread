@@ -18,6 +18,8 @@ import org.jetbrains.compose.web.attributes.disabled
 import org.jetbrains.compose.web.attributes.onSubmit
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.css.fontSize
+import org.jetbrains.compose.web.css.px
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
@@ -120,7 +122,7 @@ internal fun JiraScreen(
     val scope = rememberCoroutineScope()
 
     var listRefresh by remember { mutableStateOf(0) }
-    val listAuto = rememberAutoRefresh(JiraList.Assigned)
+    val listAuto = rememberAutoRefresh(JiraList.Assigned) { jira.problem == ExternalProblem.Unauthorized }
     val listView = rememberExternalView(jira.listLoader, JiraList.Assigned, listOf(listRefresh, listAuto, jira.version))
     LaunchedEffect(listView) { listView?.let(jira::observeList) }
     val assigned = listView?.savedOrNull?.value
@@ -217,8 +219,12 @@ internal fun JiraScreen(
     }
 
     PageHeader(jira.name, "Read-only. Tickets you open are saved on this device.")
-    // The banner speaks for the ticket on screen when it shows a saved copy, else for the list.
-    val bannerView = ticketView?.takeIf { it.savedOrNull != null } ?: listView?.takeIf { it.savedOrNull != null }
+    // The banner speaks for a view that shows its saved copy because of a problem (ticket first), so a list that got a
+    // 401 still says why while the ticket on screen is fine. Else for the ticket on screen, else for the list.
+    val bannerView =
+        listOf(ticketView, listView).firstOrNull { it is ExternalView.SavedCopy }
+            ?: ticketView?.takeIf { it.savedOrNull != null }
+            ?: listView?.takeIf { it.savedOrNull != null }
     ViewBanner(bannerView, jira.name, "tickets") { router.go(CONNECTIONS_PLACE) }
     Div({ classes("md", *(if (openKey != null) arrayOf("has-open") else emptyArray())) }) {
         Div({ classes("md__list") }) {
@@ -352,7 +358,7 @@ private fun AssignedPanel(
                 }
             }
         list != null -> {
-            CacheBar(view, onRefresh)
+            CacheBar(view, "Refresh the list", onRefresh)
             if (list.issues.isEmpty()) {
                 EmptyState(Icon.Jira, "Nothing assigned to you", "Open tickets assigned to you show here.")
             } else {
@@ -408,7 +414,7 @@ private fun SearchPanel(
     val results = search.results
     P({
         classes("muted")
-        attr("style", "font-size:13px")
+        style { fontSize(13.px) }
         attr("aria-live", "polite")
     }) {
         Text(

@@ -15,6 +15,9 @@ import org.jetbrains.compose.web.attributes.onSubmit
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.attributes.required
 import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.css.fontSize
+import org.jetbrains.compose.web.css.padding
+import org.jetbrains.compose.web.css.px
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.B
@@ -58,8 +61,8 @@ import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.StatusLabel
 import thread.web.presentation.topics.TopicHex
 import thread.web.presentation.topics.TopicProgress
+import thread.web.presentation.topics.topicColor
 import thread.web.presentation.topics.topicPlace
-import thread.web.presentation.topics.topicStyle
 
 /**
  * Today (v3 today.html): the date and the personal checklist lead, reminders and review requests sit on the rail,
@@ -219,7 +222,7 @@ private fun TaskGroup(
         } else {
             P({
                 classes("muted")
-                attr("style", "padding:12px 4px")
+                style { padding(12.px, 4.px) }
             }) { Text("Nothing planned for today yet.") }
         }
     }
@@ -295,7 +298,7 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
             }
             Span({
                 classes("muted")
-                attr("style", "font-size:13px")
+                style { fontSize(13.px) }
             }) { Text(if (names.isNotEmpty()) "Statuses in the Active category: $names" else "No status uses the Active category") }
         }
         if (active.isEmpty()) {
@@ -310,7 +313,7 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
                     Li {
                         A(topicPlace(topic).hash, {
                             classes("acard")
-                            attr("style", topicStyle(topic.color))
+                            topicColor(topic.color)
                         }) {
                             Span({ classes("acard__top") }) {
                                 TopicHex(topic.name, topic.color, HexSize.Md)

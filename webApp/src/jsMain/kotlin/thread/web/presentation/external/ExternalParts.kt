@@ -215,10 +215,15 @@ internal fun GoToConnectionsButton(onClick: () -> Unit) {
     }) { Text("Open Settings") }
 }
 
-/** The v3 cache bar: when the copy on screen is from, and Refresh. */
+/**
+ * The v3 cache bar: when the copy on screen is from, and Refresh. [refreshName] is the button's accessible name, such as
+ * "Refresh this ticket": a list and an open record each have a Refresh, and screen readers must tell them apart. It
+ * starts with the visible word, so speech input still finds the button.
+ */
 @Composable
 internal fun CacheBar(
     view: ExternalView<*>,
+    refreshName: String,
     onRefresh: () -> Unit,
 ) {
     val busy = view is ExternalView.Refreshing || view is ExternalView.Loading
@@ -237,6 +242,7 @@ internal fun CacheBar(
         Button({
             classes("btn", "btn--text", "btn--sm")
             type(ButtonType.Button)
+            attr("aria-label", refreshName)
             if (busy) disabled()
             onClick { onRefresh() }
         }) {

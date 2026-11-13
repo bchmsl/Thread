@@ -185,14 +185,21 @@ internal class JiraModel(
 /** Copies refresh when opened and then every five minutes while the page is visible and online (ADR-013). */
 internal const val JIRA_REFRESH_MILLIS = 5 * 60 * 1_000L
 
-/** A number that grows every [JIRA_REFRESH_MILLIS] while the page is visible and online, to reload a view. */
+/**
+ * A number that grows every [JIRA_REFRESH_MILLIS] while the page is visible and online, to reload a view. It stops
+ * while [accessExpired]: after a 401 the token is known to be wrong, so nothing goes out on its own until the person
+ * connects again, opens another item or presses Refresh (04 "revoked external access": no retry loop).
+ */
 @Composable
-internal fun rememberAutoRefresh(key: Any?): Int {
+internal fun rememberAutoRefresh(
+    key: Any?,
+    accessExpired: () -> Boolean,
+): Int {
     var tick by remember(key) { mutableStateOf(0) }
     LaunchedEffect(key) {
         while (true) {
             delay(JIRA_REFRESH_MILLIS)
-            if (isOnline() && document.asDynamic().visibilityState == "visible") tick++
+            if (!accessExpired() && isOnline() && document.asDynamic().visibilityState == "visible") tick++
         }
     }
     return tick
@@ -205,7 +212,7 @@ internal fun rememberJiraTicket(
     key: JiraIssueKey?,
     refresh: Int,
 ): ExternalView<JiraIssue>? {
-    val auto = rememberAutoRefresh(key)
+    val auto = rememberAutoRefresh(key) { jira.problem == ExternalProblem.Unauthorized }
     val view = rememberExternalView(jira.issueLoader, key, listOf(refresh, auto, jira.version))
     LaunchedEffect(view) { if (key != null && view != null) jira.observeTicket(key, view) }
     return view

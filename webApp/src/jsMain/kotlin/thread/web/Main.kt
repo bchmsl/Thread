@@ -2,6 +2,7 @@ package thread.web
 
 import org.jetbrains.compose.web.renderComposable
 import thread.data.external.KeyValueConnectionStore
+import thread.data.external.KeyValueStore
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
@@ -21,6 +22,7 @@ import thread.data.local.randomWorkspaceId
 import thread.data.synthetic.SyntheticConnectionStore
 import thread.data.synthetic.SyntheticHttpTransport
 import thread.data.synthetic.SyntheticScenario
+import thread.domain.account.AccountId
 import thread.domain.external.ConnectionStore
 import thread.domain.note.LocalDraftStore
 import thread.web.platform.isOnline
@@ -52,7 +54,9 @@ fun main() {
         AppServices(
             account = account,
             usesEmulators = backend.usesEmulators,
-            workspaceStore = { accountId -> FirestoreWorkspaceStore(backend, accountId) { testFlags.failServerWrites } },
+            workspaceStore = { accountId ->
+                FirestoreWorkspaceStore(backend, accountId, workspaceOutbox(accountId)) { testFlags.failServerWrites }
+            },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
             jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),
@@ -96,6 +100,14 @@ private fun connectionStore(synthetic: Boolean): ConnectionStore {
         )
     return KeyValueConnectionStore(database.store(IndexedDbKeyValueDatabase.CONNECTIONS_STORE))
 }
+
+/** This account's record of workspace changes on their way to the server, so a refused one survives a reload (Q14). */
+private fun workspaceOutbox(accountId: AccountId): KeyValueStore =
+    IndexedDbKeyValueDatabase(
+        IndexedDbKeyValueDatabase.workspaceOutboxFor(accountId),
+        listOf(IndexedDbKeyValueDatabase.WORKSPACE_OUTBOX_STORE),
+        strictDurability = true,
+    ).store(IndexedDbKeyValueDatabase.WORKSPACE_OUTBOX_STORE)
 
 /** Saved Jira and GitHub copies. SYNTHETIC copies use a separate database, so fixture data never mixes with real copies. */
 private fun externalCache(synthetic: Boolean): IndexedDbKeyValueDatabase =

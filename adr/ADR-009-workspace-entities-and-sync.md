@@ -1,6 +1,6 @@
 # ADR-009: Workspace entities and their sync (statuses, Topics, preferences)
 
-Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Built on ADR-002 (Firestore persistent cache as the device store) and ADR-005 (per-user rules). Checked with the emulator tests in `shared/data/src/jsTest/.../FirestoreWorkspace*EmulatorTest.kt` and the Phase 6 browser checks (96 of 96). The owner review is queued (owner-review-queue.md, Phase 6 items).
+Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Built on ADR-002 (Firestore persistent cache as the device store) and ADR-005 (per-user rules). Checked with the emulator tests in `shared/data/src/jsTest/.../FirestoreWorkspace*EmulatorTest.kt` and the Phase 6 browser checks (96 of 96). The owner review is queued (owner-review-queue.md, Phase 6 items). Updated in Phase 12: refused changes are kept on the device (Q14), checked with `WorkspaceOutboxTest`, `RefusedChangesTest` and the emulator tests.
 
 ## Context
 
@@ -28,7 +28,12 @@ Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Buil
 - The Firestore persistent cache (`persistentMultipleTabManager`) is the device's only copy and outbox, as for Notes (ADR-002). There is no second queue.
 - `WorkspaceStore.write` applies a list of writes as one batch, to the cache at once, and sends it when online. The screens only show what the store emits, so they always show what the device stored.
 - Save state comes from snapshot metadata: a pending write is Syncing (online) or Saved locally, offline. All synced only after the server acknowledged every write.
-- A write the server refuses is taken back out of the cache by the SDK. The store lists it in `refused`, the chip shows Sync failed, and the sync panel names the Topic, status or preferences with a link. The refused change is not kept anywhere else (queue item).
+- A write the server refuses is taken back out of the cache by the SDK. A refusal is a failed sync, even when only a rules bug or an old app version causes it, so it is never dropped. Updated in Phase 12 (owner-review-queue Q14):
+  - The store keeps a small device-local record of each change until the server answers (`WorkspaceOutbox`, IndexedDB `thread-outbox-<uid>`). It is not a second queue: Firestore still sends the change; the record only remembers it.
+  - Each batch is recorded as sent before it goes out. The server's accept deletes the record. A refusal marks it refused.
+  - The store lists refused changes in `refused`, also after a reload, until the person acts. The chip shows Sync failed. The sync panel names the change with a link and offers Retry (writes the same change again), Copy (puts the change as text on the clipboard) and Discard (with Undo).
+  - A change still marked sent when the next page starts lost its answer in the reload: Firestore resends it from its own queue, and the answer reaches no callback. The store waits for `waitForPendingWrites`, which settles on accepts and refusals alike, then compares each such change with the stored data, field by field (`unconfirmedChanges` in the domain). A later write to the same field hides an earlier one. If the data does not show the change, the panel lists it as "Could not confirm".
+  - This covers every workspace write: Topics, statuses, preferences, Tasks, Reminders, Note filing and links, and Jira and GitHub links. Note text has its own revisions (ADR-004).
 
 ### Seeding
 
@@ -57,7 +62,7 @@ Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Buil
 - Small, readable rules. No Cloud Functions, no server.
 - Known race: two devices open a brand-new account at the same moment, both see no statuses, and both seed. If one renames a seed status before the other's seed reaches the server, the late seed resets that name. Not handled in the pilot (queue item).
 - Last writer wins per field. If the same field is edited on two devices, one edit is lost without a notice.
-- A refused write is lost after reload. In practice only a rules bug or a schema mismatch can cause it.
+- A refused change stays on the device until the person retries or discards it (Q14). Remaining limits: a false "Could not confirm" when another device or tab changed the same field after the change was accepted (a false alarm, never a loss); if device storage fails, a refused change is listed only until the page closes; a record this version cannot read stays in storage untouched; each tab lists the refusals it saw plus those stored when it opened; a page closed in the same instant as a change may close before its record is written.
 
 ## Alternatives considered
 

@@ -71,6 +71,12 @@ internal external fun getDocsFromServer(query: CollectionReference): Promise<Que
 /** The server's time of the write. Shown as the device's estimate until acknowledged (with `serverTimestamps`). */
 internal external fun serverTimestamp(): dynamic
 
+/**
+ * Resolves when the server has answered every write pending now, from earlier pages too, whether it accepted or
+ * refused them. Waits while offline; rejects when the user changes.
+ */
+internal external fun waitForPendingWrites(firestore: Firestore): Promise<Unit>
+
 internal external fun disableNetwork(firestore: Firestore): Promise<Unit>
 
 internal external fun enableNetwork(firestore: Firestore): Promise<Unit>

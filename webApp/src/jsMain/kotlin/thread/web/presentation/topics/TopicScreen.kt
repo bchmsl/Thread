@@ -136,7 +136,7 @@ internal fun TopicScreen(
     }
     Header({
         classes("td-head")
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
     }) {
         TopicHex(topic.name, topic.color, HexSize.Lg)
         H1({
@@ -212,7 +212,7 @@ internal fun TopicScreen(
     }
     Section({
         classes("pickup")
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
         attr("aria-labelledby", "pu-h")
     }) {
         H2({
@@ -312,7 +312,7 @@ private fun TopicInTrash(
     }
     Section({
         classes("gone")
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
         attr("aria-labelledby", GONE_HEADING_ID)
     }) {
         TopicHex(topic.name, topic.color, HexSize.Lg)

@@ -180,7 +180,7 @@ internal fun rememberPullRequest(
     ref: PullRequestRef?,
     refresh: Int,
 ): ExternalView<PullRequestDetail>? {
-    val auto = rememberAutoRefresh(ref)
+    val auto = rememberAutoRefresh(ref) { gitHub.problem == ExternalProblem.Unauthorized }
     val view = rememberExternalView(gitHub.pullLoader, ref, listOf(refresh, auto, gitHub.version))
     LaunchedEffect(view) { if (ref != null && view != null) gitHub.observePull(ref, view) }
     return view
@@ -193,7 +193,7 @@ internal fun rememberPullRequestList(
     list: PullRequestList,
     refresh: Int,
 ): ExternalView<PullRequestListPage>? {
-    val auto = rememberAutoRefresh(list)
+    val auto = rememberAutoRefresh(list) { gitHub.problem == ExternalProblem.Unauthorized }
     val view = rememberExternalView(gitHub.listLoader, list, listOf(refresh, auto, gitHub.version))
     LaunchedEffect(view) { if (view != null) gitHub.observeList(list, view) }
     return view

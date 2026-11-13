@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import thread.domain.note.NoteSaveState
 import thread.domain.note.overallSaveState
+import thread.domain.workspace.RefusedChange
 import thread.web.platform.isOnline
 import thread.web.platform.onOnlineChange
 
@@ -16,6 +17,15 @@ internal data class SyncProblem(
     val label: String,
     val state: NoteSaveState,
     val place: Place?,
+    /** Set for a change the server refused: the panel then offers Retry, Copy and Discard. */
+    val refused: RefusedItem? = null,
+)
+
+/** A refused change in the sync panel: [subject] names it in the buttons' accessible names, [copyText] is what Copy copies. */
+internal data class RefusedItem(
+    val change: RefusedChange,
+    val subject: String,
+    val copyText: String,
 )
 
 /** What one part of the app (Notes, Topics and Tasks, ...) reports about its saving and syncing. */

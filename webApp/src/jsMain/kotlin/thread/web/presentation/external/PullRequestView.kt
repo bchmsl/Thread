@@ -93,7 +93,7 @@ internal fun PullRequestDetailView(
         view == null || view == ExternalView.Loading -> P({ classes("muted") }) { Text("Loading the pull request…") }
         view is ExternalView.Missing -> MissingPullRequest(view.problem, gitHub.name, onRefresh)
         copy != null -> {
-            CacheBar(view, onRefresh)
+            CacheBar(view, "Refresh this pull request", onRefresh)
             PullRequestArticle(copy.value, view.isOnDevice, gitHub, workspace, heading1, onGo)
         }
     }

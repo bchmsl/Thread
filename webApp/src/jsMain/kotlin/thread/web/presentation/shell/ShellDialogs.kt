@@ -24,6 +24,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
 import thread.domain.note.NoteSaveState
+import thread.domain.workspace.RefusedChange
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
@@ -33,12 +34,18 @@ import thread.web.presentation.SyncProblem
 import thread.web.presentation.View
 import thread.web.presentation.syncText
 
-/** The sync popover (v3 renderSync), driven by the real save and sync states. */
+/**
+ * The sync popover (v3 renderSync), driven by the real save and sync states. A change the server refused also gets
+ * Retry, Copy and Discard (owner-review-queue Q14).
+ */
 @Composable
 internal fun SyncPanel(
     state: NoteSaveState,
     problems: List<SyncProblem>,
     usesEmulators: Boolean,
+    onRetry: (RefusedChange) -> Unit,
+    onCopy: (String) -> Unit,
+    onDiscard: (RefusedChange) -> Unit,
     onClose: () -> Unit,
 ) {
     val text = syncText(state)
@@ -67,16 +74,25 @@ internal fun SyncPanel(
                 Ul({ classes("syncp__list") }) {
                     problems.forEach { problem ->
                         Li {
-                            val place = problem.place
-                            if (place != null) {
-                                A(place.hash, { onClick { onClose() } }) {
-                                    IconView(Icon.Notes, 16)
-                                    Text(" " + problem.label)
+                            Div({ classes("syncp__item") }) {
+                                val place = problem.place
+                                if (place != null) {
+                                    A(place.hash, { onClick { onClose() } }) {
+                                        IconView(Icon.Notes, 16)
+                                        Text(" " + problem.label)
+                                    }
+                                } else {
+                                    Span {
+                                        IconView(Icon.Alert, 16)
+                                        Text(" " + problem.label)
+                                    }
                                 }
-                            } else {
-                                Span {
-                                    IconView(Icon.Alert, 16)
-                                    Text(" " + problem.label)
+                                problem.refused?.let { refused ->
+                                    Div({ classes("syncp__acts") }) {
+                                        SyncAction("Retry", "Retry: ${refused.subject}") { onRetry(refused.change) }
+                                        SyncAction("Copy", "Copy: ${refused.subject}") { onCopy(refused.copyText) }
+                                        SyncAction("Discard", "Discard: ${refused.subject}") { onDiscard(refused.change) }
+                                    }
                                 }
                             }
                             Span({ classes("sync", "sync--bad") }) { Text(syncText(problem.state).text) }
@@ -86,6 +102,21 @@ internal fun SyncPanel(
             }
         }
     }
+}
+
+/** A small text button under a refused change. [name] starts with the visible [label], so speech input finds it. */
+@Composable
+private fun SyncAction(
+    label: String,
+    name: String,
+    onClick: () -> Unit,
+) {
+    Button({
+        classes("btn", "btn--text", "btn--sm")
+        type(ButtonType.Button)
+        attr("aria-label", name)
+        onClick { onClick() }
+    }) { Text(label) }
 }
 
 /** The narrow views sheet (v3 open-views), a bottom dialog with every view plus search and sync status. */

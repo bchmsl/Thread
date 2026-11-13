@@ -96,3 +96,8 @@ img.ProseMirror-separator {
    green Open pill; descriptions are GitHub plain text with its line breaks kept (owner-review-queue, ADR-014). */
 .pill-open--draft { background: transparent; color: var(--text-2); border: 1px solid var(--border-strong); }
 .desc--plain p { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* Phase 12: a change the server refused gets Retry, Copy and Discard under its line in the sync panel. v3 only had
+   the line and its red state (owner-review-queue Q14, adr/ADR-009-workspace-entities-and-sync.md). */
+.syncp__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.syncp__acts { display: flex; gap: 4px; flex-wrap: wrap; margin-left: -10px; }

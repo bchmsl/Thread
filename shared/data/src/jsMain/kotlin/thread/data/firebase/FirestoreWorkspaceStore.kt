@@ -1,14 +1,20 @@
 package thread.data.firebase
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.await
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import thread.data.external.InMemoryKeyValueStore
+import thread.data.external.KeyValueStore
 import thread.data.local.newJsObject
+import thread.data.workspace.WorkspaceOutbox
 import thread.domain.account.AccountId
 import thread.domain.note.LinkHref
 import thread.domain.note.NoteId
@@ -33,6 +39,7 @@ import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
@@ -40,6 +47,7 @@ import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceStore
 import thread.domain.workspace.WorkspaceWrite
+import kotlin.js.Date
 
 /** Listening to the workspace failed, for example because the account was signed out. */
 class WorkspaceReadException(
@@ -75,8 +83,11 @@ class WorkspaceReadException(
  *   deleted too.
  *
  * The Firestore persistent cache is the device copy and the outbox. A write goes into it at once, also offline, and
- * the snapshot metadata says whether the server acknowledged it. A refused write is dropped from the cache by the SDK;
- * it is kept in [refused] so the app can say what was not saved.
+ * the snapshot metadata says whether the server acknowledged it. A refused write is dropped from the cache by the SDK.
+ * [WorkspaceOutbox] records each change in [outboxStorage] until the server answers, so a refused one stays listed in
+ * [refused], also after a reload, until the person retries or discards it. A change sent before a reload has no
+ * answer on the next page: once the server has answered every pending write, the changes the stored data does not
+ * show are listed as unconfirmed (owner-review-queue Q14).
  *
  * A write with a `before` value sets only the fields that changed (a merge), so edits to different fields of one
  * document on two devices both survive. Edits to the same field: the last one the server receives wins.
@@ -86,17 +97,52 @@ class WorkspaceReadException(
 class FirestoreWorkspaceStore internal constructor(
     private val firestore: Firestore,
     private val accountId: AccountId,
+    outboxStorage: KeyValueStore,
+    scope: CoroutineScope,
     private val rejectWritesForTesting: () -> Boolean,
 ) : WorkspaceStore {
+    /**
+     * [outboxStorage] must be this account's device storage (IndexedDB) for refused changes to survive a reload. The
+     * in-memory default is for tests.
+     */
     constructor(
         backend: FirebaseBackend,
         accountId: AccountId,
+        outboxStorage: KeyValueStore = InMemoryKeyValueStore(),
+        scope: CoroutineScope = MainScope(),
         rejectWritesForTesting: () -> Boolean = { false },
-    ) : this(backend.firestore, accountId, rejectWritesForTesting)
+    ) : this(backend.firestore, accountId, outboxStorage, scope, rejectWritesForTesting)
 
-    private val refusedWrites = MutableStateFlow<List<WorkspaceWrite>>(emptyList())
+    private val outbox = WorkspaceOutbox(outboxStorage, scope, now = ::nowMillis)
 
-    override val refused: StateFlow<List<WorkspaceWrite>> = refusedWrites.asStateFlow()
+    override val refused: StateFlow<List<RefusedChange>> = outbox.refused
+
+    init {
+        scope.launch { checkLeftovers() }
+    }
+
+    /** Lists the changes sent before a reload that the server's answer did not keep (see the class comment). */
+    private suspend fun checkLeftovers() {
+        val leftovers = outbox.load()
+        if (leftovers.isEmpty()) return
+        try {
+            waitForPendingWrites(firestore).await()
+            outbox.resolve(leftovers, observe().first())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // Signed out, or the device copy failed: the leftovers stay recorded for the next page.
+        }
+    }
+
+    override fun retry(change: RefusedChange) {
+        write(change.writes)
+        outbox.discard(change)
+    }
+
+    override fun discard(change: RefusedChange) = outbox.discard(change)
+
+    override fun keep(change: RefusedChange) = outbox.keep(change)
 
     override fun observe(): Flow<WorkspaceData> =
         callbackFlow {
@@ -205,7 +251,8 @@ class FirestoreWorkspaceStore internal constructor(
             if (write is WorkspaceWrite.DeleteForever) batch.set(reference(write), data) else batch.set(reference(write), data, merge())
         }
         // The cache has the writes now. The promise settles when the server answers, which waits while offline.
-        batch.commit().catch { refusedWrites.update { it + writes } }
+        val id = outbox.sent(writes)
+        batch.commit().then({ outbox.accepted(id) }, { outbox.refused(id, writes) })
     }
 
     private fun reference(write: WorkspaceWrite): DocumentReference =
@@ -660,3 +707,5 @@ private fun estimatedTimestamps(): dynamic {
     options.serverTimestamps = "estimate"
     return options
 }
+
+private fun nowMillis(): Long = Date.now().toLong()

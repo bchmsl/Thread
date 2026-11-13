@@ -1,6 +1,11 @@
 package thread.data.firebase
 
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import thread.data.external.InMemoryKeyValueStore
+import thread.data.workspace.WorkspaceOutbox
 import thread.domain.topic.SEED_STATUSES
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
@@ -9,6 +14,7 @@ import thread.domain.topic.newTopic
 import thread.domain.topic.visibleStatuses
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceWrite
@@ -85,13 +91,85 @@ class FirestoreWorkspaceEmulatorTest {
                 val rename = assertIs<EditResult.Changed>(renameStatus(SEED_STATUSES, StatusId("s-active"), "Building")).edit
                 store.write(rename.writes)
                 val refused = store.refused.first { it.isNotEmpty() }
-                assertEquals(rename.writes, refused)
+                assertEquals(rename.writes, refused.single().writes)
+                assertFalse(refused.single().unconfirmed)
                 val after = store.observe().first { !it.pendingWrites }
                 assertEquals("Active", visibleStatuses(after.statuses)[1].name, "The server copy wins again")
             } finally {
                 device.backend.close()
             }
         }
+
+    @Test
+    fun aRefusedChangeIsStillListedAfterAReloadAndARetryIsAccepted() =
+        emulatorTest {
+            val device = EmulatedDevice.signIn(syntheticSubject())
+            val deviceStorage = InMemoryKeyValueStore()
+            val pages = MainScope()
+            var reject = false
+            val store = FirestoreWorkspaceStore(device.backend, device.accountId, deviceStorage, pages) { reject }
+            try {
+                store.write(seedWrites())
+                store.observe().first { it.statuses.size == 4 && !it.pendingWrites }
+                reject = true
+                val rename = assertIs<EditResult.Changed>(renameStatus(SEED_STATUSES, StatusId("s-active"), "Building")).edit
+                store.write(rename.writes)
+                val refused = store.refused.first { it.isNotEmpty() }.single()
+                awaitRecords(deviceStorage) { records -> records.singleOrNull()?.contains("\"state\":\"refused\"") == true }
+
+                // The next page on this device: a new store over the same device storage.
+                val reloaded = FirestoreWorkspaceStore(device.backend, device.accountId, deviceStorage, pages)
+                assertEquals(refused, reloaded.refused.first { it.isNotEmpty() }.single())
+
+                reloaded.retry(refused)
+                assertTrue(reloaded.refused.value.isEmpty(), "Retrying takes it off the list")
+                val after = reloaded.observe().first { !it.pendingWrites && visibleStatuses(it.statuses)[1].name == "Building" }
+                assertEquals("Building", visibleStatuses(after.statuses)[1].name)
+                awaitRecords(deviceStorage) { it.isEmpty() }
+            } finally {
+                pages.cancel()
+                device.backend.close()
+            }
+        }
+
+    @Test
+    fun aChangeWhoseAnswerWasLostInAReloadIsListedWhenTheDataDoesNotShowIt() =
+        emulatorTest {
+            val device = EmulatedDevice.signIn(syntheticSubject())
+            val deviceStorage = InMemoryKeyValueStore()
+            val pages = MainScope()
+            val store = FirestoreWorkspaceStore(device.backend, device.accountId)
+            try {
+                store.write(seedWrites())
+                store.observe().first { it.statuses.size == 4 && !it.pendingWrites }
+                val arrived = assertIs<EditResult.Changed>(renameStatus(SEED_STATUSES, StatusId("s-active"), "Building")).edit
+                val lost = assertIs<EditResult.Changed>(renameStatus(SEED_STATUSES, StatusId("s-paused"), "Waiting")).edit
+                store.write(arrived.writes)
+                store.observe().first { !it.pendingWrites && visibleStatuses(it.statuses)[1].name == "Building" }
+
+                // An earlier page recorded both as sent and closed before the server answered.
+                val earlierPage = WorkspaceOutbox(deviceStorage, pages, now = { 1L }, session = "earlier-page")
+                earlierPage.sent(arrived.writes)
+                val lostId = earlierPage.sent(lost.writes)
+                earlierPage.load()
+
+                val reloaded = FirestoreWorkspaceStore(device.backend, device.accountId, deviceStorage, pages)
+                val listed = reloaded.refused.first { it.isNotEmpty() }
+                assertEquals(listOf(RefusedChange(lostId, lost.writes, unconfirmed = true)), listed)
+                awaitRecords(deviceStorage) { records -> records.singleOrNull()?.contains("\"state\":\"unconfirmed\"") == true }
+            } finally {
+                pages.cancel()
+                device.backend.close()
+            }
+        }
+
+    /** Waits until the device storage holds records that pass [check]. Storage writes run after the list changes. */
+    private suspend fun awaitRecords(
+        storage: InMemoryKeyValueStore,
+        check: (List<String>) -> Boolean,
+    ) {
+        while (!check(storage.all().map { it.second })) delay(20)
+    }
 
     @Test
     fun theFirstPreferencesSaveIsAcceptedAndLaterSavesMerge() =

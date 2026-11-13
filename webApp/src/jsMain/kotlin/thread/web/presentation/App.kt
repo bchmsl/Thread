@@ -39,6 +39,7 @@ import thread.domain.topic.statusOf
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.WorkspaceStore
+import thread.web.platform.copyText
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
 import thread.web.presentation.external.GitHubModel
@@ -364,7 +365,24 @@ private fun Workspace(
             )
         }
         if (syncOpen) {
-            SyncPanel(syncState, syncCenter.problems, services.usesEmulators) { syncOpen = false }
+            SyncPanel(
+                syncState,
+                syncCenter.problems,
+                services.usesEmulators,
+                onRetry = { change ->
+                    workspace.retryRefused(change)
+                    toasts.show("Sending the change again")
+                },
+                onCopy = { text ->
+                    copyText(text) { copied ->
+                        toasts.show(if (copied) "Change copied" else "Copy failed. Your browser blocked the clipboard.")
+                    }
+                },
+                onDiscard = { change ->
+                    workspace.discardRefused(change)
+                    toasts.show("Change discarded", undo = { workspace.keepRefused(change) })
+                },
+            ) { syncOpen = false }
         }
         if (searchOpen) {
             SearchPalette(

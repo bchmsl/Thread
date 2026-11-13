@@ -517,8 +517,8 @@ private fun SavedCopiesRow(
             P({ classes("conn__name") }) { Text("Saved copies") }
             P({ classes("pref__hint") }) {
                 Text(
-                    "Tickets, pull requests and lists saved on this device for offline reading: ${jira.saved.size} tickets and " +
-                        "${gitHub.saved.size} pull requests saved. Connections stay.",
+                    "Tickets, pull requests and lists saved on this device for offline reading: " +
+                        "${countOf(jira.saved.size, "ticket")} and ${countOf(gitHub.saved.size, "pull request")} saved. Connections stay.",
                 )
             }
         }
@@ -571,3 +571,9 @@ private fun AttrsScope<*>.fieldAttrs(
     attr("aria-describedby", "$id-hint")
     if (error != null) attr("aria-invalid", "true")
 }
+
+/** "1 ticket", "3 tickets". */
+private fun countOf(
+    count: Int,
+    noun: String,
+): String = if (count == 1) "1 $noun" else "$count ${noun}s"

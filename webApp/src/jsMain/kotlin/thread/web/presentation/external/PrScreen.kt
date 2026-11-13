@@ -107,8 +107,12 @@ internal fun PrScreen(
     }
 
     PageHeader("Pull requests", "Read-only. Open pull requests from GitHub.")
-    // The banner speaks for the pull request on screen when it shows a saved copy, else for the list.
-    val bannerView = pullView?.takeIf { it.savedOrNull != null } ?: listView?.takeIf { it.savedOrNull != null }
+    // The banner speaks for a view that shows its saved copy because of a problem (pull request first), so a list that got a
+    // 401 still says why while the pull request on screen is fine. Else for the pull request on screen, else for the list.
+    val bannerView =
+        listOf(pullView, listView).firstOrNull { it is ExternalView.SavedCopy }
+            ?: pullView?.takeIf { it.savedOrNull != null }
+            ?: listView?.takeIf { it.savedOrNull != null }
     ViewBanner(bannerView, gitHub.name, "pull requests") { router.go(CONNECTIONS_PLACE) }
     Div({ classes("md", *(if (openRef != null) arrayOf("has-open") else emptyArray())) }) {
         Div({ classes("md__list") }) {
@@ -231,7 +235,7 @@ private fun ListPanel(
                 }
             }
         page != null -> {
-            CacheBar(view, onRefresh)
+            CacheBar(view, "Refresh the list", onRefresh)
             if (page.items.isEmpty()) {
                 if (reviewTab) {
                     EmptyState(Icon.Pr, "No review requests", "Pull requests that ask for your review show here.")

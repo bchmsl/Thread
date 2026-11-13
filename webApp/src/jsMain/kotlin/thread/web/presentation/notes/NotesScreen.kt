@@ -17,6 +17,8 @@ import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.css.padding
+import org.jetbrains.compose.web.css.px
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.Button
@@ -244,7 +246,7 @@ private fun NoteRows(
     if (rows.isEmpty()) {
         Li({
             classes("muted")
-            attr("style", "padding:12px")
+            style { padding(12.px) }
         }) { Text(if (workspace.notes.isEmpty()) "No notes yet. Start one with New note." else "No notes match.") }
         return
     }

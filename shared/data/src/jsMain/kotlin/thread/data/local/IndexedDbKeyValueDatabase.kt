@@ -5,12 +5,14 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import thread.data.external.KeyValueStore
 import thread.data.external.KeyValueStoreException
+import thread.domain.account.AccountId
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
  * An IndexedDB database of simple string stores, for connections and saved copies of Jira and GitHub records
- * (adr/ADR-006, ADR-007, ADR-008). Each store holds records `{key, value}` with key path `key`.
+ * (adr/ADR-006, ADR-007, ADR-008), and each account's record of workspace changes on their way to the server
+ * (adr/ADR-009). Each store holds records `{key, value}` with key path `key`.
  *
  * It is separate from the Note drafts database (thread-local and thread-drafts-*), so clearing saved copies can
  * never touch a Note. [strictDurability] makes writes wait until the browser reports them on disk; connections use
@@ -176,6 +178,11 @@ class IndexedDbKeyValueDatabase(
         const val PR_LISTS: String = "prLists"
         const val PULL_REQUESTS: String = "pullRequests"
         val EXTERNAL_CACHE_STORES: List<String> = listOf(JIRA_ISSUES, JIRA_META, PR_LISTS, PULL_REQUESTS)
+
+        /** One account's record of workspace changes on their way to the server (owner-review-queue Q14). */
+        fun workspaceOutboxFor(accountId: AccountId): String = "thread-outbox-${accountId.value}"
+
+        const val WORKSPACE_OUTBOX_STORE: String = "changes"
     }
 }
 

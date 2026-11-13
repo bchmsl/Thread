@@ -167,11 +167,25 @@ data class WorkspaceData(
 )
 
 /**
+ * A change the server refused (owner-review-queue Q14). It stays on this device, also after a reload, until the person
+ * retries or discards it: a failed sync never drops content silently.
+ *
+ * [unconfirmed] marks a change sent before a reload whose answer the reload lost, and that the stored data does not
+ * show: the server refused it, or another device changed the same field since ([unconfirmedChanges]).
+ */
+data class RefusedChange(
+    val id: String,
+    val writes: List<WorkspaceWrite>,
+    val unconfirmed: Boolean = false,
+)
+
+/**
  * Topics, statuses, Tasks, Reminders, Note listings and links, and preferences of one signed-in account
  * (adr/ADR-009-workspace-entities-and-sync.md, adr/ADR-010-tasks-reminders-and-dates.md,
  * adr/ADR-011-notes-in-the-workspace.md). Platform
  * code implements it (Firestore on the web). The store's local copy is this device's only copy and outbox: there is
- * no second queue.
+ * no second queue. The store also remembers each change on this device until the server answers, only so a refusal
+ * is never lost.
  */
 interface WorkspaceStore {
     /** The device's copy. Emits again on every local change and every server change or acknowledgement. */
@@ -183,8 +197,17 @@ interface WorkspaceStore {
      */
     fun write(writes: List<WorkspaceWrite>)
 
-    /** Writes the server refused since this store was made, oldest first. */
-    val refused: StateFlow<List<WorkspaceWrite>>
+    /** Changes the server refused, oldest first. They stay listed, also after a reload, until [retry] or [discard]. */
+    val refused: StateFlow<List<RefusedChange>>
+
+    /** Sends [change] again as a new write. If the server refuses it again, it is listed again. */
+    fun retry(change: RefusedChange)
+
+    /** Forgets [change] on this device, once the person copied it or does not need it. */
+    fun discard(change: RefusedChange)
+
+    /** Lists [change] again: the Undo of [discard]. */
+    fun keep(change: RefusedChange)
 }
 
 /**

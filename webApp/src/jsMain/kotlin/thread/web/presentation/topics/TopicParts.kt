@@ -50,7 +50,7 @@ internal fun TopicHex(
         attr("height", size.px.toString())
         attr("aria-hidden", "true")
         attr("focusable", "false")
-        attr("style", "--hc:var(--topic-${color.id})")
+        style { property("--hc", "var(--topic-${color.id})") }
     }) {
         if (size == HexSize.Md || size == HexSize.Lg) {
             SvgTag("polygon", {
@@ -145,7 +145,7 @@ internal fun TopicTag(
     }
     A(topicPlace(topic).hash, {
         classes("ttag")
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
     }) {
         TopicHex(topic.name, topic.color, HexSize.Xs)
         Span { Text(topic.name) }
@@ -157,7 +157,7 @@ internal fun TopicTag(
 internal fun PlainTopicTag(topic: Topic) {
     Span({
         classes("ttag")
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
     }) {
         TopicHex(topic.name, topic.color, HexSize.Xs)
         Span { Text(topic.name) }
@@ -179,7 +179,7 @@ internal fun TopicProgress(
     }
     Span({
         classes("prog")
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
     }) {
         Span({
             classes("prog__segs")
@@ -188,7 +188,7 @@ internal fun TopicProgress(
             if (progress.total <= PROGRESS_SEGMENTS_MAX) {
                 repeat(progress.total) { index -> I({ if (index < progress.done) classes("on") }) }
             } else {
-                B({ attr("style", "--p:${progress.done.toDouble() / progress.total}") })
+                B({ style { property("--p", "${progress.done.toDouble() / progress.total}") } })
             }
         }
         Span({ classes("prog__txt") }) {
@@ -217,8 +217,13 @@ internal fun categoryHint(category: StatusCategory): String =
         StatusCategory.Done -> "finished"
     }
 
-/** The `--tc` custom property that tints a Topic's row, card or header (v3 T.topicVar). */
-internal fun topicStyle(color: TopicColor): String = "--tc:var(--topic-${color.id})"
+/**
+ * The `--tc` custom property that tints a Topic's row, card or header (v3 T.topicVar). Set through the CSSOM, because
+ * the strict CSP blocks style attributes (adr/ADR-015).
+ */
+internal fun AttrsScope<*>.topicColor(color: TopicColor) {
+    style { property("--tc", "var(--topic-${color.id})") }
+}
 
 internal fun topicPlace(topic: Topic): Place = Place.of("topic", topic.id.value)
 

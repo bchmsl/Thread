@@ -142,7 +142,7 @@ private fun TopicsList(
                             Li {
                                 A(topicPlace(topic).hash, {
                                     classes("trow2")
-                                    attr("style", topicStyle(topic.color))
+                                    topicColor(topic.color)
                                 }) {
                                     TopicHex(topic.name, topic.color, HexSize.Md)
                                     Span({ classes("trow2__name") }) { Text(topic.name) }
@@ -262,7 +262,7 @@ private fun BoardCard(
         if (dragging) classes("is-dragging")
         attr("draggable", "true")
         attr("data-topic", topic.id.value)
-        attr("style", topicStyle(topic.color))
+        topicColor(topic.color)
         onDragStart { event ->
             event.dataTransfer?.effectAllowed = "move"
             event.dataTransfer?.setData("text/plain", topic.id.value)

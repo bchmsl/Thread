@@ -216,3 +216,25 @@ Status: **provisional**. Written in Phase 11 while the owner was away. Details: 
 - A Topic in Trash hides its pull request links; Restore brings them back.
 - Offline or rate limited shows the saved copy with its age and makes no request. Expired access keeps copies readable. Not found forgets the saved copy.
 - Thread sends at most 10 search requests a minute, inside GitHub's 30 for the token.
+
+## Phase 12 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 12 while the owner was away. Details: ADR-015 (Proposed). Checked on the production build against the emulators with SYNTHETIC data only; nothing was checked against real Firebase, Jira or GitHub.
+
+- No change to the Firestore data model or the rules.
+- A change the server refuses is a failed sync and is never dropped (owner-review-queue Q14, ADR-009). The workspace store keeps each change in a device-only IndexedDB record (`thread-outbox-<uid>`, never uploaded) until the server answers. A refused change stays in the sync panel after a reload, with Retry, Copy and Discard (with Undo). A change whose answer was lost in a reload is compared with the stored data after `waitForPendingWrites`, field by field, and listed as "Could not confirm" when the data does not show it.
+- Revoked or expired access (401): saved copies stay readable and the page says "access expired" with Reconnect. The five-minute automatic refresh stops for that provider. Opening another item, pressing Refresh or saving a token loads once; there is no retry loop. Cache policy: copies stay until "Delete saved copies", Disconnect hides them, a 404 forgets one copy.
+- The Jira and Pull requests pages show the banner of the view that has a problem, so a list that got a 401 still says why.
+
+Verification scenarios, as checked on the production build (browser checks of Phases 7 to 12, run again in Phase 12):
+
+| Scenario | Checked by |
+|---|---|
+| Offline create/edit, reload, reconnect, synced | Phase 7 O1 to O6 (Tasks), Phase 8 O1 to O9 (Notes) |
+| Two devices edit one Note | Phase 8 X1 to X18: both versions stay, the other one becomes a Note copy |
+| Repeated retry, no duplicate | Phase 8 O9 and Q6, Phase 7 O6, and the emulator tests (`-Pthread.emulatorTests`) |
+| Deleted object plus stale offline update | Phase 9 D1 to D10 and W1 to W3: tombstones, nothing comes back |
+| Cache refresh fails | Phase 10 O1, A1 to A5, Phase 11 the same for GitHub, Phase 12 J3 (server error keeps the saved ticket), G0 and G1 (rate limit with and without a saved copy) |
+| Revoked external access | Phase 10 A1 and Phase 12 A0 to A5 (no automatic refresh after a 401, Refresh asks once, Jira and GitHub) |
+| Local quota failure | Phase 8 E6: a failed local save says Needs attention, never Saved |
+| Server refuses a change (rules), reload | Phase 12 Q14 R1 to R14 (kept after a reload, Copy, Discard and Undo, Retry) and B1 to B10 (answer lost in a reload), and the emulator tests |
