@@ -1,0 +1,166 @@
+<div id="thread-direction" aria-label="Thread workspace redesign">
+<style>
+#thread-direction{color-scheme:dark;--bg:#141519;--rail:#101115;--panel:#1c1d24;--line:#2f303a;--ink:#f2eff8;--muted:#a9a6b7;--violet:#d2c2ff;--green:#a9dfc2;--peach:#ffcbad;color:var(--ink);font:14px/1.45 system-ui,sans-serif}
+#thread-direction *{box-sizing:border-box}#thread-direction [hidden]{display:none!important}
+#thread-direction h1,#thread-direction h2,#thread-direction h3,#thread-direction p{margin:0}
+#thread-direction .window{display:grid;grid-template-columns:154px minmax(0,1fr);border:1px solid var(--line);border-radius:15px;min-height:600px;overflow:hidden;background:var(--bg)}
+#thread-direction .rail{padding:23px 12px;background:var(--rail);border-right:1px solid var(--line)}
+#thread-direction .wordmark{display:flex;align-items:center;gap:8px;margin:0 7px 22px;font-size:18px;font-weight:700}
+#thread-direction .mark{width:18px;height:18px;border:3px solid var(--violet);border-radius:7px 7px 7px 2px;transform:rotate(-12deg)}
+#thread-direction nav{display:grid;gap:4px}
+#thread-direction button{font:inherit;color:inherit;cursor:pointer;border:0;border-radius:8px;padding:7px 10px;background:#2b2c35}
+#thread-direction button:hover{filter:brightness(1.15)}
+#thread-direction button:focus-visible,#thread-direction select:focus-visible,#thread-direction input:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+#thread-direction nav button{text-align:left;background:transparent;color:var(--muted);display:flex;align-items:center;gap:8px}
+#thread-direction nav button[aria-current]{background:#2a2339;color:var(--violet);box-shadow:inset 2px 0 var(--violet);font-weight:650}
+#thread-direction .nav-symbol{width:17px;text-align:center}
+#thread-direction .screen{min-width:0;padding:25px clamp(15px,3vw,31px)}
+#thread-direction .top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:21px;flex-wrap:wrap}
+#thread-direction h1{font-size:clamp(29px,5vw,40px);letter-spacing:-.055em;line-height:1.03}
+#thread-direction h2{font-size:16px}
+#thread-direction h3{font-size:14px}
+#thread-direction .kicker{color:var(--muted);font-size:12px;margin-bottom:7px}
+#thread-direction .small{color:var(--muted);font-size:12px}
+#thread-direction .today-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:15px;align-items:start}
+#thread-direction .agenda{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px}
+#thread-direction .agenda header,#thread-direction .work-head,#thread-direction .group-title{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+#thread-direction .date{color:var(--violet)}
+#thread-direction .task{display:grid;grid-template-columns:17px minmax(0,1fr) auto;gap:9px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+#thread-direction .task input{accent-color:var(--violet);margin:3px 0}
+#thread-direction .task input:checked+span{opacity:.6;text-decoration:line-through}
+#thread-direction .task small{display:block;margin-top:2px}
+#thread-direction .qr{color:var(--violet)}#thread-direction .bills{color:var(--green)}#thread-direction .warn{color:var(--peach)}
+#thread-direction .today-side{display:grid;gap:12px}
+#thread-direction .reminder{background:#28212e;border-radius:12px;padding:14px}
+#thread-direction .clock{display:block;color:#e1caff;font-size:24px;font-variant-numeric:tabular-nums;font-weight:650}
+#thread-direction .review{background:#181e24;border:1px solid #384450;border-radius:10px;padding:12px}
+#thread-direction .pr-row{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin:8px 0 4px}
+#thread-direction .pr-open{background:#23623a;border-radius:20px;color:#fff;padding:0 6px;font-size:12px}
+#thread-direction .active-strip{margin-top:18px;border-top:1px solid var(--line);padding-top:13px}
+#thread-direction .active-strip p{margin:7px 0;display:flex;gap:8px;align-items:start}
+#thread-direction .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-top:7px;flex:none}
+#thread-direction .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:stretch}
+#thread-direction .lane{background:#191a20;border:1px solid var(--line);border-top:2px solid var(--lane);border-radius:10px;padding:10px;min-height:232px}
+#thread-direction .lane h2{font-size:13px;color:var(--lane);margin-bottom:11px}
+#thread-direction .topic-card{background:#262730;border-radius:7px;padding:9px;border-left:2px solid var(--topic,#a9a6b7);margin-bottom:8px;overflow-wrap:anywhere}
+#thread-direction .topic-card p{margin-top:4px}
+#thread-direction .notebook{display:grid;grid-template-columns:155px minmax(0,1fr);gap:16px}
+#thread-direction .note-index{display:grid;gap:5px;align-content:start}
+#thread-direction .note-index button{text-align:left;background:transparent}
+#thread-direction .note-index button[aria-pressed=true]{background:#342e24;color:#f5d49d}
+#thread-direction .page{background:#24221f;border:1px solid #433c31;border-radius:9px;padding:clamp(15px,4vw,28px);min-height:310px}
+#thread-direction .page h2{font:600 clamp(20px,4vw,30px)/1.15 Georgia,serif;color:#f6e6c9;margin:10px 0}
+#thread-direction .page h3{margin:13px 0 4px}
+#thread-direction .page p{color:#ddd1bd}
+#thread-direction .paper-tools{display:flex;gap:9px;justify-content:space-between;flex-wrap:wrap;border-bottom:1px solid #514637;padding-bottom:8px}
+#thread-direction .queue{max-width:560px;margin:0 auto}
+#thread-direction .inbox-card{background:#262235;border:1px solid #504466;border-radius:16px;padding:clamp(14px,3vw,23px);margin:10px 0}
+#thread-direction .inbox-card h2{font-size:22px;line-height:1.2;margin:7px 0 13px}
+#thread-direction .inbox-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+#thread-direction .primary{background:var(--violet);color:#231942;font-weight:650}
+#thread-direction select{font:inherit;background:#17151f;border:1px solid #55496c;color:var(--ink);border-radius:7px;padding:6px;max-width:100%}
+#thread-direction .queue-next{padding:10px 2px;color:var(--muted);border-top:1px solid var(--line)}
+@media(max-width:780px){#thread-direction .window{grid-template-columns:115px minmax(0,1fr)}#thread-direction .board{grid-template-columns:repeat(2,minmax(0,1fr))}#thread-direction .lane{min-height:120px}}
+@media(max-width:560px){#thread-direction .window{display:block;min-height:0}#thread-direction .rail{border:0;border-bottom:1px solid var(--line);padding:10px}#thread-direction .wordmark{margin:0 0 6px}#thread-direction nav{display:flex;flex-wrap:wrap}#thread-direction .today-grid,#thread-direction .notebook{grid-template-columns:1fr}#thread-direction .note-index{display:flex;flex-wrap:wrap}}
+</style>
+<div class="window">
+<aside class="rail"><div class="wordmark"><span class="mark" aria-hidden="true"></span>Thread</div><nav aria-label="Workspace views">
+<button type="button" data-view="today" aria-current="page"><span class="nav-symbol" aria-hidden="true">◉</span>Today</button>
+<button type="button" data-view="topics"><span class="nav-symbol" aria-hidden="true">▥</span>Topics</button>
+<button type="button" data-view="notes"><span class="nav-symbol" aria-hidden="true">▤</span>Notes</button>
+<button type="button" data-view="inbox"><span class="nav-symbol" aria-hidden="true">↓</span>Inbox</button>
+</nav></aside>
+<main>
+<section class="screen" data-screen="today">
+<header class="top"><div><p class="kicker date">Thursday · November 12</p><h1>Today</h1></div><span class="small" id="td-count" aria-live="polite">2 tasks left</span></header>
+<div class="today-grid">
+<section class="agenda"><header><h2>Your agenda</h2><span class="small">Personal tasks</span></header>
+<label class="task"><input type="checkbox" data-task><span>Confirm backend error codes<small class="qr">QR payments</small></span><span class="small warn">Overdue</span></label>
+<label class="task"><input type="checkbox" data-task><span>Test timeout and retry<small class="qr">QR payments</small></span><span class="small">17:00</span></label>
+</section>
+<div class="today-side">
+<section class="reminder"><h2>Reminder</h2><time class="clock" datetime="16:30">16:30</time><p>Follow up on the API contract</p></section>
+<section class="review"><h2>Review requested</h2><p class="pr-row"><span class="pr-open">Open</span><strong>Handle QR payment timeout</strong><span class="small">#248</span></p><p class="small">android-payments · CI passed</p></section>
+</div>
+</div>
+<section class="active-strip"><h2>Active topics</h2><p><span class="dot qr"></span>QR payments</p><p><span class="dot bills"></span>Bill payment errors</p></section>
+</section>
+<section class="screen" data-screen="topics" hidden>
+<header class="top"><div><p class="kicker">Board</p><h1>Topics</h1></div><span class="small">4 statuses</span></header>
+<div class="board">
+<section class="lane" style="--lane:#a9a6b7"><h2>Planned · 1</h2><article class="topic-card" style="--topic:#a9d5f6"><h3>Payment mapper tests</h3><p class="small">List edge cases</p></article></section>
+<section class="lane" style="--lane:#9bc5ff"><h2>Active · 2</h2><article class="topic-card" style="--topic:#c7b4f5"><h3>QR payments</h3><p class="small">Test timeout handling</p></article><article class="topic-card" style="--topic:#a6e1ca"><h3>Bill payment errors</h3><p class="small">Review the error copy</p></article></section>
+<section class="lane" style="--lane:#f0b573"><h2>Paused · 1</h2><article class="topic-card" style="--topic:#f7c3a6"><h3>Recurring payments API</h3><p class="small">Awaiting the contract</p></article></section>
+<section class="lane" style="--lane:#a1d3ac"><h2>Done · 1</h2><article class="topic-card" style="--topic:#f3b8cf"><h3>Payment receipt</h3></article></section>
+</div>
+</section>
+<section class="screen" data-screen="notes" hidden>
+<header class="top"><h1>Notes</h1></header>
+<div class="notebook">
+<aside class="note-index" aria-label="Notes list"><button type="button" data-note="qr" aria-pressed="true">QR payment decisions</button><button type="button" data-note="pr" aria-pressed="false">PR review checklist</button></aside>
+<div class="page">
+<div class="paper-tools small"><span>Paragraph · <b>B</b> · <i>I</i> · List · Link</span><span>✓ Synced</span></div>
+<article data-paper="qr"><h2>QR payment decisions</h2><p class="small">QR payments · November 12</p><h3>Retry behavior</h3><p>Keep the scanned context after a timeout. Confirm whether retry needs a new request ID.</p><h3>Open question</h3><p>☐ Confirm the behavior with the backend team.</p></article>
+<article data-paper="pr" hidden><h2>PR review checklist</h2><p class="small">Standalone · November 11</p><h3>First pass</h3><p>Follow the changed flow and check the loading and error states.</p></article>
+</div>
+</div>
+</section>
+<section class="screen" data-screen="inbox" hidden>
+<header class="top"><h1>Inbox</h1><span class="small" id="td-inbox-count" aria-live="polite">2 to organize</span></header>
+<div class="queue">
+<section class="inbox-card" id="td-triage"><p class="kicker" id="td-type">Task</p><h2 id="td-item">Check QR timeout copy</h2><label class="small" for="td-topic">Topic</label><br><select id="td-topic"><option value="">Choose a Topic</option><option>QR payments</option><option>Bill payment errors</option></select><div class="inbox-actions"><button class="primary" type="button" id="td-move">Move to Topic</button><button type="button" id="td-keep">Keep standalone</button></div></section>
+<p class="queue-next" id="td-next">Up next · Ideas from the payments sync</p>
+<p class="small" id="td-inbox-message" role="status"></p>
+</div>
+</section>
+</main>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('thread-direction');
+  const pick = id => root.querySelector('#td-' + id);
+  const nav = Array.from(root.querySelectorAll('[data-view]'));
+  nav.forEach(button => button.addEventListener('click', () => {
+    nav.forEach(link => link.removeAttribute('aria-current'));
+    button.setAttribute('aria-current', 'page');
+    root.querySelectorAll('[data-screen]').forEach(screen => {
+      screen.hidden = screen.dataset.screen !== button.dataset.view;
+    });
+  }));
+  const tasks = Array.from(root.querySelectorAll('[data-task]'));
+  tasks.forEach(task => task.addEventListener('change', () => {
+    const count = tasks.filter(item => !item.checked).length;
+    pick('count').textContent = count + (count === 1 ? ' task left' : ' tasks left');
+  }));
+  const notes = Array.from(root.querySelectorAll('[data-note]'));
+  notes.forEach(button => button.addEventListener('click', () => {
+    notes.forEach(note => note.setAttribute('aria-pressed', String(note === button)));
+    root.querySelectorAll('[data-paper]').forEach(paper => {
+      paper.hidden = paper.dataset.paper !== button.dataset.note;
+    });
+  }));
+  const inbox = [
+    {type: 'Task', title: 'Check QR timeout copy'},
+    {type: 'Note', title: 'Ideas from the payments sync'}
+  ];
+  function triage(topic) {
+    const current = inbox.shift();
+    if (!current) return;
+    pick('inbox-message').textContent = topic ? 'Moved to ' + topic + '.' : 'Kept standalone.';
+    pick('inbox-count').textContent = inbox.length + ' to organize';
+    pick('triage').hidden = !inbox.length;
+    pick('next').textContent = inbox[1] ? 'Up next · ' + inbox[1].title : inbox.length ? '' : 'Inbox is clear.';
+    if (!inbox.length) return;
+    pick('type').textContent = inbox[0].type;
+    pick('item').textContent = inbox[0].title;
+    pick('topic').value = '';
+  }
+  pick('move').addEventListener('click', () => {
+    const topic = pick('topic').value;
+    if (topic) triage(topic);
+    else { pick('inbox-message').textContent = 'Choose a Topic.'; pick('topic').focus(); }
+  });
+  pick('keep').addEventListener('click', () => triage(''));
+})();
+</script>
+</div>

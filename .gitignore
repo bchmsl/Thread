@@ -1,0 +1,30 @@
+# Build output and tools. No trailing slash, so the symlinks that keep build
+# output out of iCloud Drive are ignored too (adr/ADR-001-build-baseline.md).
+build
+.gradle
+.kotlin
+node_modules/
+
+# Local configuration and secrets. Never commit these.
+local.properties
+.env
+.env.*
+!.env.example
+
+# Firebase CLI and emulator logs
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log
+ui-debug.log
+
+# IDE and OS files
+.idea/
+*.iml
+.vscode/
+.claude/settings.local.json
+.DS_Store
+
+# Design handoff archives in the root. Their unpacked folders under design/ are tracked.
+/*.zip

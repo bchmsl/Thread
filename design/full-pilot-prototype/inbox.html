@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thread · pilot prototype</title>
+<style>
+:root{color-scheme:dark;--bg:#131419;--rail:#101116;--panel:#1c1e26;--line:#333542;--text:#f4f0fb;--muted:#adaabf;--violet:#d0bfff;--mint:#a9dfc2;--peach:#ffcbad;--blue:#a9d5f6;--rose:#f3b8cf;font:15px/1.5 system-ui,sans-serif;color:var(--text);background:var(--bg)}
+*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit;color:inherit}button,a,input,select{touch-action:manipulation}button{cursor:pointer;background:#292b36;border:1px solid transparent;border-radius:9px;padding:7px 11px}button:hover{background:#37394a}button:disabled{opacity:.45;cursor:default}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[contenteditable]:focus-visible,summary:focus-visible{outline:2px solid var(--violet);outline-offset:3px}a{color:var(--violet)}h1,h2,h3,p{margin:0}h1{font-size:clamp(29px,5vw,43px);line-height:1.05;letter-spacing:-.052em}h2{font-size:17px}h3{font-size:15px}small,.small{font-size:12px;color:var(--muted)}[hidden]{display:none!important}
+.shell{display:grid;grid-template-columns:172px minmax(0,1fr);min-height:100dvh}.rail{background:var(--rail);border-right:1px solid var(--line);padding:20px 11px;display:flex;flex-direction:column;gap:16px}.brand{font-size:21px;font-weight:750;padding:0 9px}.brand b{color:var(--violet);margin-right:5px}.rail nav{display:grid;gap:4px}.rail nav button{background:transparent;text-align:left;color:var(--muted);display:flex;gap:9px;align-items:center}.rail nav button[aria-current]{color:var(--violet);background:#2c2540;box-shadow:inset 2px 0 var(--violet)}.icon{display:inline-grid;place-items:center;width:19px;height:19px;flex:none;font-family:system-ui,sans-serif;font-weight:700}.rail .lower{margin-top:auto}.toolbar{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px clamp(14px,3vw,30px);border-bottom:1px solid var(--line);min-height:55px}.toolbar .actions,.row,.between,.chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.between{justify-content:space-between}.main{max-width:1160px;margin:auto;padding:25px clamp(14px,3vw,32px) 42px;min-width:0}.primary{background:var(--violet);color:#251841;font-weight:720}.primary:hover{background:#e0d3ff}.quiet{background:transparent;color:var(--muted)}.danger{color:#ffb3b7}.head{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:22px}.kicker{color:var(--muted);font-size:12px;margin-bottom:5px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px;min-width:0}.stack{display:grid;gap:13px}.today{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);align-items:start;gap:14px}.agenda h3{color:var(--muted);font-size:12px;margin-top:13px}.task{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}.task:last-child{border:0}.task input{accent-color:var(--violet);margin:6px 0 0}.task button,.text-button{background:none;padding:0;text-align:left;border:0;font-weight:650}.task button:hover,.text-button:hover{color:var(--violet);background:transparent}.done{text-decoration:line-through;opacity:.63}.chip{display:inline-block;background:#303240;border-radius:6px;padding:2px 7px;font-size:12px}.chip.topic{color:var(--topic);background:color-mix(in srgb,var(--topic) 13%,var(--panel))}.reminder{background:#2b2235}.clock{font-size:25px;color:var(--violet);font-weight:750}.pr{background:#161c24;border:1px solid #394658;border-radius:9px;padding:10px;margin-top:8px}.pr-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:7px;align-items:start}.open{background:#27663d;color:white;border-radius:14px;padding:1px 7px;font-size:12px}.active-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.active-list button{border-left:2px solid var(--topic);text-align:left}.active-list small{display:block}.board{display:flex;gap:10px;overflow-x:auto;padding-bottom:10px}.lane{flex:1 0 150px;background:#1a1b22;border-top:2px solid var(--status);border-radius:10px;padding:10px;min-height:220px}.lane h2{color:var(--status);margin-bottom:8px;font-size:13px}.topic-card{padding:9px;background:#292b35;border-left:3px solid var(--topic);border-radius:7px;margin-bottom:8px}.topic-card select{margin-top:7px}.list-row{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(80px,.7fr) minmax(0,1fr) auto;gap:8px;padding:11px 0;border-bottom:1px solid var(--line);align-items:center}.details{max-width:800px}.details details{border-bottom:1px solid var(--line);padding:11px 0}.details summary{cursor:pointer;font-weight:650}.details details>div{padding:9px 0}.notebook{display:grid;grid-template-columns:178px minmax(0,1fr);gap:14px}.index{display:grid;gap:5px;align-content:start}.index button{text-align:left}.index .selected{background:#3a3028;color:#f3d7a4}.paper{background:#26231f;border:1px solid #4d4234;border-radius:10px;padding:clamp(14px,3vw,25px);min-width:0}.paper input.title{background:transparent;border:0;font:700 27px Georgia,serif;color:#f6e6c9;padding:3px 0;width:100%}.format{margin:9px 0;display:flex;gap:4px;flex-wrap:wrap}.format button{padding:4px 7px;background:#3a3028}.editable{min-height:145px;color:#eee1ce;padding:9px 0;overflow-wrap:anywhere}.editable p{margin:0 0 8px}.inbox{display:grid;grid-template-columns:minmax(145px,.8fr) minmax(0,1.2fr);gap:14px;align-items:start}.triage{background:#2c253c;border-color:#514465}.triage h2{font-size:23px;line-height:1.12}.ticket{border-left:2px solid var(--blue);padding:8px 10px;background:#1b2532;border-radius:7px;margin-top:7px}.ticket b{color:var(--blue);margin-right:7px}.banner{background:#352b3c;border:1px solid #594760;border-radius:9px;padding:10px;margin:9px 0;color:#f5d9ee}.form{display:grid;gap:9px}.form label{display:grid;gap:3px}.form label.inline{display:flex;align-items:center;gap:6px}.form input:not([type=checkbox]),.form select,.form textarea,select,input[type=search]{background:#15161d;border:1px solid #414454;border-radius:7px;padding:6px 8px;min-width:0;max-width:100%}.form select[multiple]{min-height:85px}.pane-layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(260px,1fr);gap:13px;align-items:start}.pane{background:#1d2129;border:1px solid #404653;border-radius:12px;padding:14px;min-width:0}.pane p{margin:7px 0}.tabs{display:flex;gap:5px;flex-wrap:wrap}.tabs .selected{background:#42345d;color:var(--violet)}.welcome{max-width:545px;margin:clamp(15px,8vw,70px) auto;text-align:center;padding:30px;background:linear-gradient(145deg,#2c223b,#191b24 75%);border:1px solid #4d3d61;border-radius:18px}.welcome h1,.welcome p{margin:9px 0 16px}.empty{padding:20px;color:var(--muted);border:1px dashed var(--line);border-radius:10px}.status-list{display:grid;gap:7px}.status-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:5px;align-items:center}.status-row .label{font-size:12px}.toast{position:fixed;bottom:12px;right:12px;max-width:calc(100% - 24px);background:#303443;color:#f6f2ff;border:1px solid #555b71;padding:9px 13px;border-radius:9px;z-index:3}
+dialog{color:var(--text);background:#1d1f29;border:1px solid #494c62;border-radius:13px;padding:16px;width:min(94vw,530px);max-height:85dvh;overflow:auto}dialog::backdrop{background:#0009}dialog header{margin-bottom:11px}.search-results{display:grid;gap:5px;margin-top:9px}.search-results button{text-align:left}.search-results h3{margin-top:5px;color:var(--muted)}.focus-readout{font:700 34px/1.2 system-ui;color:var(--violet);font-variant-numeric:tabular-nums}
+@media(max-width:900px){.shell{grid-template-columns:132px minmax(0,1fr)}.pane-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.context-pane .context-underlay{display:none}.shell{display:block}.rail{padding:8px 10px;gap:4px;border-bottom:1px solid var(--line)}.rail nav{display:flex;flex-wrap:wrap}.rail nav button{padding:5px}.rail .lower{margin-top:0}.brand{font-size:17px}.today,.notebook,.inbox{grid-template-columns:minmax(0,1fr)}.index{display:flex;flex-wrap:wrap}.list-row{grid-template-columns:minmax(0,1fr) auto}.list-row .next{grid-column:1}.toolbar{flex-wrap:wrap}.main{padding-top:17px}.status-row{grid-template-columns:minmax(0,1fr) auto auto}.status-row .label{grid-column:1/-1}}
+</style></head>
+<body data-start="inbox">
+<div class="shell">
+<aside class="rail"><div class="brand"><b aria-hidden="true">◆</b>Thread</div><nav id="nav" aria-label="Workspace"></nav>
+<div class="lower"><button id="focus-trigger" data-action="focus"><span class="icon" aria-hidden="true">◷</span> Focus</button></div></aside>
+<div><header class="toolbar"><span class="small" id="location">Workspace / Today</span><div class="actions"><button data-action="search" aria-keyshortcuts="Meta+K Control+K">⌕ Search <small>⌘K</small></button><button class="primary" data-action="capture">＋ New</button></div></header>
+<main class="main" id="view"><header class="head"><div><p class="kicker">Thread · Demo workspace</p><h1>Today</h1></div></header><p class="small">Opening the prototype…</p></main></div>
+</div>
+<dialog id="modal"><header class="between"><h2 id="modal-title"></h2><button data-action="close" aria-label="Close">×</button></header><div id="modal-body"></div></dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<script>
+(() => {
+  const byId = id => document.getElementById(id);
+  const view = byId('view');
+  const modal = byId('modal');
+  const modalBody = byId('modal-body');
+  const date = '2026-11-12';
+  const categories = {Planned:'#adaabf', Active:'#9bc5ff', Paused:'#f0b573', Done:'#a1d3ac'};
+  const palette = ['#d0bfff','#a9dfc2','#ffcbad','#a9d5f6','#f3b8cf'];
+  const pages = {
+    today:['◉','Today'], topics:['▥','Topics'], notes:['▤','Notes'], inbox:['↓','Inbox'],
+    jira:['◇','Jira'], prs:['⑂','Pull requests'], settings:['⚙','Settings'], trash:['▱','Trash'], welcome:['↪','Sign-in']
+  };
+  const seed = {
+    statuses: Object.keys(categories).map(name => ({id:name, name, category:name})),
+    topics: [
+      {id:'qr',title:'QR payments',status:'Active',color:0,next:'Test timeout handling',goal:'Recover cleanly when a QR payment times out.'},
+      {id:'bills',title:'Bill payment errors',status:'Active',color:1,next:'Review error copy',goal:'Give customers a clear next action.'},
+      {id:'api',title:'Recurring payments API',status:'Paused',color:2,next:'Wait for the API contract',goal:'Confirm response fields.'},
+      {id:'mapper',title:'Payment mapper tests',status:'Planned',color:3,next:'List edge cases',goal:'Cover unusual API responses.'},
+      {id:'receipt',title:'Payment receipt',status:'Done',color:4,next:'',goal:'Finish receipt copy.'}
+    ],
+    tasks:[
+      {id:'t1',title:'Confirm backend error codes',topic:'qr',day:'',deadline:'2026-11-11T17:00'},
+      {id:'t2',title:'Test timeout and retry',topic:'qr',day:date,deadline:'2026-11-12T17:00'},
+      {id:'t3',title:'Review payment error copy',topic:'bills',day:date,deadline:''},
+      {id:'t4',title:'Check camera permission fallback',topic:'qr',day:'2026-11-11',deadline:''},
+      {id:'t5',title:'Check QR timeout copy',topic:'',day:'',deadline:'',inbox:true}
+    ],
+    notes:[
+      {id:'n1',title:'QR payment decisions',topics:['qr','bills'],body:'<p>Keep the scanned context after a timeout.</p><h3>Open question</h3><p>Does retry need a new request ID?</p>'},
+      {id:'n2',title:'PR review checklist',topics:[],body:'<p>Follow the changed flow.</p><ul><li>Check error and loading states.</li><li>Look for a regression test.</li></ul>'},
+      {id:'n3',title:'Ideas from the payments sync',topics:[],body:'<p>Compare recovery messages across flows.</p>',inbox:true}
+    ],
+    reminders:[{id:'r1',kind:'topic',target:'api',title:'Follow up on the API contract',when:'2026-11-12T16:30'}],
+    jira:[
+      {id:'PAY-142',title:'Handle QR payment response',status:'In progress',author:'Bachana',priority:'Medium',assigned:true,topics:['qr'],description:'Map approved, pending and recoverable error responses.',comments:['Keep scanned context after a timeout.'],related:'PAY-138'},
+      {id:'PAY-138',title:'Add QR scanner permissions',status:'Done',author:'Nino',priority:'Low',assigned:false,topics:[],description:'Handle denied camera permissions with a clear settings action.',comments:[],related:'PAY-142'}
+    ],
+    prs:[
+      {id:'248',title:'Handle QR payment timeout',status:'Open',author:'Alex',repo:'android-payments',ci:'CI passed',review:'Review requested',mine:false,topics:['qr'],description:'Add a recoverable retry path after network timeout.',comments:['Please check that retry preserves scan context.']},
+      {id:'251',title:'Map bill payment error messages',status:'Open',author:'Bachana',repo:'android-payments',ci:'CI pending',review:'Awaiting review',mine:true,topics:['bills'],description:'Use specific messages for known response codes.',comments:[]}
+    ],
+    trash:[{id:'old-note',kind:'note',title:'Old QR meeting notes',topics:['qr'],body:'<p>Notes from the first planning meeting.</p>'}],
+    connections:{jira:true,prs:true}, history:[], mode:'board'
+  };
+  let db;
+  try { db = JSON.parse(localStorage.getItem('thread-pilot-v1')) || seed; } catch { db = seed; }
+  let route = '';
+  let externalMode = 'ready';
+  let noteMode = 'synced';
+  let compare = false;
+  let prFilter = 'review';
+  let jiraQuery = '';
+  let focus = {seconds:1500,running:false,target:''};
+  let toastTimer;
+  const safe = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+  const uid = () => String(Date.now()) + Math.random().toString(36).slice(2,7);
+  const list = kind => ({task:db.tasks,note:db.notes,topic:db.topics,jira:db.jira,prs:db.prs})[kind] || [];
+  const item = (kind,id) => list(kind).find(entry => entry.id === id);
+  const status = id => db.statuses.find(entry => entry.id === id) || db.statuses[0];
+  const tone = topic => palette[topic?.color] || palette[0];
+  const goButton = (label, to, css='text-button') => `<button class="${css}" data-go="${safe(to)}">${label}</button>`;
+  const action = (label, name, extra='', css='') => `<button class="${css}" data-action="${name}" ${extra}>${label}</button>`;
+  const head = (title,kicker='',right='') => `<header class="head"><div>${kicker ? '<p class="kicker">'+safe(kicker)+'</p>' : ''}<h1>${safe(title)}</h1></div>${right}</header>`;
+  const empty = text => '<div class="empty">'+safe(text)+'</div>';
+  const options = (entries,selected='',label='') => (label ? `<option value="">${safe(label)}</option>` : '') + entries.map(entry => `<option value="${safe(entry.id)}"${(Array.isArray(selected) ? selected.includes(entry.id) : selected===entry.id) ? ' selected' : ''}>${safe(entry.title ?? entry.name)}</option>`).join('');
+  function save() {
+    try { localStorage.setItem('thread-pilot-v1',JSON.stringify(db)); return true; }
+    catch { notify('Demo storage unavailable. Changes are held in this tab.'); return false; }
+  }
+  function notify(message) {
+    byId('toast').textContent = message;
+    byId('toast').hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { byId('toast').hidden = true; },2500);
+  }
+  function chip(id) {
+    const topic = item('topic',id);
+    return topic ? `<span class="chip topic" style="--topic:${tone(topic)}">${safe(topic.title)}</span>` : '';
+  }
+  const kindPage = kind => ({task:'task',note:'notes',topic:'topic',jira:'jira',prs:'prs'})[kind];
+  function taskRow(task) {
+    return `<div class="task"><input type="checkbox" aria-label="Complete ${safe(task.title)}" data-complete="${task.id}" ${task.done?'checked':''}><div>${goButton(safe(task.title),'task/'+task.id,task.done?'text-button done':'text-button')}<div>${chip(task.topic)}</div></div><small>${task.deadline?safe(task.deadline.slice(5).replace('T',' · ')):''}</small></div>`;
+  }
+  function prRow(pr, topicId='') {
+    return `<article class="pr"><div class="pr-heading"><span class="open">${safe(pr.status)}</span>${goButton(safe(pr.title),'prs/'+pr.id+(topicId?'/'+topicId:''))}<small>#${safe(pr.id)}</small></div><small>${safe(pr.repo)} · ${safe(pr.author)} · ${safe(pr.ci)} · ${safe(pr.review)}</small></article>`;
+  }
+  function jiraRow(issue, topicId='') {
+    return `<article class="ticket"><b>${safe(issue.id)}</b>${goButton(safe(issue.title),'jira/'+issue.id+(topicId?'/'+topicId:''))}<div class="small">${safe(issue.status)} · ${safe(issue.author)}</div></article>`;
+  }
+  function today() {
+    const overdue = task => task.deadline && task.deadline.slice(0,10) < date && !task.done;
+    const groups = [
+      ['Overdue', db.tasks.filter(overdue)],
+      ['Planned today', db.tasks.filter(task=>task.day===date && !overdue(task))],
+      ['Earlier planned', db.tasks.filter(task=>task.day && task.day<date && !task.done && !overdue(task))]
+    ];
+    const active = db.topics.filter(topic=>status(topic.status).category==='Active');
+    const due = db.reminders.filter(reminder=>reminder.when.slice(0,10)===date);
+    return head('Today','Thursday · November 12',action('＋ Add task','capture','data-kind="Task"','primary'))+
+      `<div class="today"><section class="card agenda"><h2>Your agenda</h2>${groups.some(([,tasks])=>tasks.length)?groups.map(([name,tasks])=>tasks.length?`<h3>${name}</h3>${tasks.map(taskRow).join('')}`:'').join(''):empty('No tasks planned for today.')}</section><div class="stack"><section class="card reminder"><h2>Reminders</h2>${due.length?due.map(r=>`<article><div class="clock">${safe(r.when.slice(11))}</div><p>${safe(r.title)}</p>${goButton('Open item',kindPage(r.kind)+'/'+r.target)}</article>`).join(''):empty('No reminders today.')}</section><section class="card"><h2>Review requested</h2>${db.prs.filter(pr=>!pr.mine).map(pr=>prRow(pr)).join('')||empty('No reviews requested.')}</section></div></div>
+      <section style="margin-top:20px"><h2>Active topics</h2><div class="active-list">${active.map(t=>`<button data-go="topic/${t.id}" style="--topic:${tone(t)}">${safe(t.title)}<small>${safe(t.next)}</small></button>`).join('')||'<small>No active Topics.</small>'}</div></section>`;
+  }
+  function topics() {
+    const toggle = `<div class="tabs">${['list','board'].map(mode=>action(mode==='list'?'☷ List':'▥ Board','topic-mode',`data-mode="${mode}" aria-pressed="${db.mode===mode}"`,db.mode===mode?'selected':'')).join('')}${action('＋ Topic','capture','data-kind="Topic"','primary')}</div>`;
+    const board = `<div class="board">${db.statuses.map(s=>`<section class="lane" style="--status:${categories[s.category]}" data-lane="${safe(s.id)}"><h2>${safe(s.name)}</h2>${db.topics.filter(t=>t.status===s.id).map(t=>`<article class="topic-card" draggable="true" data-drag="${t.id}" style="--topic:${tone(t)}">${goButton(safe(t.title),'topic/'+t.id)}<p class="small">${safe(t.next)}</p><select data-topic-status="${t.id}" aria-label="Move ${safe(t.title)}">${options(db.statuses,t.status)}</select></article>`).join('')}</section>`).join('')}</div>`;
+    const table = db.topics.map(t=>{
+      const tasks=db.tasks.filter(task=>task.topic===t.id);
+      return `<div class="list-row">${goButton('● '+safe(t.title),'topic/'+t.id)}<span class="chip" style="color:${categories[status(t.status).category]}">${safe(status(t.status).name)}</span><span class="small next">${safe(t.next)}</span><small>${tasks.filter(task=>task.done).length}/${tasks.length} tasks</small></div>`;
+    }).join('');
+    return head('Topics','Workspace',toggle)+(db.mode==='board'?board:table||empty('Create your first Topic.'));
+  }
+  const detailGroup = (name,content) => `<details open><summary>${name}</summary><div>${content||'<small>None linked.</small>'}</div></details>`;
+  function topicDetail(t) {
+    if(!t) return empty('Topic unavailable.');
+    return head(t.title,'Topics',`<div class="row"><select data-topic-status="${t.id}" aria-label="Topic status">${options(db.statuses,t.status)}</select>${action('＋ Add','capture',`data-id="${t.id}"`,'primary')}</div>`)+
+      `<div class="details stack"><section class="card" style="border-left:3px solid ${tone(t)}"><p>${safe(t.goal)}</p><p class="small">Next step · ${safe(t.next||'None set')}</p></section><div>
+      ${detailGroup('Tasks',db.tasks.filter(task=>task.topic===t.id).map(taskRow).join(''))}
+      ${detailGroup('Notes',db.notes.filter(n=>n.topics.includes(t.id)).map(n=>`<div class="ticket">${goButton('▤ '+safe(n.title),'notes/'+n.id)}</div>`).join(''))}
+      ${detailGroup('Jira',db.jira.filter(issue=>issue.topics.includes(t.id)).map(issue=>jiraRow(issue,t.id)).join(''))}
+      ${detailGroup('Pull requests',db.prs.filter(pr=>pr.topics.includes(t.id)).map(pr=>prRow(pr,t.id)).join(''))}
+      ${detailGroup('Reminders',db.reminders.filter(r=>r.kind==='topic'&&r.target===t.id).map(r=>`<p>${safe(r.title)} · ${safe(r.when.replace('T',' '))}</p>`).join(''))}</div>
+      <div class="row">${action('Link existing','link-existing',`data-id="${t.id}"`)}${action('＋ Reminder','reminder',`data-kind="topic" data-id="${t.id}"`)}</div></div>`;
+  }
+  const noteStates = {synced:'✓ Synced',saving:'Saving locally…',offline:'Saved locally · Offline',syncing:'Syncing…',error:'Sync failed',local:'Local save failed',conflict:'Conflict · both versions available'};
+  function notes(id) {
+    const n = item('note',id) || db.notes[0];
+    const selector = `<select id="note-state" aria-label="Simulated save state">${Object.entries(noteStates).map(([k,label])=>`<option value="${k}" ${k===noteMode?'selected':''}>${label}</option>`).join('')}</select>`;
+    const banners = {
+      offline:'The demo draft is available on this device.',
+      error:'Local draft retained. Remote sync failed.',
+      local:'Simulated storage failure. Copy your current text before closing.',
+      conflict:'This note has a local draft and a version from another device.'
+    };
+    const conflict = noteMode==='conflict' ? action(compare?'Hide comparison':'Compare versions','compare')+(compare?`<div class="today"><section class="card"><h3>Local draft</h3>${n.body}</section><section class="card"><h3>Other device</h3><p>${safe(n.other||'Check the payment status before offering retry.')}</p></section></div><div class="row">${action('Keep local','resolve','data-choice="local" data-id="'+n.id+'"')}${action('Use other version','resolve','data-choice="other" data-id="'+n.id+'"')}</div>`:'') : '';
+    const editor = n ? `<section class="paper"><div class="between"><small>Demo save state</small>${selector}</div>${banners[noteMode]?'<div class="banner">'+banners[noteMode]+conflict+'</div>':''}
+      <input class="title" id="note-title" aria-label="Note title" value="${safe(n.title)}" data-note="${n.id}">
+      <div class="chips">${n.topics.map(chip).join('')}${action('Edit Topics','note-topics','data-id="'+n.id+'"','quiet')}</div>
+      <div class="format">${[['formatBlock','H2','Heading'],['bold','','Bold'],['italic','','Italic'],['insertUnorderedList','','List'],['checklist','','Checklist'],['link','','Link']].map(([cmd,value,label])=>action(label,'format',`data-command="${cmd}" data-value="${value}"`)).join('')}</div>
+      <div class="editable" id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Note text" data-note="${n.id}">${n.body}</div>
+      <div class="row">${action('＋ Reminder','reminder','data-kind="note" data-id="'+n.id+'"')}${action('Move to Trash','trash-note','data-id="'+n.id+'"','danger')}</div></section>` : empty('No notes. Create one to get started.');
+    return head('Notes','Notebook',action('＋ New note','capture','data-kind="Note"','primary'))+`<div class="notebook"><aside class="index" aria-label="Notes">${db.notes.map(entry=>goButton(safe(entry.title),'notes/'+entry.id,entry===n?'selected':'')).join('')}</aside>${editor}</div>`;
+  }
+  function inbox(id) {
+    const entries = [...db.tasks.filter(t=>t.inbox).map(t=>({...t,kind:'task'})),...db.notes.filter(n=>n.inbox).map(n=>({...n,kind:'note'}))];
+    const current = entries.find(e=>e.id===id) || entries[0];
+    return head('Inbox',entries.length+' to organize',action('＋ Quick capture','capture','','primary'))+(current?`<div class="inbox"><aside class="index">${entries.map(e=>goButton(`<small>${e.kind==='task'?'☑ Task':'▤ Note'}</small><br>${safe(e.title)}`,'inbox/'+e.id,e.id===current.id?'selected':'')).join('')}</aside><section class="card triage"><p class="kicker">${current.kind==='task'?'Task':'Note'}</p><h2>${safe(current.title)}</h2><form class="form" data-form="triage"><input type="hidden" name="kind" value="${current.kind}"><input type="hidden" name="id" value="${current.id}"><label>Topic<select name="topic">${options(db.topics,'','Keep standalone')}</select></label><div class="row"><button class="primary" type="submit">Finish triage</button>${goButton('Open details',kindPage(current.kind)+'/'+current.id,'quiet')}</div></form></section></div>`:empty('Inbox is clear.'));
+  }
+  function task(t) {
+    if(!t) return empty('Task unavailable.');
+    const reminder = db.reminders.find(r=>r.kind==='task'&&r.target===t.id);
+    return head(t.title,'Task details')+`<section class="card details"><form class="form" data-form="task"><input type="hidden" name="id" value="${t.id}"><label class="inline"><input type="checkbox" name="done" ${t.done?'checked':''}> Completed</label><label>Topic<select name="topic">${options(db.topics,t.topic,'Standalone')}</select></label><label>Planned day<input type="date" name="day" value="${safe(t.day)}"></label><label>Deadline<input type="datetime-local" name="deadline" value="${safe(t.deadline)}"></label><label>Reminder<input type="datetime-local" name="reminder" value="${safe(reminder?.when)}"></label><div class="row"><button class="primary" type="submit">Save task</button>${t.topic?goButton('Open Topic','topic/'+t.topic,'quiet'):''}</div></form></section>`;
+  }
+  const externalStates = {ready:'Cached · refreshed just now',refresh:'Cached · refreshing…',offline:'Offline · showing last cached details',empty:'Offline · no cached details',expired:'Access expired · reconnect in Settings',limit:'Rate limited · try again later'};
+  function external(kind,id,topicId) {
+    const isPr=kind==='prs';
+    const label=isPr?'Pull requests':'Jira';
+    const connected=db.connections[kind];
+    const stateMenu=`<select id="external-state" aria-label="Simulated connection state">${Object.entries(externalStates).map(([k,v])=>`<option value="${k}" ${k===externalMode?'selected':''}>${safe(v)}</option>`).join('')}</select>`;
+    const results=isPr?db.prs.filter(p=>p.mine===(prFilter==='mine')):db.jira.filter(issue=>jiraQuery?(issue.id+' '+issue.title).toLowerCase().includes(jiraQuery.toLowerCase()):issue.assigned);
+    const controls=isPr?`<div class="tabs">${action('Review requested','pr-filter','data-mode="review"',prFilter==='review'?'selected':'')}${action('My PRs','pr-filter','data-mode="mine"',prFilter==='mine'?'selected':'')}</div>`:`<form class="row" data-form="jira-search"><input type="search" name="q" aria-label="Find Jira issues" placeholder="Search Jira" value="${safe(jiraQuery)}"><button type="submit">Search</button></form>`;
+    const e=item(kind,id);
+    const context=item('topic',topicId);
+    if(!connected) return head(label,'Integrations')+empty('Disconnected. Configure the demo connection in Settings.')+goButton('Open Settings','settings','quiet');
+    const listMarkup=externalMode==='empty'?empty('No downloaded items.'):`<section>${controls}${results.map(entry=>isPr?prRow(entry):jiraRow(entry)).join('')||empty('No matching items.')}</section>`;
+    const details=e && externalMode!=='empty'?`<article class="pane"><header class="between"><small>${isPr?'PR #':'Issue '}${safe(e.id)}</small>${goButton('Close',context?'topic/'+context.id:kind,'quiet')}</header><h2>${safe(e.title)}</h2><p><span class="${isPr?'open':'chip'}">${safe(e.status)}</span> <small>${safe(e.author)} · ${safe(isPr?e.repo:e.priority)}</small></p>${isPr?`<p class="small">${safe(e.ci)} · ${safe(e.review)}</p>`:''}<p>${safe(e.description)}</p><h3>Comments</h3>${e.comments.map(c=>'<p class="small">'+safe(c)+'</p>').join('')||'<small>No comments.</small>'}${e.related?`<p>Related · ${goButton(safe(e.related),'jira/'+e.related)}</p>`:''}<div class="chips">${e.topics.map(chip).join('')}</div><div class="row">${action('Link Topic','external-link',`data-kind="${kind}" data-id="${e.id}"`)}${action(isPr?'Open in GitHub ↗':'Open in Jira ↗','source','','quiet')}</div></article>`:'';
+    if(context && details) return head(label,'Linked to '+context.title,stateMenu)+
+      `<div class="pane-layout context-pane"><div class="context-underlay">${topicDetail(context)}</div><div>${goButton('‹ Back to '+safe(context.title),'topic/'+context.id,'quiet')}${details}</div></div>`;
+    return head(label,isPr?'Code review':'Work tracker',stateMenu)+`<p class="kicker">Simulated · ${safe(externalStates[externalMode])}</p><div class="${details?'pane-layout':''}">${listMarkup}${details}</div>`;
+  }
+  function settings() {
+    const statuses=db.statuses.map((s,index)=>`<div class="status-row"><strong>${safe(s.name)}</strong><span class="label" style="color:${categories[s.category]}">${safe(s.category)}</span><div class="row">${action('↑','reorder',`data-id="${s.id}" data-dir="-1" aria-label="Move ${safe(s.name)} up" ${!index?'disabled':''}`)}${action('↓','reorder',`data-id="${s.id}" data-dir="1" aria-label="Move ${safe(s.name)} down" ${index===db.statuses.length-1?'disabled':''}`)}</div><div class="row">${action('Edit','status-editor',`data-id="${s.id}"`)}${action('Delete','status-delete',`data-id="${s.id}"`,'danger')}</div></div>`).join('');
+    return head('Settings','Workspace')+`<div class="stack details"><section class="card"><h2>Connections</h2>${['jira','prs'].map(k=>`<div class="between"><p>${k==='jira'?'Jira':'GitHub'} · <small>${db.connections[k]?'Connected (demo)':'Disconnected'}</small></p>${action(db.connections[k]?'Disconnect':'Connect demo','connection',`data-kind="${k}"`)}</div>`).join('')}</section><section class="card"><h2>Appearance</h2><p class="small">Dark · Comfortable</p></section><section class="card"><div class="between"><h2>Topic statuses</h2>${action('＋ Add status','status-editor')}</div><div class="status-list">${statuses}</div></section><div class="row">${goButton('Trash','trash','quiet')}${goButton('Demo sign-in','welcome','quiet')}${action('Reset sample data','reset','','danger')}</div></div>`;
+  }
+  function trash() {
+    return head('Trash','Recovery')+(db.trash.length?`<section class="card details">${db.trash.map(e=>`<div class="between"><p>▤ ${safe(e.title)}</p>${action('Restore','restore',`data-id="${e.id}"`)}</div>`).join('')}</section>`:empty('Trash is empty.'));
+  }
+  function welcome() {
+    return `<section class="welcome"><p class="kicker">◆ Thread</p><h1>Your work, in context</h1><p>Pick up a Topic, capture a task and keep the decisions close.</p>${goButton('Enter demo workspace','today','primary')} <p class="small">Sample data · No account needed</p></section>`;
+  }
+  function render() {
+    const [page,id,context]=route.split('/');
+    const navKey=page==='task'?'today':page==='topic'?'topics':page;
+    byId('nav').innerHTML=Object.entries(pages).filter(([key])=>key!=='welcome').map(([key,[icon,label]])=>`<button data-go="${key}" ${key===navKey?'aria-current="page"':''}><span class="icon" aria-hidden="true">${icon}</span>${label}</button>`).join('');
+    byId('location').textContent='Demo workspace / '+(pages[navKey]?.[1]||'Today');
+    const screens={today,topics,topic:()=>topicDetail(item('topic',id)),notes:()=>notes(id),inbox:()=>inbox(id),task:()=>task(item('task',id)),jira:()=>external('jira',id,context),prs:()=>external('prs',id,context),settings,trash,welcome};
+    view.innerHTML=(screens[page]||today)();
+  }
+  function go(to) {
+    if (location.hash !== '#'+to) location.hash = to;
+    else { route=to; render(); }
+  }
+  function navigate() {
+    route = location.hash.slice(1) || document.body.dataset.start || 'today';
+    render();
+  }
+  function show(title,markup) {
+    byId('modal-title').textContent=title;
+    modalBody.innerHTML=markup;
+    if(!modal.open) modal.showModal();
+  }
+  function close() { if(modal.open) modal.close(); }
+  const form = (name,body,label='Save') => `<form class="form" data-form="${name}">${body}<div class="row"><button type="submit" class="primary">${label}</button></div></form>`;
+  const hidden = (name,value) => `<input type="hidden" name="${name}" value="${safe(value)}">`;
+  const select = (name,entries,selected='',label='') => `<select name="${name}">${options(entries,selected,label)}</select>`;
+  function capture(kind='Task',topic='') {
+    show('Quick capture',form('capture',`<label>Type${select('kind',['Task','Note','Topic'].map(title=>({id:title,title})),kind)}</label><label>Title<input name="title" maxlength="160" required autofocus></label><label id="capture-topic" ${kind==='Topic'?'hidden':''}>Topic · Optional${select('topic',db.topics,topic,'Inbox')}</label>`,'Create'));
+  }
+  function searchResults(query) {
+    const q=query.trim().toLowerCase();
+    if(!q) return '<p class="small">Search Topics, Tasks, Notes and downloaded Jira/PR items.</p>';
+    let content='';
+    for(const [kind,label] of [['topic','Topics'],['task','Tasks'],['note','Notes'],['jira','Jira'],['prs','Pull requests']]) {
+      const matches=list(kind).filter(e=>(e.title+' '+e.id).toLowerCase().includes(q));
+      if(matches.length) content+='<h3>'+label+'</h3>'+matches.map(e=>goButton(safe(e.title),kindPage(kind)+'/'+e.id,'')).join('');
+    }
+    return content || empty('No results.');
+  }
+  function search() {
+    show('Search workspace','<label class="form"><input id="global-query" type="search" placeholder="Search downloaded items…" aria-label="Search workspace" autofocus></label><div id="global-results" class="search-results">'+searchResults('')+'</div>');
+    byId('global-query').focus();
+  }
+  function noteTopics(id) {
+    const note=item('note',id);
+    if(!note) return;
+    show('Link Topics',form('note-topics',hidden('id',id)+`<label>Topics<select multiple name="topics">${options(db.topics,note.topics)}</select></label><p class="small">Use Cmd or Ctrl to select more than one.</p>`));
+  }
+  function linkExternal(kind,id) {
+    show('Link to a Topic',form('external-link',hidden('kind',kind)+hidden('id',id)+`<label>Existing Topic${select('topic',db.topics,'','Choose a Topic')}</label><label>Or create a Topic<input name="newTopic" maxlength="160" placeholder="New Topic name"></label>`,'Link'));
+  }
+  function linkExisting(id) {
+    const items=[...db.tasks.map(e=>({...e,kind:'task'})),...db.notes.map(e=>({...e,kind:'note'})),...db.jira.map(e=>({...e,kind:'jira'})),...db.prs.map(e=>({...e,kind:'prs'}))];
+    show('Link an existing item',form('link-existing',hidden('topic',id)+`<label>Item${select('item',items.map(e=>({id:e.kind+'/'+e.id,title:e.kind.toUpperCase()+' · '+e.title})))}</label>`,'Link'));
+  }
+  function reminder(kind,id) {
+    show('New reminder',form('reminder',hidden('kind',kind)+hidden('id',id)+'<label>Title<input name="title" required maxlength="160"></label><label>When<input name="when" type="datetime-local" required></label>','Add reminder'));
+  }
+  function statusEditor(id) {
+    const entry=db.statuses.find(s=>s.id===id);
+    show(entry?'Edit status':'New status',form('status',hidden('id',id||'')+`<label>Name<input name="name" value="${safe(entry?.name)}" required maxlength="35"></label><label>Category${select('category',Object.keys(categories).map(name=>({id:name,name})),entry?.category||'Planned')}</label>`));
+  }
+  function statusDelete(id) {
+    const used=db.topics.some(t=>t.status===id);
+    const alternatives=db.statuses.filter(s=>s.id!==id);
+    if(!alternatives.length) { notify('Keep at least one status.'); return; }
+    show('Delete status',form('status-delete',hidden('id',id)+(used?`<label>Replacement status${select('replacement',alternatives)}</label>`:'<p>No Topics use this status.</p>'),'Delete'));
+  }
+  function focusLabel() {
+    return Math.floor(focus.seconds/60)+':'+String(focus.seconds%60).padStart(2,'0');
+  }
+  function focusPanel() {
+    show('Focus · Post-pilot concept',`<div class="stack"><p class="focus-readout" id="focus-readout">${focusLabel()}</p><p class="small">${focus.break?'Break':'Work'} · 25 min work / 5 min break</p><label>Link task or Topic ${select('target',[...db.topics.map(e=>({...e,id:'topic/'+e.id})),...db.tasks.map(e=>({...e,id:'task/'+e.id}))],focus.target,'Standalone').replace('name="target"','id="focus-target"')}</label><div class="row">${action(focus.running?'Pause':'Start','focus-toggle','','primary')}${action('Stop','focus-stop')}${action('Finish demo session','focus-finish')}</div><small>${db.history.length} completed sessions</small></div>`);
+  }
+  function finishFocus() {
+    if(!focus.break) db.history.push({at:Date.now(),target:focus.target});
+    focus={...focus,running:false,seconds:focus.break?1500:300,break:!focus.break};
+    save();
+    if(modal.open && byId('focus-readout')) focusPanel();
+  }
+  setInterval(()=>{
+    if(!focus.running) return;
+    if(--focus.seconds<=0) finishFocus();
+    if(byId('focus-readout')) byId('focus-readout').textContent=focusLabel();
+    byId('focus-trigger').innerHTML='<span class="icon" aria-hidden="true">◷</span> '+focusLabel();
+  },1000);
+  function newTopic(title) {
+    const id=uid();
+    const initial=db.statuses.find(s=>s.category==='Planned') || db.statuses[0];
+    db.topics.push({id,title,status:initial.id,color:db.topics.length%palette.length,next:'',goal:''});
+    return id;
+  }
+  function addLink(kind,entry,topic) {
+    if(kind==='task') entry.topic=topic;
+    else if(topic && !entry.topics.includes(topic)) entry.topics.push(topic);
+    if(kind==='task'||kind==='note') entry.inbox=false;
+  }
+  document.addEventListener('submit',event=>{
+    const name=event.target.dataset.form;
+    if(!name) return;
+    event.preventDefault();
+    const data=new FormData(event.target);
+    const get=key=>String(data.get(key)||'').trim();
+    const id=get('id');
+    let next='',message='Saved in demo.';
+    if(name==='capture') {
+      const title=get('title'),kind=get('kind'),topic=get('topic');
+      if(!title) return;
+      if(kind==='Topic') next='topic/'+newTopic(title);
+      else {
+        const id=uid();
+        if(kind==='Task') db.tasks.push({id,title,topic,day:'',deadline:'',inbox:!topic});
+        else db.notes.push({id,title,topics:topic?[topic]:[],body:'<p><br></p>',inbox:!topic});
+        next=topic?(kind==='Task'?'task/':'notes/')+id:'inbox/'+id;
+      }
+    } else if(name==='triage') {
+      const kind=get('kind'),entry=item(kind,id),topic=get('topic');
+      addLink(kind,entry,topic);
+      message=topic?'Linked to '+item('topic',topic).title+'.':'Kept standalone.';
+      next='inbox';
+    } else if(name==='task') {
+      const t=item('task',id);
+      Object.assign(t,{done:data.has('done'),topic:get('topic'),day:get('day'),deadline:get('deadline')});
+      db.reminders=db.reminders.filter(r=>r.kind!=='task'||r.target!==id);
+      if(get('reminder')) db.reminders.push({id:uid(),kind:'task',target:id,title:t.title,when:get('reminder')});
+    } else if(name==='note-topics') {
+      const note=item('note',id);
+      note.topics=data.getAll('topics');
+      if(note.topics.length) note.inbox=false;
+    } else if(name==='external-link') {
+      const kind=get('kind'),topic=get('newTopic')?newTopic(get('newTopic')):get('topic');
+      if(!topic) { notify('Choose or create a Topic.'); return; }
+      addLink(kind,item(kind,id),topic);
+      message='Linked to '+item('topic',topic).title+'.';
+    } else if(name==='link-existing') {
+      const [kind,existingId]=get('item').split('/');
+      const entry=item(kind,existingId);
+      if(!entry) return;
+      addLink(kind,entry,get('topic'));
+    } else if(name==='reminder') {
+      db.reminders.push({id:uid(),kind:get('kind'),target:id,title:get('title'),when:get('when')});
+    } else if(name==='status') {
+      if(!get('name')) return;
+      const change={name:get('name'),category:get('category')};
+      const entry=db.statuses.find(s=>s.id===id);
+      if(entry) Object.assign(entry,change); else db.statuses.push({id:uid(),...change});
+    } else if(name==='status-delete') {
+      db.topics.filter(t=>t.status===id).forEach(t=>{t.status=get('replacement');});
+      db.statuses=db.statuses.filter(s=>s.id!==id);
+    } else if(name==='jira-search') {
+      jiraQuery=get('q'); render(); return;
+    }
+    const persisted=save();
+    close();
+    if(next) go(next); else render();
+    if(persisted) notify(message);
+  });
+  document.addEventListener('click',event=>{
+    const b=event.target.closest('button');
+    if(!b || b.disabled) return;
+    const {go:to,action:name,id,kind,mode}=b.dataset;
+    if(to) { close(); go(to); return; }
+    if(!name) return;
+    switch(name) {
+      case 'close': close(); return;
+      case 'search': search(); return;
+      case 'capture': capture(kind,id); return;
+      case 'link-existing': linkExisting(id); return;
+      case 'external-link': linkExternal(kind,id); return;
+      case 'note-topics': noteTopics(id); return;
+      case 'reminder': reminder(kind,id); return;
+      case 'status-editor': statusEditor(id); return;
+      case 'status-delete': statusDelete(id); return;
+      case 'focus': focusPanel(); return;
+      case 'focus-toggle': focus.running=!focus.running; focusPanel(); return;
+      case 'focus-stop':
+        focus={seconds:1500,running:false,target:focus.target};
+        byId('focus-trigger').textContent='◷ Focus'; focusPanel(); return;
+      case 'focus-finish': finishFocus(); return;
+      case 'source': notify('Demo item. No live provider URL.'); return;
+      case 'topic-mode': db.mode=mode; break;
+      case 'pr-filter': prFilter=mode; render(); return;
+      case 'compare': compare=!compare; render(); return;
+      case 'resolve': {
+        const n=item('note',id);
+        n.versions=[n.body,n.other||'Check the payment status before offering retry.'];
+        if(b.dataset.choice==='other') n.body='<p>'+safe(n.versions[1])+'</p>';
+        noteMode='synced'; compare=false; break;
+      }
+      case 'format': {
+        const editor=byId('note-body');
+        editor.focus();
+        const cmd=b.dataset.command;
+        if(cmd==='link') {
+          const url=window.prompt('Link URL (https://)');
+          if(url && /^https?:\/\//i.test(url)) document.execCommand('createLink',false,url);
+        } else if(cmd==='checklist') document.execCommand('insertText',false,'☐ ');
+        else document.execCommand(cmd,false,b.dataset.value||null);
+        const note=item('note',editor.dataset.note);
+        note.body=editor.innerHTML; save(); return;
+      }
+      case 'trash-note': {
+        const n=item('note',id);
+        db.trash.push({...n,kind:'note'});
+        db.notes=db.notes.filter(entry=>entry.id!==id);
+        save(); go('trash'); return;
+      }
+      case 'restore': {
+        const n=db.trash.find(entry=>entry.id===id);
+        db.notes.push(n); db.trash=db.trash.filter(entry=>entry.id!==id);
+        notify('Note restored.'); break;
+      }
+      case 'connection': db.connections[kind]=!db.connections[kind]; break;
+      case 'reorder': {
+        const a=db.statuses.findIndex(s=>s.id===id), c=a+Number(b.dataset.dir);
+        if(c>=0 && c<db.statuses.length) [db.statuses[a],db.statuses[c]]=[db.statuses[c],db.statuses[a]];
+        break;
+      }
+      case 'reset':
+        if(!window.confirm('Reset demo changes?')) return;
+        db=JSON.parse(initialSeed); noteMode='synced'; externalMode='ready'; break;
+      default: return;
+    }
+    save(); render();
+  });
+  document.addEventListener('pointerdown',event=>{
+    if(event.target.closest('button[data-action="format"]')) event.preventDefault();
+  });
+  document.addEventListener('input',event=>{
+    const node=event.target;
+    if(node.id==='global-query') byId('global-results').innerHTML=searchResults(node.value);
+    if(node.id==='note-title'||node.id==='note-body') {
+      const note=item('note',node.dataset.note);
+      if(node.id==='note-title') note.title=node.value;
+      else note.body=node.innerHTML;
+      save();
+    }
+  });
+  document.addEventListener('paste',event=>{
+    if(event.target.closest('#note-body')) {
+      event.preventDefault();
+      document.execCommand('insertText',false,event.clipboardData.getData('text/plain'));
+    }
+  });
+  document.addEventListener('change',event=>{
+    const node=event.target;
+    if(node.dataset.complete) { item('task',node.dataset.complete).done=node.checked; save(); render(); }
+    if(node.dataset.topicStatus) { item('topic',node.dataset.topicStatus).status=node.value; save(); render(); }
+    if(node.id==='note-state') { noteMode=node.value; compare=false; render(); }
+    if(node.id==='external-state') { externalMode=node.value; render(); }
+    if(node.id==='focus-target') focus.target=node.value;
+    if(node.name==='kind' && byId('capture-topic')) byId('capture-topic').hidden=node.value==='Topic';
+  });
+  document.addEventListener('dragstart',event=>{
+    const card=event.target.closest('[data-drag]');
+    if(card) event.dataTransfer.setData('text/plain',card.dataset.drag);
+  });
+  document.addEventListener('dragover',event=>{ if(event.target.closest('[data-lane]')) event.preventDefault(); });
+  document.addEventListener('drop',event=>{
+    const lane=event.target.closest('[data-lane]');
+    if(!lane) return;
+    event.preventDefault();
+    const t=item('topic',event.dataTransfer.getData('text/plain'));
+    if(t) { t.status=lane.dataset.lane; save(); render(); }
+  });
+  document.addEventListener('keydown',event=>{
+    if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k') { event.preventDefault(); search(); }
+  });
+  const initialSeed=JSON.stringify(seed);
+  window.addEventListener('hashchange',navigate);
+  navigate();
+})();
+</script>
+</body></html>

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#16171d">
+  <title>Thread pilot prototype map</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="assets/thread.css">
+  <style>
+    .map { max-width: 1080px; margin: 0 auto; padding: 40px 24px 64px; display: grid; gap: 40px; }
+    .map-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: start; }
+    .map-head h1 { font-size: var(--fs-34); font-weight: 650; letter-spacing: -0.025em; line-height: 1.1; }
+    .map-lede { color: var(--text-2); max-width: 62ch; margin-top: 10px; }
+    .map-cta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .map-notice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--warning-line); background: var(--warning-surface); border-radius: var(--r-md); color: var(--text-2); font-size: var(--fs-14); max-width: 72ch; margin-top: 20px; }
+    .map-notice svg { color: var(--warning); flex: none; margin-top: 2px; }
+    .map h2 { font-size: var(--fs-20); font-weight: 650; letter-spacing: -0.01em; }
+    .map-sec-sub { color: var(--text-3); font-size: var(--fs-14); margin-top: 4px; max-width: 70ch; }
+    .surfaces { margin-top: 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+    .surface { display: grid; grid-template-columns: 34px minmax(0, 1.1fr) minmax(0, 1.6fr); gap: 4px 16px; padding: 14px 18px; border-top: 1px solid var(--line); align-items: baseline; }
+    .surface:first-child { border-top: 0; }
+    .surface-n { color: var(--text-3); font-size: var(--fs-13); font-variant-numeric: tabular-nums; }
+    .surface-name a { font-weight: 600; text-decoration: none; }
+    .surface-name a:hover { text-decoration: underline; text-underline-offset: 3px; }
+    .surface-name p { color: var(--text-3); font-size: var(--fs-13); margin-top: 2px; }
+    .surface-links { display: flex; flex-wrap: wrap; gap: 6px; }
+    .state-link { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-pill); font-size: var(--fs-13); color: var(--text-2); text-decoration: none; background: var(--bg); }
+    .state-link:hover { color: var(--text); border-color: var(--line-strong); }
+    .state-link.is-sim { border-color: var(--warning-line); }
+    .state-link.is-sim::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
+    .tag-concept { font-size: 11px; color: var(--text-3); border: 1px dashed var(--line-strong); border-radius: var(--r-pill); padding: 1px 7px; margin-left: 6px; font-weight: 500; vertical-align: 1px; }
+    .journeys { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .journey { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px 18px; background: var(--surface); }
+    .journey h3 { font-size: var(--fs-15); font-weight: 600; }
+    .journey ol { list-style: decimal; padding-left: 20px; margin-top: 10px; display: grid; gap: 6px; font-size: var(--fs-14); color: var(--text-2); }
+    .journey ol a { color: var(--text); }
+    .journey .btn { margin-top: 12px; }
+    .keys { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--text-2); font-size: var(--fs-14); }
+    .keys span { display: inline-flex; gap: 6px; align-items: center; }
+    .map-foot { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; border-top: 1px solid var(--line); padding-top: 20px; color: var(--text-3); font-size: var(--fs-13); }
+    .map-foot .spacer { flex: 1; }
+    #reset-msg:empty { display: none; }
+    @media (max-width: 860px) {
+      .surface { grid-template-columns: 28px minmax(0, 1fr); }
+      .surface-links { grid-column: 2; margin-top: 6px; }
+      .journeys { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .map { padding: 24px 16px 48px; gap: 32px; }
+      .map-head { grid-template-columns: minmax(0, 1fr); }
+      .map-head h1 { font-size: var(--fs-26); }
+      .surface { padding: 12px 14px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="map">
+    <header class="map-head">
+      <div class="welcome-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-logo"></use></svg></div>
+      <div>
+        <h1>Thread pilot prototype</h1>
+        <p class="map-lede">A clickable design prototype of the personal workspace: Today, Topics, Notes, Inbox, read-only Jira and pull requests, search, settings and Trash. Open the app, or jump to any surface or state below.</p>
+        <div class="map-cta">
+          <a class="btn btn-primary" href="app.html#/today">Open Today</a>
+          <a class="btn" href="app.html#/welcome">Start at sign-in</a>
+          <a class="btn btn-ghost" href="README.md">README</a>
+        </div>
+        <p class="map-notice"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-flask"></use></svg><span>All people, tickets, repositories and pull requests are invented. Changes are saved in this browser only. Links marked with a dot switch on a simulated state, which stays on until you change it in Demo controls or reset the demo.</span></p>
+      </div>
+    </header>
+
+    <section aria-labelledby="sec-surfaces">
+      <h2 id="sec-surfaces">Surfaces</h2>
+      <p class="map-sec-sub">Numbers follow the list in the design brief.</p>
+      <ol class="surfaces">
+        <li class="surface"><span class="surface-n">1</span><div class="surface-name"><a href="app.html#/welcome">Sign-in and first run</a><p>Demo account only. Choose example or empty data.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/welcome">Sign-in</a><a class="state-link is-sim" href="app.html#/today?sim=empty">Empty workspace</a><a class="state-link is-sim" href="app.html#/today?sim=reset">Example workspace</a></div></li>
+        <li class="surface"><span class="surface-n">2</span><div class="surface-name"><a href="app.html#/today">Today</a><p>Overdue and planned Tasks, Reminders, review requests, active Topics.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/today">Today</a><a class="state-link" href="app.html#/today?open=demo">Advance the clock</a></div></li>
+        <li class="surface"><span class="surface-n">3</span><div class="surface-name"><a href="app.html#/topics?view=list">Topics list</a><p>Status, next step and progress for each Topic.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/topics?view=list">List</a></div></li>
+        <li class="surface"><span class="surface-n">4</span><div class="surface-name"><a href="app.html#/topics?view=board">Topics board</a><p>Lanes by status. Drag a card or use its status menu.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/topics?view=board">Board</a></div></li>
+        <li class="surface"><span class="surface-n">5</span><div class="surface-name"><a href="app.html#/topic/t-qr">Topic details</a><p>Where you left off, Tasks, Notes, linked tickets and pull requests, Reminders.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/topic/t-qr">QR payments</a><a class="state-link" href="app.html#/topic/t-qr?jira=NOVA-142">With ticket panel</a><a class="state-link" href="app.html#/topic/t-rec">Paused Topic</a></div></li>
+        <li class="surface"><span class="surface-n">6</span><div class="surface-name"><a href="app.html#/notes/n1">Notes and editor</a><p>Rich text, checklists, links, save and sync status, conflict choice.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/notes/n1">Editor</a><a class="state-link is-sim" href="app.html#/notes/n1?sim=offline">Offline</a><a class="state-link is-sim" href="app.html#/notes/n1?sim=conflict">Conflict</a><a class="state-link is-sim" href="app.html#/notes/n1?sim=save-fail">Device save fails</a><a class="state-link is-sim" href="app.html#/notes/n1?sim=sync-fail">Cloud sync fails</a></div></li>
+        <li class="surface"><span class="surface-n">7</span><div class="surface-name"><a href="app.html#/inbox">Inbox</a><p>Triage one item at a time or select several.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/inbox">Inbox</a></div></li>
+        <li class="surface"><span class="surface-n">8</span><div class="surface-name"><a href="app.html#/today?open=capture">Quick capture</a><p>Press C anywhere. Task or Note, Inbox or a Topic.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/today?open=capture">Capture</a></div></li>
+        <li class="surface"><span class="surface-n">9</span><div class="surface-name"><a href="app.html#/today?task=k2">Task details and Reminders</a><p>Planned day, deadline and reminder are separate. Shows where the Task appears.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/today?task=k2">Task with reminder</a><a class="state-link" href="app.html#/topic/t-rec">Topic reminder</a></div></li>
+        <li class="surface"><span class="surface-n">10</span><div class="surface-name"><a href="app.html#/jira">Jira</a><p>Read-only. Saved copy first, then refresh. Links to several Topics.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/jira">Assigned</a><a class="state-link" href="app.html#/jira/NOVA-151">Ticket in two Topics</a><a class="state-link" href="app.html#/jira?tab=search">Search</a><a class="state-link is-sim" href="app.html#/jira/NOVA-205?sim=offline">Offline, not saved</a><a class="state-link is-sim" href="app.html#/jira?sim=jira-expired">Access expired</a><a class="state-link is-sim" href="app.html#/jira?sim=jira-limited">Rate limited</a></div></li>
+        <li class="surface"><span class="surface-n">11</span><div class="surface-name"><a href="app.html#/prs">Pull requests</a><p>My pull requests and review requests. Separate CI and review status.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/prs">Mine</a><a class="state-link" href="app.html#/prs?tab=review">Review requested</a><a class="state-link" href="app.html#/prs/pr-248">Detail</a><a class="state-link is-sim" href="app.html#/prs?sim=github-expired">Access expired</a><a class="state-link is-sim" href="app.html#/prs?sim=github-limited">Rate limited</a></div></li>
+        <li class="surface"><span class="surface-n">12</span><div class="surface-name"><a href="app.html#/today?open=search">Global search</a><p>Cmd or Ctrl + K. Grouped results, Escape closes.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/today?open=search">Search</a></div></li>
+        <li class="surface"><span class="surface-n">13</span><div class="surface-name"><a href="app.html#/settings">Settings</a><p>Demo connect and disconnect, preferences, ordered Topic statuses.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/settings">Connections</a><a class="state-link" href="app.html#/settings?sec=statuses">Topic statuses</a></div></li>
+        <li class="surface"><span class="surface-n">14</span><div class="surface-name"><a href="app.html#/trash">Trash</a><p>Restore with context. Jira and pull requests never go here.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/trash">Trash</a></div></li>
+        <li class="surface"><span class="surface-n">15</span><div class="surface-name"><a href="app.html#/today?open=focus">Focus timer</a><span class="tag-concept">Post-pilot concept</span><p>Small popover from the sidebar. 25 and 5 minutes by default.</p></div>
+          <div class="surface-links"><a class="state-link" href="app.html#/today?open=focus">Timer</a></div></li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="sec-journeys">
+      <h2 id="sec-journeys">Journeys to try</h2>
+      <p class="map-sec-sub">Each one starts from the example workspace. Reset the demo first for a clean run.</p>
+      <div class="journeys">
+        <article class="journey"><h3>Capture, triage, finish</h3><ol>
+          <li>Press C, type a Task, keep “Inbox, sort later”, press Enter.</li>
+          <li>Open Inbox, pick a Topic in the triage panel, choose Move.</li>
+          <li>Open that Topic and tick the Task.</li></ol>
+          <a class="btn btn-sm" href="app.html#/today?open=capture">Start</a></article>
+        <article class="journey"><h3>Write offline, resolve a conflict</h3><ol>
+          <li>Open a Note, format a line as a heading or checklist.</li>
+          <li>Go offline in Demo controls, keep typing, watch the save status.</li>
+          <li>Go online, then create a conflict and choose a version.</li></ol>
+          <a class="btn btn-sm" href="app.html#/notes/n1">Start</a></article>
+        <article class="journey"><h3>Find a ticket and link it</h3><ol>
+          <li>Search Jira for “receipt” and open a result.</li>
+          <li>Choose Link to Topic and pick one or more Topics.</li>
+          <li>Open a linked Topic from the ticket.</li></ol>
+          <a class="btn btn-sm" href="app.html#/jira?tab=search">Start</a></article>
+        <article class="journey"><h3>Change a status</h3><ol>
+          <li>Open the paused Topic and set its status to Active.</li>
+          <li>See it on Today under Active Topics, and in the Active lane on the Board.</li>
+          <li>Rename or delete a status in Settings and see the Board follow.</li></ol>
+          <a class="btn btn-sm" href="app.html#/topic/t-rec">Start</a></article>
+        <article class="journey"><h3>Delete and restore a Note</h3><ol>
+          <li>Open a standalone Note and choose Move to Trash.</li>
+          <li>Open Trash and restore it. The message says where it went back.</li></ol>
+          <a class="btn btn-sm" href="app.html#/notes/n2">Start</a></article>
+        <article class="journey"><h3>Search and go</h3><ol>
+          <li>Press Cmd or Ctrl + K and type “mapper”.</li>
+          <li>Use the arrow keys and Enter to open a result. Escape closes.</li></ol>
+          <a class="btn btn-sm" href="app.html#/today?open=search">Start</a></article>
+      </div>
+    </section>
+
+    <section aria-labelledby="sec-keys">
+      <h2 id="sec-keys">Keyboard</h2>
+      <div class="keys">
+        <span><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> <kbd>K</kbd> search</span>
+        <span><kbd>/</kbd> search</span>
+        <span><kbd>C</kbd> capture</span>
+        <span><kbd>Esc</kbd> close</span>
+        <span><kbd>Cmd</kbd>/<kbd>Ctrl</kbd> <kbd>Enter</kbd> tick a checklist line in a Note</span>
+      </div>
+    </section>
+
+    <footer class="map-foot">
+      <button class="btn btn-sm" type="button" id="reset">Reset demo data</button>
+      <span id="reset-msg" role="status"></span>
+      <span class="spacer"></span>
+      <span>Design prototype. Plain HTML, CSS and JavaScript. No network calls.</span>
+    </footer>
+  </main>
+  <script src="assets/icons.js"></script>
+  <script>
+    window.ThreadIcons.mount();
+    document.getElementById('reset').addEventListener('click', function () {
+      var msg = document.getElementById('reset-msg');
+      try { window.localStorage.removeItem('thread-claude-pilot:v1'); msg.textContent = 'Demo data reset. The app opens with the example workspace.'; }
+      catch (e) { msg.textContent = 'This browser blocks storage, so there is nothing to reset. The app keeps data in memory only.'; }
+    });
+  </script>
+</body>
+</html>

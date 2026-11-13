@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thread Notes design</title><style>body{background:#16181c;margin:0 auto;padding:12px;max-width:1180px}</style><body>
+<div id="thread-pilot-notes" aria-label="Thread Notes design">
+<style>
+#thread-pilot-notes{color-scheme:dark;--text:#eef0f3;--muted:#aab0bb;--border:#343842;--accent:#c4b5fd;--editor:#1b1d21;--panel:#22252b;font:14px/1.5 system-ui,sans-serif;color:var(--text)}
+#thread-pilot-notes *{box-sizing:border-box}
+#thread-pilot-notes [hidden]{display:none!important}
+#thread-pilot-notes h1,#thread-pilot-notes h2,#thread-pilot-notes p{margin:0}
+#thread-pilot-notes .demo{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;color:var(--muted);font-size:12px}
+#thread-pilot-notes button,#thread-pilot-notes select{background:var(--panel);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 9px;font:inherit;cursor:pointer}
+#thread-pilot-notes button:hover{background:#303743}
+#thread-pilot-notes .shell{display:grid;grid-template-columns:145px 206px minmax(0,1fr);min-height:565px;background:var(--editor);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+#thread-pilot-notes .rail{background:#16181c;padding:19px 14px}
+#thread-pilot-notes .brand{font-size:19px;font-weight:650;margin-bottom:22px}
+#thread-pilot-notes .rail span{display:block;padding:7px 8px;color:var(--muted)}
+#thread-pilot-notes .rail [aria-current]{background:#303743;border-radius:7px;color:var(--text)}
+#thread-pilot-notes .notes-index{background:#202228;border-right:1px solid var(--border);padding:15px 11px}
+#thread-pilot-notes .index-title{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:14px}
+#thread-pilot-notes .index-title h2{font-size:16px}
+#thread-pilot-notes .new{background:var(--accent);color:#211637;font-weight:650}
+#thread-pilot-notes .entry{text-align:left;width:100%;margin-bottom:6px;background:transparent;border-color:transparent}
+#thread-pilot-notes .entry[aria-current]{background:#303743;border-color:#424a59}
+#thread-pilot-notes .entry span{display:block}
+#thread-pilot-notes .small{font-size:12px;color:var(--muted)}
+#thread-pilot-notes .editor{padding:19px 23px;min-width:0}
+#thread-pilot-notes .editor-top{display:flex;gap:8px;justify-content:space-between;align-items:start;flex-wrap:wrap;padding-bottom:15px;border-bottom:1px solid var(--border)}
+#thread-pilot-notes .format{display:flex;flex-wrap:wrap;gap:4px}
+#thread-pilot-notes .format span{display:inline-flex;padding:3px 7px;border:1px solid var(--border);border-radius:5px}
+#thread-pilot-notes .save{font-size:12px;color:#a1d3ac;padding-top:4px}
+#thread-pilot-notes .save.attention{color:#f0b573}
+#thread-pilot-notes .notice{background:#302838;border:1px solid #55445e;border-radius:8px;margin-top:13px;padding:12px}
+#thread-pilot-notes .notice button{margin-top:8px}
+#thread-pilot-notes .sheet{max-width:620px;margin:24px auto}
+#thread-pilot-notes .sheet h1{font-size:clamp(22px,4vw,29px);line-height:1.16;margin-bottom:11px}
+#thread-pilot-notes .topics{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:24px}
+#thread-pilot-notes .topic{border-radius:6px;padding:2px 7px;color:#c7b4f5;background:#30283d;font-size:12px}
+#thread-pilot-notes .topic.mint{color:#a6e1ca;background:#24372f}
+#thread-pilot-notes .body{color:#e2e5ea;font-size:15px;line-height:1.6}
+#thread-pilot-notes .body p{margin-bottom:15px}
+#thread-pilot-notes .body h2{font-size:17px;margin:16px 0 6px}
+#thread-pilot-notes .body ul{margin:6px 0;padding-inline-start:20px}
+#thread-pilot-notes .versions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+#thread-pilot-notes .versions article{background:var(--panel);padding:9px;border-radius:6px}
+@media(max-width:760px){#thread-pilot-notes .shell{grid-template-columns:165px minmax(0,1fr)}#thread-pilot-notes .rail{display:none}}
+@media(max-width:520px){#thread-pilot-notes .shell,#thread-pilot-notes .versions{grid-template-columns:1fr}#thread-pilot-notes .notes-index{border-right:0;border-bottom:1px solid var(--border)}#thread-pilot-notes .editor{padding:15px}}
+</style>
+<div class="demo"><label for="tpn-state">Preview state</label>
+<select id="tpn-state">
+<option value="synced">Synced</option><option value="saving">Saving locally</option><option value="offline">Saved locally · Offline</option><option value="syncing">Syncing</option><option value="error">Sync failed</option><option value="local-error">Local save failed</option><option value="conflict">Conflict</option>
+</select><span>Sample data</span></div>
+<div class="shell">
+<aside class="rail" aria-label="Workspace navigation preview"><div class="brand">Thread</div><span>Today</span><span>Inbox</span><span>Topics</span><span aria-current="page">Notes</span><span>Jira</span><span>Pull requests</span></aside>
+<aside class="notes-index" aria-label="Notes"><div class="index-title"><h2>Notes</h2><button class="new" data-note="new">+ New</button></div>
+<button class="entry" data-note="qr" aria-current="true"><span>QR payment decisions</span><span class="small">12 Nov · 2 topics</span></button>
+<button class="entry" data-note="review"><span>PR review checklist</span><span class="small">11 Nov · Standalone</span></button>
+</aside>
+<main class="editor">
+<div class="editor-top">
+<div class="format" aria-label="Formatting toolbar design"><span>Paragraph ▾</span><span><b>B</b></span><span><i>I</i></span><span>List</span><span>Checklist</span><span>Link</span></div>
+<span id="tpn-save" class="save" role="status">✓ Synced</span></div>
+<div id="tpn-notice" class="notice" hidden><p id="tpn-message"></p><button id="tpn-compare" hidden aria-expanded="false">Compare versions</button>
+<div class="versions" id="tpn-versions" hidden><article><h2>Local draft</h2><p>Show the last status and let the customer retry.</p></article><article><h2>Other device</h2><p>Check payment status before offering retry.</p></article></div></div>
+<div class="sheet">
+<h1 id="tpn-title">QR payment decisions</h1>
+<div id="tpn-topics" class="topics"><span class="topic">QR payments</span><span class="topic mint">Bill payment errors</span></div>
+<div id="tpn-body" class="body">
+<p>Keep the scanned context after a timeout. Confirm whether retry needs a new request ID.</p>
+<h2>Decisions</h2><ul><li>Keep the scanned payment context.</li><li>Show a clear retry action when the state is recoverable.</li></ul>
+<h2>Open questions</h2><p>☐ Confirm retry behavior with the backend team.</p>
+</div>
+</div>
+</main>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('thread-pilot-notes');
+  const pick = id => root.querySelector('#tpn-' + id);
+  const original = { title: pick('title').textContent, topics: pick('topics').innerHTML, body: pick('body').innerHTML };
+  const notes = {
+    qr: original,
+    review: { title: 'PR review checklist', topics: '<span class="small">Standalone</span>', body: '<p>Start with the feature goal and follow the changed flow.</p><ul><li>Check error and loading states.</li><li>Look for tests that cover the behavior change.</li></ul>' },
+    new: { title: 'Untitled note', topics: '<span class="small">Standalone · Inbox</span>', body: '<p class="small">Start writing…</p>' }
+  };
+  const states = {
+    synced: ['✓ Synced', ''],
+    saving: ['Saving locally…', ''],
+    offline: ['Saved locally · Offline', 'Changes will sync when you reconnect.'],
+    syncing: ['Syncing…', ''],
+    error: ['Needs attention', 'Saved on this device. Sync failed. Your draft is available here.'],
+    'local-error': ['Local save failed', 'This edit is still in the open editor. Copy your changes before closing and try again.'],
+    conflict: ['Needs attention', 'Two versions of this note are available. Review both before choosing what to keep.']
+  };
+  function showState(value) {
+    const [label, message] = states[value];
+    const attention = ['error', 'local-error', 'conflict'].includes(value);
+    pick('save').textContent = label;
+    pick('save').classList.toggle('attention', attention);
+    pick('notice').hidden = !message;
+    pick('message').textContent = message;
+    pick('compare').hidden = value !== 'conflict';
+    pick('compare').setAttribute('aria-expanded', 'false');
+    pick('versions').hidden = true;
+  }
+  pick('state').addEventListener('change', event => showState(event.target.value));
+  root.addEventListener('click', event => {
+    const button = event.target.closest('[data-note]');
+    if (!button) return;
+    const note = notes[button.dataset.note];
+    pick('title').textContent = note.title;
+    pick('topics').innerHTML = note.topics;
+    pick('body').innerHTML = note.body;
+    root.querySelectorAll('.entry').forEach(entry => entry.removeAttribute('aria-current'));
+    if (button.classList.contains('entry')) button.setAttribute('aria-current', 'true');
+    pick('state').value = button.dataset.note === 'new' ? 'saving' : 'synced';
+    showState(pick('state').value);
+  });
+  pick('compare').addEventListener('click', () => {
+    pick('versions').hidden = !pick('versions').hidden;
+    pick('compare').setAttribute('aria-expanded', String(!pick('versions').hidden));
+  });
+})();
+</script>
+</div>
+</body></html>

@@ -1,0 +1,164 @@
+<div id="thread-pilot-inbox" aria-label="Thread Inbox design">
+<style>
+#thread-pilot-inbox{color-scheme:dark;--bg:#1b1d21;--panel:#22252b;--edge:#343842;--text:#eef0f3;--muted:#aab0bb;--accent:#c4b5fd;font:14px/1.5 system-ui,sans-serif;color:var(--text)}
+#thread-pilot-inbox *{box-sizing:border-box}
+#thread-pilot-inbox [hidden]{display:none!important}
+#thread-pilot-inbox h1,#thread-pilot-inbox h2,#thread-pilot-inbox p{margin:0}
+#thread-pilot-inbox .sample{font-size:12px;color:var(--muted);margin-bottom:8px}
+#thread-pilot-inbox .shell{display:grid;grid-template-columns:154px minmax(0,1fr);min-height:555px;border:1px solid var(--edge);border-radius:12px;background:var(--bg);overflow:hidden}
+#thread-pilot-inbox .rail{background:#16181c;padding:18px 12px}
+#thread-pilot-inbox .rail strong{display:block;font-size:19px;margin-bottom:17px}
+#thread-pilot-inbox .rail span{display:block;color:var(--muted);padding:6px 8px}
+#thread-pilot-inbox .rail [aria-current]{background:#303743;border-radius:7px;color:var(--text)}
+#thread-pilot-inbox main{padding:24px;min-width:0}
+#thread-pilot-inbox .head,#thread-pilot-inbox .actions,#thread-pilot-inbox .card-head{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+#thread-pilot-inbox .head{margin-bottom:16px}
+#thread-pilot-inbox .head h1{font-size:29px}
+#thread-pilot-inbox button,#thread-pilot-inbox input,#thread-pilot-inbox select{background:var(--bg);border:1px solid var(--edge);color:var(--text);border-radius:7px;padding:6px 9px;font:inherit;max-width:100%}
+#thread-pilot-inbox button{cursor:pointer}
+#thread-pilot-inbox button:hover{background:#303743}
+#thread-pilot-inbox button.primary{background:var(--accent);color:#231942;font-weight:650}
+#thread-pilot-inbox .small{font-size:12px;color:var(--muted)}
+#thread-pilot-inbox .grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;align-items:start}
+#thread-pilot-inbox .card{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:14px;min-width:0}
+#thread-pilot-inbox .card h2{font-size:16px}
+#thread-pilot-inbox .queue{display:grid;gap:7px;margin-top:10px}
+#thread-pilot-inbox .queue button{text-align:left;width:100%;border-color:transparent;overflow-wrap:anywhere}
+#thread-pilot-inbox .queue button[aria-pressed=true]{border-color:#5b5271;background:#303743}
+#thread-pilot-inbox .queue span{display:block}
+#thread-pilot-inbox .kind{color:#c7b4f5;font-size:12px}
+#thread-pilot-inbox .kind.note{color:#e5c98d}
+#thread-pilot-inbox .field{display:grid;gap:4px;margin-top:12px}
+#thread-pilot-inbox details{margin:12px 0}
+#thread-pilot-inbox .actions{justify-content:flex-start;margin-top:14px}
+#thread-pilot-inbox .capture{margin-bottom:14px}
+#thread-pilot-inbox .notice{color:#a1d3ac;margin-top:13px;min-height:21px}
+@media(max-width:760px){#thread-pilot-inbox .shell{grid-template-columns:minmax(0,1fr)}#thread-pilot-inbox .rail{display:none}}
+@media(max-width:550px){#thread-pilot-inbox .grid{grid-template-columns:1fr}#thread-pilot-inbox main{padding:14px}}
+</style>
+<p class="sample">Design preview · Sample data</p>
+<div class="shell">
+<aside class="rail" aria-label="Workspace navigation preview"><strong>Thread</strong><span>Today</span><span aria-current="page">Inbox</span><span>Topics</span><span>Notes</span><span>Jira</span><span>Pull requests</span></aside>
+<main>
+<div class="head"><div><h1>Inbox</h1><p class="small">Captured items to organize</p></div><button type="button" id="tpi-open" class="primary" aria-expanded="false">+ Quick capture</button></div>
+<form class="card capture" id="tpi-capture" hidden>
+<div class="card-head"><h2>Quick capture</h2><button type="button" id="tpi-close">Close</button></div>
+<label class="field">Type<select id="tpi-type"><option>Task</option><option>Note</option><option>Topic</option></select></label>
+<label class="field">Title<input id="tpi-title" required maxlength="160" placeholder="What do you want to capture?"></label>
+<label class="field" id="tpi-context">Topic · Optional<select id="tpi-capture-topic"><option value="">Inbox</option><option>QR payments</option><option>Bill payment errors</option></select></label>
+<div class="actions"><button class="primary" type="submit">Create</button></div>
+</form>
+<div class="grid">
+<section class="card"><div class="card-head"><h2>To organize</h2><span id="tpi-count" class="small">2 items</span></div>
+<div class="queue" id="tpi-queue">
+<button type="button" data-item="0" aria-pressed="true"><span class="kind">Task</span><span>Check QR timeout copy</span></button>
+<button type="button" data-item="1" aria-pressed="false"><span class="kind note">Note</span><span>Ideas from the payments sync</span></button>
+</div><p class="small" id="tpi-empty" hidden>You're all caught up.</p></section>
+<section class="card" id="tpi-detail">
+<h2 id="tpi-selected">Check QR timeout copy</h2>
+<label class="field">Move to Topic<select id="tpi-topic"><option value="">Choose a Topic</option><option>QR payments</option><option>Bill payment errors</option></select></label>
+<details id="tpi-schedule"><summary>Scheduling</summary>
+<label class="field">Planned day<input type="date" id="tpi-planned"></label>
+<label class="field">Deadline<input type="datetime-local" id="tpi-deadline"></label>
+<label class="field">Reminder<input type="datetime-local" id="tpi-reminder"></label>
+<p class="small" id="tpi-schedule-note">Dates are optional and saved with this Task.</p>
+</details>
+<div class="actions"><button type="button" class="primary" id="tpi-move" disabled>Move to Topic</button><button type="button" id="tpi-keep">Keep standalone</button></div>
+</section>
+</div>
+<p class="notice" id="tpi-status" role="status"></p>
+</main>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('thread-pilot-inbox');
+  const pick = id => root.querySelector('#tpi-' + id);
+  const items = [
+    { id: 0, type: 'Task', title: 'Check QR timeout copy' },
+    { id: 1, type: 'Note', title: 'Ideas from the payments sync' }
+  ];
+  const moved = [];
+  let nextId = 2;
+  let selected = items[0];
+  function capture(open) {
+    pick('capture').hidden = !open;
+    pick('open').setAttribute('aria-expanded', String(open));
+    if (open) pick('title').focus();
+    else pick('open').focus();
+  }
+  function renderQueue() {
+    const queue = pick('queue');
+    queue.replaceChildren();
+    for (const item of items) {
+      const button = document.createElement('button');
+      const kind = document.createElement('span');
+      const title = document.createElement('span');
+      button.type = 'button';
+      button.dataset.item = item.id;
+      button.setAttribute('aria-pressed', String(item === selected));
+      kind.className = item.type === 'Note' ? 'kind note' : 'kind';
+      kind.textContent = item.type;
+      title.textContent = item.title;
+      button.append(kind, title);
+      queue.append(button);
+    }
+    pick('count').textContent = items.length + (items.length === 1 ? ' item' : ' items');
+    pick('detail').hidden = !selected;
+    pick('empty').hidden = Boolean(items.length);
+    if (!selected) return;
+    pick('selected').textContent = selected.title;
+    pick('topic').value = '';
+    pick('move').disabled = true;
+    pick('schedule').open = false;
+    pick('schedule').hidden = selected.type !== 'Task';
+    for (const key of ['planned', 'deadline', 'reminder']) pick(key).value = selected[key] || '';
+  }
+  function triage(topic) {
+    if (!selected) return;
+    const title = selected.title;
+    moved.push({...selected, topic});
+    items.splice(items.indexOf(selected), 1);
+    selected = items[0];
+    renderQueue();
+    pick('status').textContent = topic ? title + ' moved to ' + topic + '.' : title + ' kept standalone.';
+  }
+  pick('open').addEventListener('click', () => capture(pick('capture').hidden));
+  pick('close').addEventListener('click', () => capture(false));
+  pick('type').addEventListener('change', () => {
+    pick('context').hidden = pick('type').value === 'Topic';
+  });
+  pick('capture').addEventListener('submit', event => {
+    event.preventDefault();
+    const title = pick('title').value.trim();
+    if (!title) return;
+    const type = pick('type').value;
+    const topic = type === 'Topic' ? '' : pick('capture-topic').value;
+    const item = { id: nextId++, type, title };
+    if (type === 'Topic' || topic) {
+      moved.push({...item, topic});
+      pick('status').textContent = type === 'Topic' ? 'Topic created: ' + title : title + ' added to ' + topic + '.';
+    } else {
+      items.push(item);
+      selected = item;
+      renderQueue();
+      pick('status').textContent = title + ' added to Inbox.';
+    }
+    pick('title').value = '';
+    capture(false);
+  });
+  pick('queue').addEventListener('click', event => {
+    const button = event.target.closest('[data-item]');
+    if (!button) return;
+    selected = items.find(item => item.id === Number(button.dataset.item));
+    renderQueue();
+    pick('queue').querySelector('[aria-pressed="true"]')?.focus();
+  });
+  pick('topic').addEventListener('change', () => { pick('move').disabled = !pick('topic').value; });
+  pick('move').addEventListener('click', () => { if (pick('topic').value) triage(pick('topic').value); });
+  pick('keep').addEventListener('click', () => triage(''));
+  for (const key of ['planned', 'deadline', 'reminder']) {
+    pick(key).addEventListener('change', () => { if (selected?.type === 'Task') selected[key] = pick(key).value; });
+  }
+})();
+</script>
+</div>

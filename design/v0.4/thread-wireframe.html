@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thread · design proposal v0.4</title><style>body{margin:0;background:#16181c}body>div{max-width:1440px;margin:auto}</style></head><body>
+<div id="thread-workspace-v04" aria-label="Thread dark workspace design proposal">
+<style>
+#thread-workspace-v04{--paper:#1b1d21;--canvas:#22252b;--rail:#16181c;--ink:#eef0f3;--secondary:#aab0bb;--line:#343842;--selected:#303743;--blue:#9bc5ff;--orange:#f0b573;--green:#a1d3ac;--space:24px;color-scheme:dark;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--paper)}
+#thread-workspace-v04 *{box-sizing:border-box}#thread-workspace-v04 button,#thread-workspace-v04 input,#thread-workspace-v04 select{font:inherit;color:inherit}#thread-workspace-v04 button{cursor:pointer;border:1px solid var(--line);background:var(--paper);border-radius:7px;padding:7px 11px}#thread-workspace-v04 button:hover{background:var(--rail)}#thread-workspace-v04 button:focus-visible,#thread-workspace-v04 input:focus-visible,#thread-workspace-v04 select:focus-visible,#thread-workspace-v04 summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px}#thread-workspace-v04 button[aria-current=page],#thread-workspace-v04 button[aria-pressed=true]{background:var(--selected)}#thread-workspace-v04 .quiet{border:0;background:transparent}#thread-workspace-v04 .meta{font-size:12px;color:var(--secondary)}#thread-workspace-v04 .proposal{display:flex;flex-wrap:wrap;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--canvas);font-size:12px;color:var(--secondary)}#thread-workspace-v04 .shell{display:grid;grid-template-columns:166px minmax(0,1fr);min-height:660px}#thread-workspace-v04 .sidebar{padding:24px 12px;background:var(--rail);display:flex;flex-direction:column;gap:24px}#thread-workspace-v04 .brand{font-size:19px;letter-spacing:-.5px;padding:0 10px;font-weight:500}#thread-workspace-v04 nav{display:grid;gap:4px}#thread-workspace-v04 nav button{text-align:left;border:0;background:transparent;display:flex;justify-content:space-between}#thread-workspace-v04 nav button:disabled{opacity:.55;cursor:default}#thread-workspace-v04 .utilities{margin-top:auto;display:grid;gap:7px}#thread-workspace-v04 .workspace{min-width:0}#thread-workspace-v04 .topbar{min-height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px var(--space)}#thread-workspace-v04 .topbar span{font-size:12px;color:var(--secondary)}#thread-workspace-v04 .content{padding:28px var(--space);min-width:0}#thread-workspace-v04 h1{font-size:28px;line-height:1.2;font-weight:500;letter-spacing:-.8px;margin:0}#thread-workspace-v04 h2{font-size:15px;font-weight:500;margin:0}#thread-workspace-v04 p{margin:0}#thread-workspace-v04 .heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:28px}#thread-workspace-v04 .stack{display:grid;gap:28px}#thread-workspace-v04 .section-title{display:flex;gap:10px;align-items:center;margin-bottom:10px}#thread-workspace-v04 .count{font-size:12px;color:var(--secondary)}#thread-workspace-v04 .task{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:start;gap:9px;padding:12px 0;border-bottom:1px solid var(--line)}#thread-workspace-v04 .task input{margin:5px 0 0;accent-color:var(--green);width:15px;height:15px}#thread-workspace-v04 .task.done .task-label{text-decoration:line-through;color:var(--secondary)}#thread-workspace-v04 .task-label{display:block}#thread-workspace-v04 .context{padding:0;border:0;background:transparent;font-size:12px;color:var(--secondary);text-align:left}#thread-workspace-v04 .date{font-size:12px;color:var(--secondary);white-space:nowrap}#thread-workspace-v04 .late{color:var(--orange)}#thread-workspace-v04 .row{display:flex;justify-content:space-between;gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}#thread-workspace-v04 .inline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}#thread-workspace-v04 .badge{display:inline-flex;gap:5px;align-items:center;font-size:12px;white-space:nowrap}#thread-workspace-v04 .badge:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}#thread-workspace-v04 .active{color:var(--blue)}#thread-workspace-v04 .paused{color:var(--orange)}#thread-workspace-v04 .done-status{color:var(--green)}#thread-workspace-v04 .planned{color:var(--secondary)}#thread-workspace-v04 .review{background:var(--canvas);padding:16px;border-radius:8px}#thread-workspace-v04 .review .row:last-child{border-bottom:0}#thread-workspace-v04 .list-row{display:grid;grid-template-columns:minmax(140px,1.3fr) 90px minmax(100px,1fr) 54px;gap:15px;align-items:center;padding:17px 0;border-bottom:1px solid var(--line)}#thread-workspace-v04 .list-head{font-size:12px;color:var(--secondary);padding:10px 0}#thread-workspace-v04 .topic-link{padding:0;border:0;background:transparent;text-align:left;font-weight:500}#thread-workspace-v04 .board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}#thread-workspace-v04 .column{background:var(--canvas);padding:12px;border-radius:8px;min-height:260px}#thread-workspace-v04 .topic-card{padding:13px;background:var(--paper);border:1px solid var(--line);border-radius:7px;margin-top:12px;display:grid;gap:12px}#thread-workspace-v04 .topic-card select{width:100%;font-size:12px;border:1px solid var(--line);border-radius:5px;background:var(--paper);padding:4px}#thread-workspace-v04 .detail-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:22px}#thread-workspace-v04 .detail-layout.with-panel{grid-template-columns:minmax(0,1fr) minmax(235px,.85fr)}#thread-workspace-v04 details{border-bottom:1px solid var(--line);padding:0 0 18px;margin-bottom:20px}#thread-workspace-v04 summary{font-weight:500;cursor:pointer;margin-bottom:12px}#thread-workspace-v04 .continuation{background:var(--canvas);padding:16px;border-radius:8px;margin-bottom:22px;display:grid;gap:14px}#thread-workspace-v04 .external-panel{border-left:1px solid var(--line);padding-left:20px;min-width:0}#thread-workspace-v04 .external-panel h2{font-size:19px;margin:18px 0}#thread-workspace-v04 .external-panel .properties{display:grid;grid-template-columns:75px 1fr;gap:10px;font-size:12px;margin:20px 0}#thread-workspace-v04 .external-panel .comment{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}#thread-workspace-v04 .note-preview{padding:14px;background:var(--canvas);border-radius:7px}#thread-workspace-v04 .popover{background:var(--paper);border:1px solid var(--line);padding:12px;border-radius:8px;display:grid;gap:8px}#thread-workspace-v04 .capture{display:flex;gap:8px;margin:14px 0}#thread-workspace-v04 .capture input{min-width:0;flex:1;padding:8px;border:1px solid var(--line);border-radius:6px}#thread-workspace-v04 .empty{padding:30px 0;color:var(--secondary)}
+@media(max-width:800px){#thread-workspace-v04 .board{grid-template-columns:repeat(2,minmax(0,1fr))}#thread-workspace-v04 .detail-layout.with-panel{grid-template-columns:1fr}#thread-workspace-v04 .external-panel{border-left:0;border-top:1px solid var(--line);padding:20px 0 0}}
+@media(max-width:540px){#thread-workspace-v04 .shell{grid-template-columns:1fr}#thread-workspace-v04 .sidebar{padding:12px;gap:10px}#thread-workspace-v04 nav{display:flex;flex-wrap:wrap}#thread-workspace-v04 .sidebar .utilities{display:none}#thread-workspace-v04 .brand{padding:0}#thread-workspace-v04 .content{padding:22px 16px}#thread-workspace-v04 .list-row{grid-template-columns:minmax(0,1fr) 80px}#thread-workspace-v04 .list-row>*:nth-child(3){grid-column:1}#thread-workspace-v04 .list-head{display:none}#thread-workspace-v04 .board{grid-template-columns:1fr}#thread-workspace-v04 .task{grid-template-columns:20px minmax(0,1fr)}#thread-workspace-v04 .date{grid-column:2}#thread-workspace-v04 button{min-height:40px}}
+
+#thread-workspace-v04 { --accent: #c4b5fd; --accent-hover: #e7ddff; }
+#thread-workspace-v04 .today-head { margin-bottom: 20px; }
+#thread-workspace-v04 .today-head h1 { font-size: 34px; margin-top: 3px; }
+#thread-workspace-v04 .today-head button { background: var(--accent); color: #211637; border-color: var(--accent); font-weight: 600; }
+#thread-workspace-v04 .today-head button:hover { background: var(--accent-hover); }
+#thread-workspace-v04 .today-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; gap: 16px; }
+#thread-workspace-v04 .today-card { background: var(--canvas); border: 1px solid var(--line); border-radius: 16px; padding: 17px; min-width: 0; }
+#thread-workspace-v04 .today-card > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+#thread-workspace-v04 .today-card > header h2 { font-size: 16px; font-weight: 600; }
+#thread-workspace-v04 .today-card .count { border-radius: 20px; background: var(--selected); padding: 2px 8px; }
+#thread-workspace-v04 .focus-next { color: var(--accent-hover); margin-bottom: 16px; }
+#thread-workspace-v04 .today-side, #thread-workspace-v04 .task-groups { display: grid; gap: 16px; }
+#thread-workspace-v04 .task-groups .section-title { margin: 0; }
+#thread-workspace-v04 .task-groups h3 { font-size: 13px; font-weight: 500; margin: 0; color: var(--secondary); }
+#thread-workspace-v04 .task-groups .task { padding: 9px 0; }
+#thread-workspace-v04 .task-groups .task:last-child { border-bottom: 0; }
+#thread-workspace-v04 .today-side .side-entry { display: grid; gap: 5px; }
+#thread-workspace-v04 .today-side .review-meta { margin-top: 6px; }
+#thread-workspace-v04 .today-side .reminder-time { color: var(--accent); white-space: nowrap; }
+@media (max-width: 740px) { #thread-workspace-v04 .today-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 420px) { #thread-workspace-v04 .today-card { padding: 14px; } }
+
+#thread-workspace-v04 .active-topics { grid-column: 1 / -1; }
+#thread-workspace-v04 .active-topics > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+#thread-workspace-v04 .active-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+#thread-workspace-v04 .active-topic { background: var(--canvas); border: 1px solid var(--line); border-radius: 12px; padding: 13px; display: grid; gap: 5px; min-width: 0; }
+#thread-workspace-v04 .active-topic .topic-link { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+#thread-workspace-v04 .active-topic .topic-link:hover { color: var(--accent); }
+#thread-workspace-v04 .active-topic .topic-arrow { color: var(--accent); }
+#thread-workspace-v04 .pr-list { background: #171b22; border: 1px solid #3b4656; border-radius: 8px; padding: 10px; }
+#thread-workspace-v04 .pr-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 7px; }
+#thread-workspace-v04 .pr-open { display: inline-flex; align-items: center; background: #236b3a; color: #fff; border-radius: 20px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+#thread-workspace-v04 .pr-heading .topic-link { color: #dce8fa; overflow-wrap: anywhere; }
+#thread-workspace-v04 .pr-heading .topic-link:hover { color: var(--blue); text-decoration: underline; }
+#thread-workspace-v04 .pr-meta { margin-top: 7px; }
+#thread-workspace-v04 .reminder-entry { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; }
+#thread-workspace-v04 .reminder-clock { background: #332b49; color: #e3d6ff; border-radius: 8px; padding: 7px; font-size: 12px; font-variant-numeric: tabular-nums; }
+#thread-workspace-v04 .reminder-entry .context { margin-top: 4px; }
+#thread-workspace-v04 .note-preview { background: #2b2821; border-left: 3px solid #bd9c57; padding: 14px; display: grid; gap: 6px; }
+#thread-workspace-v04 .note-preview .note-label { color: #e5c98d; }
+#thread-workspace-v04 .note-preview h3 { margin: 0; font-size: 15px; }
+#thread-workspace-v04 .note-preview .note-body { color: #d5cabb; }
+@media (max-width: 540px) { #thread-workspace-v04 .active-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<div class="proposal"><span>DESIGN PROPOSAL · v0.4</span><span>Synthetic data · Nov 12, 2026 · No live sync</span></div>
+<div class="shell">
+<aside class="sidebar"><div class="brand">Thread <span class="meta">/ working title</span></div><nav aria-label="Workspace"><button data-screen="today" aria-current="page">Today</button><button disabled>Inbox</button><button data-screen="topics">Topics</button><button disabled>Notes</button><button disabled>Jira</button><button disabled>Pull Requests</button></nav><div class="utilities"><button id="tw-focus">◷ Focus · 25:00</button><div id="tw-focus-panel" hidden></div><span class="meta">Bachana · Personal workspace</span></div></aside>
+<main class="workspace"><div class="topbar"><span id="tw-breadcrumb">Workspace / Today</span><span>Comfortable · Dark</span></div><div class="content" id="tw-content">
+<div class="heading today-head">
+    <div><p class="meta">Thursday, November 12</p><h1>Today</h1></div>
+    <button data-capture>+ Add task</button>
+  </div>
+  <div id="tw-capture"></div>
+  <div class="today-grid">
+    <section class="active-topics">
+    <header><h2>Active topics</h2><span class="meta">2 active</span></header>
+    <div class="active-grid"><article class="active-topic">
+      <button class="topic-link" data-topic="qr">Implement QR payments <span class="topic-arrow" aria-hidden="true">↗</span></button>
+      <p class="meta">Next step · Test timeout handling</p>
+    </article><article class="active-topic">
+      <button class="topic-link" data-topic="bills">Improve bill payment errors <span class="topic-arrow" aria-hidden="true">↗</span></button>
+      <p class="meta">Next step · Review error copy</p>
+    </article></div>
+  </section>
+    <section class="today-card">
+      <header><h2>Tasks</h2><span class="count">4 open</span></header>
+      <div class="task-groups">
+        <section aria-label="Overdue">
+    <div class="section-title"><h3>Overdue</h3></div>
+    <div class="task "><input type="checkbox" data-task="codes" aria-label="Complete Confirm backend error codes" ><div><span class="task-label">Confirm backend error codes</span><button class="context" data-topic="qr">Implement QR payments</button></div><span class="date late">Due Nov 11</span></div>
+  </section>
+        <section aria-label="Planned today">
+    <div class="section-title"><h3>Planned today</h3></div>
+    <div class="task "><input type="checkbox" data-task="timeout" aria-label="Complete Test timeout and retry handling" ><div><span class="task-label">Test timeout and retry handling</span><button class="context" data-topic="qr">Implement QR payments</button></div><span class="date ">Today · 17:00</span></div><div class="task "><input type="checkbox" data-task="copy" aria-label="Complete Review payment error copy" ><div><span class="task-label">Review payment error copy</span><button class="context" data-topic="bills">Improve bill payment errors</button></div><span class="date ">Planned today</span></div>
+  </section>
+        <section aria-label="Earlier planned">
+    <div class="section-title"><h3>Earlier planned</h3></div>
+    <div class="task "><input type="checkbox" data-task="scan" aria-label="Complete Check camera permission fallback" ><div><span class="task-label">Check camera permission fallback</span><button class="context" data-topic="qr">Implement QR payments</button></div><span class="date ">Planned Nov 11</span></div>
+  </section>
+      </div>
+    </section>
+    <div class="today-side">
+      <section class="today-card">
+        <header><h2>Reminders</h2></header>
+        <div class="reminder-entry">
+    <time class="reminder-clock" datetime="16:30">16:30</time>
+    <div><p>Follow up on the backend contract</p><button class="context" data-topic="api">Confirm recurring payment API</button></div>
+  </div>
+      </section>
+      <section class="today-card">
+        <header><h2>Review requested</h2><span class="count">1</span></header>
+        <article class="pr-list">
+    <div class="pr-heading">
+      <span class="pr-open">Open</span>
+      <button class="topic-link" data-review>Handle QR payment timeout</button>
+      <span class="meta">#248</span>
+    </div>
+    <p class="meta pr-meta">android-payments · Alex</p>
+    <div class="inline pr-meta"><span class="badge done-status">CI passed</span><span class="meta">Cached 5 min ago</span></div>
+  </article>
+      </section>
+    </div>
+  </div>
+</div></main>
+</div>
+<script>
+(()=>{
+const root=document.getElementById('thread-workspace-v04');
+const area=root.querySelector('#tw-content');
+const topics=[{id:'qr',title:'Implement QR payments',status:'Active',next:'Test timeout handling',goal:'Let customers scan a QR code and complete a payment with clear recovery from errors.'},{id:'bills',title:'Improve bill payment errors',status:'Active',next:'Review error copy',goal:'Make payment failures clear and actionable.'},{id:'api',title:'Confirm recurring payment API',status:'Paused',next:'Wait for backend contract',goal:'Agree on a stable API contract.'},{id:'tests',title:'Add payment mapper tests',status:'Planned',next:'List edge cases',goal:'Cover the mapper’s important edge cases.'},{id:'receipt',title:'Update payment receipt',status:'Done',next:'Released and verified',goal:'Clarify receipt details.'}];
+const tasks=[{id:'timeout',title:'Test timeout and retry handling',topic:'qr',group:'today',due:'Today · 17:00',done:false},{id:'copy',title:'Review payment error copy',topic:'bills',group:'today',due:'Planned today',done:false},{id:'codes',title:'Confirm backend error codes',topic:'qr',group:'overdue',due:'Due Nov 11',done:false},{id:'scan',title:'Check camera permission fallback',topic:'qr',group:'earlier',due:'Planned Nov 11',done:false},{id:'scan-done',title:'Connect scanner result to payment flow',topic:'qr',group:'other',due:'',done:true}];
+let state={screen:'today',view:'list',topic:'qr',panel:null};
+const saved=window.openai?.widgetState?.privateContent;
+if(saved&&['today','topics','detail'].includes(saved.screen))state={...state,...saved,panel:null};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const badge=s=>`<span class="badge ${s==='Done'?'done-status':s.toLowerCase()}">${s}</span>`;
+const topic=id=>topics.find(t=>t.id===id)||topics[0];
+function persist(){window.openai?.setWidgetState?.({modelContent:{design:'Thread v0.4',screen:state.screen,view:state.view},privateContent:state})?.catch(()=>{});}
+function taskRow(t){return `<div class="task ${t.done?'done':''}"><input type="checkbox" data-task="${t.id}" aria-label="Complete ${esc(t.title)}" ${t.done?'checked':''}><div><span class="task-label">${esc(t.title)}</span>${t.topic?`<button class="context" data-topic="${t.topic}">${esc(topic(t.topic).title)}</button>`:'<span class="meta">Standalone · Inbox</span>'}</div><span class="date ${t.group==='overdue'?'late':''}">${t.due}</span></div>`;}
+function group(title, key) {
+  const items = tasks.filter(task => task.group === key);
+  return `<section aria-label="${title}">
+    <div class="section-title"><h3>${title}</h3></div>
+    ${items.map(taskRow).join('')}
+  </section>`;
+}
+function activeTopics() {
+  const active = topics.filter(item => item.status === 'Active');
+  if (!active.length) return '';
+  return `<section class="active-topics">
+    <header><h2>Active topics</h2><span class="meta">${active.length} active</span></header>
+    <div class="active-grid">${active.map(item => `<article class="active-topic">
+      <button class="topic-link" data-topic="${item.id}">${esc(item.title)} <span class="topic-arrow" aria-hidden="true">↗</span></button>
+      <p class="meta">Next step · ${esc(item.next)}</p>
+    </article>`).join('')}</div>
+  </section>`;
+}
+function pullRequestRow() {
+  return `<article class="pr-list">
+    <div class="pr-heading">
+      <span class="pr-open">Open</span>
+      <button class="topic-link" data-review>Handle QR payment timeout</button>
+      <span class="meta">#248</span>
+    </div>
+    <p class="meta pr-meta">android-payments · Alex</p>
+    <div class="inline pr-meta"><span class="badge done-status">CI passed</span><span class="meta">Cached 5 min ago</span></div>
+  </article>`;
+}
+function reminderEntry() {
+  return `<div class="reminder-entry">
+    <time class="reminder-clock" datetime="16:30">16:30</time>
+    <div><p>Follow up on the backend contract</p><button class="context" data-topic="api">Confirm recurring payment API</button></div>
+  </div>`;
+}
+function notePreview() {
+  return `<article class="note-preview">
+    <span class="meta note-label">Note</span>
+    <h3>QR payment decisions</h3>
+    <p class="note-body">Keep the scanned context after a timeout. Confirm whether retry needs a new request ID.</p>
+  </article>`;
+}
+function today() {
+  const pending = tasks.filter(task => task.group !== 'other' && !task.done).length;
+  return `<div class="heading today-head">
+    <div><p class="meta">Thursday, November 12</p><h1>Today</h1></div>
+    <button data-capture>+ Add task</button>
+  </div>
+  <div id="tw-capture"></div>
+  <div class="today-grid">
+    ${activeTopics()}
+    <section class="today-card">
+      <header><h2>Tasks</h2><span class="count">${pending} open</span></header>
+      <div class="task-groups">
+        ${group('Overdue', 'overdue')}
+        ${group('Planned today', 'today')}
+        ${group('Earlier planned', 'earlier')}
+      </div>
+    </section>
+    <div class="today-side">
+      <section class="today-card">
+        <header><h2>Reminders</h2></header>
+        ${reminderEntry()}
+      </section>
+      <section class="today-card">
+        <header><h2>Review requested</h2><span class="count">1</span></header>
+        ${pullRequestRow()}
+      </section>
+    </div>
+  </div>`;
+}
+function progress(t){const tt=tasks.filter(a=>a.topic===t.id);return tt.length?`${tt.filter(a=>a.done).length}/${tt.length}`:'0/0';}
+function listing(){return `<div class="heading"><div><p class="meta">Your work, in context</p><h1>Topics</h1></div><div class="inline"><button data-view="list" aria-pressed="${state.view==='list'}">List</button><button data-view="board" aria-pressed="${state.view==='board'}">Board</button></div></div>${state.view==='list'?`<div class="list-row list-head"><span>Topic</span><span>Status</span><span>Next step</span><span>Tasks</span></div>${topics.map(t=>`<div class="list-row"><button class="topic-link" data-topic="${t.id}">${t.title}</button>${badge(t.status)}<span class="meta">${t.next}</span><span class="meta">${progress(t)}</span></div>`).join('')}`:`<div class="board">${['Planned','Active','Paused','Done'].map(s=>`<section class="column" data-column="${s}"><div class="inline">${badge(s)}<span class="count">${topics.filter(t=>t.status===s).length}</span></div>${topics.filter(t=>t.status===s).map(t=>`<article class="topic-card" draggable="true" data-drag="${t.id}"><button class="topic-link" data-topic="${t.id}">${t.title}</button><p class="meta">${t.next}</p><p class="meta">${progress(t)} personal tasks</p><select data-status="${t.id}" aria-label="Status for ${t.title}">${['Planned','Active','Paused','Done'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}</select></article>`).join('')}</section>`).join('')}</div>`}`;}
+function external(){const pr=state.panel==='pr';return `<aside class="external-panel" aria-label="${pr?'Pull request':'Jira issue'} details"><div class="inline"><span class="meta">${pr?'PULL REQUEST · #248':'JIRA · PAY-142'}</span><button class="quiet" data-close aria-label="Close details">Close ×</button></div><h2>${pr?'Handle QR payment timeout':'Handle QR payment response'}</h2>${pr?'<span class="pr-open">Open</span>':badge('Active')}<div class="properties"><span class="meta">${pr?'Author':'Assignee'}</span><span>${pr?'Alex':'Bachana'}</span><span class="meta">${pr?'Checks':'Priority'}</span><span>${pr?'All checks passed':'Medium'}</span></div><p class="meta">Cached snapshot · Refreshed 5 min ago</p><hr><h3>Description</h3><p>${pr?'Adds a retry path for interrupted QR payments and maps timeout errors to a clear message.':'Map payment responses to success, pending and recoverable error states. Preserve the scanned payment context when retrying.'}</p><div class="comment"><p class="meta">Alex · 10:45</p><p>Timeout should keep the payment context so the customer can retry.</p></div><div class="comment"><p class="meta">Source action</p><button disabled>Open in ${pr?'GitHub':'Jira'} ↗</button><p class="meta">Synthetic item · no source URL</p></div></aside>`;}
+function detail(){const t=topic(state.topic);return `<div class="heading"><div><button class="context" data-screen="topics">‹ Topics</button><h1>${t.title}</h1></div><select data-status="${t.id}" aria-label="Topic status">${['Planned','Active','Paused','Done'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}</select></div><p style="margin-bottom:24px" class="meta">${t.goal}</p><div class="detail-layout ${state.panel?'with-panel':''}"><div><div class="continuation"><div><p class="meta">Where I left off</p><p>${t.id==='qr'?'Scanner flow is connected. Response mapping is ready for edge-case testing.':t.next}</p></div><div><p class="meta">Next step</p><p>${t.next}</p></div></div><details open><summary>Tasks · ${progress(t)}</summary>${tasks.filter(a=>a.topic===t.id).map(taskRow).join('')||'<p class="meta">No tasks yet.</p>'}<button class="context" data-capture>+ Add task</button><div id="tw-capture"></div></details><details open><summary>Notes · ${t.id==='qr'?1:0}</summary>${t.id==='qr'?notePreview():'<p class="meta">No linked notes.</p>'}</details><details open><summary>Jira · ${t.id==='qr'?1:0}</summary>${t.id==='qr'?'<button class="topic-link" data-external="jira">PAY-142 · Handle QR payment response</button><p class="meta">In progress · Cached 5 min ago</p>':'<p class="meta">No linked Jira tickets.</p>'}</details><details open><summary>Pull requests · ${t.id==='qr'?1:0}</summary>${t.id==='qr'?pullRequestRow():'<p class="meta">No linked pull requests.</p>'}</details><details><summary>Reminders · ${t.id==='api'?1:0}</summary>${t.id==='api'?reminderEntry():'<p>No reminders.</p>'}</details></div>${state.panel?external():''}</div>`;}
+function render(){area.innerHTML=state.screen==='today'?today():state.screen==='topics'?listing():detail();root.querySelector('#tw-breadcrumb').textContent=state.screen==='detail'?'Topics / '+topic(state.topic).title:'Workspace / '+(state.screen==='today'?'Today':'Topics');root.querySelectorAll('[data-screen]').forEach(b=>{if(b.closest('nav'))b.setAttribute('aria-current',b.dataset.screen===(state.screen==='detail'?'topics':state.screen)?'page':'false');});}
+root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.screen){state.screen=b.dataset.screen;state.panel=null;}else if(b.dataset.view){state.view=b.dataset.view;}else if(b.dataset.topic){state.screen='detail';state.topic=b.dataset.topic;state.panel=null;}else if(b.hasAttribute('data-review')){state.screen='detail';state.topic='qr';state.panel='pr';}else if(b.dataset.external){state.panel=b.dataset.external;}else if(b.hasAttribute('data-close')){state.panel=null;}else if(b.hasAttribute('data-capture')){const box=root.querySelector('#tw-capture');box.innerHTML='<form class="capture"><input aria-label="Task title" placeholder="What needs to be done?" required><button type="submit">Add</button></form><p class="meta">'+(state.screen==='detail'?'Linked to this Topic':'Standalone · Inbox · Planned today')+'</p>';box.querySelector('input').focus();return;}else if(b.id==='tw-focus'){const p=root.querySelector('#tw-focus-panel');p.hidden=!p.hidden;p.innerHTML='<div class="popover"><p>Focus · 25 min</p><p class="meta">Break · 5 min</p><p class="meta">Control placement preview</p></div>';return;}else return;persist();render();});
+root.addEventListener('submit',e=>{e.preventDefault();const input=e.target.querySelector('input');if(!input?.value.trim())return;tasks.push({id:'new-'+tasks.length,title:input.value.trim(),topic:state.screen==='detail'?state.topic:null,group:state.screen==='detail'?'other':'today',due:state.screen==='detail'?'':'Planned today',done:false});render();});
+root.addEventListener('change',e=>{if(e.target.dataset.task){tasks.find(t=>t.id===e.target.dataset.task).done=e.target.checked;render();}if(e.target.dataset.status){topic(e.target.dataset.status).status=e.target.value;render();}});
+root.addEventListener('dragstart',e=>{const card=e.target.closest('[data-drag]');if(card)e.dataTransfer.setData('text/plain',card.dataset.drag);});root.addEventListener('dragover',e=>{if(e.target.closest('[data-column]'))e.preventDefault();});root.addEventListener('drop',e=>{const col=e.target.closest('[data-column]');if(!col)return;e.preventDefault();const id=e.dataTransfer.getData('text/plain');const t=topics.find(t=>t.id===id);if(t){t.status=col.dataset.column;render();}});
+window.addEventListener('openai:set_globals',e=>{const s=e.detail?.globals?.widgetState?.privateContent;if(s&&['today','topics','detail'].includes(s.screen)){state={...state,...s};render();}});
+render();
+})();
+</script>
+</div>
+
+</body></html>
