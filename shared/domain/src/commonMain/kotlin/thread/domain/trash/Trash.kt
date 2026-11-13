@@ -13,10 +13,13 @@ import thread.domain.topic.TopicId
 import thread.domain.topic.TopicStatus
 import thread.domain.topic.visibleStatuses
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspaceEdit
 import thread.domain.workspace.WorkspaceWrite
+import thread.domain.workspace.referencesOf
 
 /*
  * Trash (D42, D43, adr/ADR-012-trash-and-search.md). A Topic goes to Trash with one write: its own `deleted` flag.
@@ -27,8 +30,8 @@ import thread.domain.workspace.WorkspaceWrite
 
 /**
  * The workspace as every view shows it: each Topic in Trash is taken out, with its Tasks, the Reminders on it or on
- * those Tasks, and its Note links. Everything else stays as stored, Trash flags included, so the Task, Note and
- * Reminder rules keep working on it.
+ * those Tasks, and its Note, Jira and pull request links. Everything else stays as stored, Trash flags included, so
+ * the Task, Note and Reminder rules keep working on it.
  */
 fun visibleWorkspace(data: WorkspaceData): WorkspaceData {
     val trashed =
@@ -47,6 +50,7 @@ fun visibleWorkspace(data: WorkspaceData): WorkspaceData {
         tasks = data.tasks.filterNot { it.id.value in hiddenTasks },
         reminders = data.reminders.filterNot { goesWithTopic(it, trashed, hiddenTasks) },
         noteLinks = data.noteLinks.filterNot { it.topicId in trashed },
+        externalLinks = data.externalLinks.filterNot { it.topicId in trashed },
     )
 }
 
@@ -141,12 +145,16 @@ sealed interface TrashEntry {
     val title: String
     val deletedAtMillis: Long?
 
-    /** A Topic and what went to Trash with it. [notes] are the live Notes whose link comes back on restore. */
+    /**
+     * A Topic and what went to Trash with it. [notes] are the live Notes whose link comes back on restore, and
+     * [externals] the Jira tickets and pull requests whose link does.
+     */
     data class TopicEntry(
         val topic: Topic,
         val tasks: List<Task>,
         val reminders: List<Reminder>,
         val notes: List<NoteSummary>,
+        val externals: List<ExternalReference> = emptyList(),
     ) : TrashEntry {
         override val kind = TrashKind.Topic
         override val id = topic.id.value
@@ -199,6 +207,7 @@ fun trashEntries(data: WorkspaceData): List<TrashEntry> {
                 tasks = tasks,
                 reminders = bundleReminders(topic.id, tasks, data),
                 notes = liveNotes(data.notes).filter { note -> topic.id in linkedTopicIds(note.id, data.noteLinks) },
+                externals = ExternalProvider.entries.flatMap { referencesOf(topic.id, it, data) },
             )
         }
     val taskEntries =

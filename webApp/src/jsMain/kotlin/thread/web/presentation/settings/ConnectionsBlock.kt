@@ -1,0 +1,393 @@
+package thread.web.presentation.settings
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.web.attributes.ATarget
+import org.jetbrains.compose.web.attributes.AttrsScope
+import org.jetbrains.compose.web.attributes.ButtonType
+import org.jetbrains.compose.web.attributes.disabled
+import org.jetbrains.compose.web.attributes.onSubmit
+import org.jetbrains.compose.web.attributes.target
+import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.Button
+import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.EmailInput
+import org.jetbrains.compose.web.dom.Form
+import org.jetbrains.compose.web.dom.Label
+import org.jetbrains.compose.web.dom.P
+import org.jetbrains.compose.web.dom.PasswordInput
+import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.TextInput
+import thread.domain.external.ConnectionStoreException
+import thread.domain.external.ExternalProblem
+import thread.domain.external.JiraCloudId
+import thread.domain.external.JiraConnection
+import thread.domain.external.JiraSite
+import thread.domain.external.SecretText
+import thread.web.platform.nowMillis
+import thread.web.presentation.ConfirmDialog
+import thread.web.presentation.Icon
+import thread.web.presentation.IconView
+import thread.web.presentation.LocalToasts
+import thread.web.presentation.external.JiraModel
+import thread.web.presentation.external.orFallback
+import thread.web.presentation.rememberOnline
+import thread.web.presentation.tasks.focusById
+import kotlin.math.ceil
+
+/**
+ * Settings "Connections" (v3 settings.js `connections`, adr/ADR-013-jira-in-the-workspace.md). Jira connects with a
+ * token form instead of v3's provider sign-in (owner-review-queue Q3, provisional). The token goes only into this
+ * browser profile and only to Jira; it is never shown again or read back into a field. GitHub comes in Phase 11.
+ */
+@Composable
+internal fun ConnectionsBlock(jira: JiraModel) {
+    SettingsBlock("connections", "Connections", "Jira and GitHub are read-only in v1.") {
+        if (!jira.checked) {
+            P({ classes("muted") }) { Text("Reading this device…") }
+            return@SettingsBlock
+        }
+        JiraRow(jira)
+        GitHubRow(jira)
+        SavedCopiesRow(jira)
+        if (jira.isSynthetic) {
+            P({ classes("pref__hint") }) {
+                Text("Fixture mode: these SYNTHETIC connections live in memory only. Reloading the page restores them.")
+            }
+        }
+        P({ classes("callout") }) {
+            IconView(Icon.Lock, 15)
+            Text(
+                " Tokens stay in this browser profile and go only to Jira or GitHub. They are never synced, logged or sent " +
+                    "to Thread's server. Use a read-only token.",
+            )
+        }
+    }
+}
+
+@Composable
+private fun JiraRow(jira: JiraModel) {
+    val toasts = LocalToasts.current
+    val scope = rememberCoroutineScope()
+    val online by rememberOnline()
+    var formOpen by remember { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf(false) }
+    val site = jira.site
+    val problem = jira.problem
+    val expired = site != null && problem == ExternalProblem.Unauthorized
+    val (statusOn, statusIcon, status) =
+        when {
+            site == null -> Triple(false, Icon.Unlink, "Not connected")
+            expired -> Triple(false, Icon.Lock, "Access expired. Replace the token to refresh.")
+            !online -> Triple(true, Icon.CloudOff, "Connected, offline. Saved copies stay readable.")
+            problem is ExternalProblem.RateLimited && problem.retryAtMillis > nowMillis() -> {
+                val minutes = ceil((problem.retryAtMillis - nowMillis()) / 60_000.0).toInt().coerceAtLeast(1)
+                val next = if (minutes == 1) "about a minute" else "about $minutes minutes"
+                Triple(true, Icon.Clock, "Connected. Jira is limiting requests; next refresh in $next.")
+            }
+            problem == ExternalProblem.Forbidden ->
+                Triple(
+                    true,
+                    Icon.Lock,
+                    "Connected, but Jira refused a request. Check the token's permissions.",
+                )
+            else -> Triple(true, Icon.Check, "Connected to ${site.site.host}, read-only")
+        }
+    Div({ classes("conn") }) {
+        Span({ classes("conn__icon") }) { IconView(Icon.Jira, 20) }
+        Div({ classes("conn__body") }) {
+            P({ classes("conn__name") }) { Text(jira.name) }
+            P({
+                classes("conn__st")
+                if (statusOn) classes("is-on")
+                id("jira-status")
+            }) {
+                IconView(statusIcon, 14)
+                Text(" $status")
+            }
+            P({ classes("pref__hint") }) { Text("Assigned tickets and search. Descriptions and comments are kept on this device only.") }
+        }
+        Button({
+            classes("btn", if (site == null || expired) "btn--line" else "btn--text")
+            type(ButtonType.Button)
+            id("jira-connect")
+            attr("aria-expanded", formOpen.toString())
+            attr("aria-controls", "jira-form")
+            onClick {
+                formOpen = !formOpen
+                if (formOpen) scope.launch { focusById("jira-site") }
+            }
+        }) {
+            Text(
+                when {
+                    site == null -> "Connect"
+                    expired -> "Reconnect"
+                    else -> "Replace token"
+                },
+            )
+        }
+        if (site != null) {
+            Button({
+                classes("btn", "btn--text", "btn--danger-text")
+                type(ButtonType.Button)
+                id("jira-disconnect")
+                onClick { confirming = true }
+            }) { Text("Disconnect") }
+        }
+    }
+    if (formOpen) {
+        JiraForm(jira, replacing = site != null) {
+            formOpen = false
+            scope.launch {
+                delay(16)
+                focusById("jira-connect")
+            }
+        }
+    }
+    if (confirming) {
+        ConfirmDialog(
+            title = "Disconnect ${jira.name}?",
+            body = "Topic links stay. Jira lists and saved copies hide until you connect again.",
+            confirmLabel = "Disconnect",
+            danger = true,
+        ) { ok ->
+            confirming = false
+            if (!ok) return@ConfirmDialog
+            scope.launch {
+                try {
+                    jira.services.connections.clearJira()
+                    formOpen = false
+                    jira.connectionChanged()
+                    toasts.show("${jira.name} disconnected")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    toasts.show("Could not change this device. Jira is still connected.")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JiraForm(
+    jira: JiraModel,
+    replacing: Boolean,
+    onDone: () -> Unit,
+) {
+    val toasts = LocalToasts.current
+    val scope = rememberCoroutineScope()
+    var site by remember { mutableStateOf("") }
+    var cloudId by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
+    var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var saving by remember { mutableStateOf(false) }
+    // A new token for the same site: the site, Cloud ID and e-mail stay as saved. The token is never read back.
+    LaunchedEffect(Unit) {
+        orFallback(null) { jira.services.connections.jira() }?.let {
+            site = it.site.host
+            cloudId = it.cloudId.value
+            email = it.email
+        }
+    }
+    val tenantInfo = JiraSite.parse(site)?.let { "https://${it.host}/_edge/tenant_info" }
+    Form(attrs = {
+        classes("cform")
+        id("jira-form")
+        attr("aria-label", "Jira connection")
+        attr("autocomplete", "off")
+        onSubmit { event ->
+            event.preventDefault()
+            if (saving) return@onSubmit
+            val parsedSite = JiraSite.parse(site)
+            val parsedCloud = JiraCloudId.parse(cloudId)
+            val found = mutableMapOf<String, String>()
+            if (parsedSite == null) found["jira-site"] = "Type a host that ends with .atlassian.net."
+            if (parsedCloud == null) found["jira-cloud"] = "Type the Cloud ID, a UUID."
+            if (email.isBlank() || '@' !in email) found["jira-email"] = "Type the account e-mail."
+            if (token.isBlank()) found["jira-token"] = "Paste the API token."
+            errors = found
+            if (parsedSite == null || parsedCloud == null || found.isNotEmpty()) {
+                found.keys.firstOrNull()?.let { first -> scope.launch { focusById(first) } }
+                return@onSubmit
+            }
+            val connection = JiraConnection(parsedSite, parsedCloud, email.trim(), SecretText(token.trim()))
+            token = ""
+            saving = true
+            scope.launch {
+                try {
+                    jira.services.connections.saveJira(connection)
+                    jira.connectionChanged()
+                    toasts.show("${jira.name} connected, read-only. The token is saved in this browser profile only.")
+                    onDone()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ConnectionStoreException) {
+                    toasts.show("Could not save on this device. Nothing changed.")
+                } catch (e: Throwable) {
+                    toasts.show("Something went wrong on this device. Nothing changed.")
+                } finally {
+                    saving = false
+                }
+            }
+        }
+    }) {
+        P({ classes("cform__h") }) { Text(if (replacing) "Replace the Jira token" else "Connect Jira") }
+        Div({ classes("fgrid") }) {
+            FormField("jira-site", "Site", errors["jira-site"], "Your Jira Cloud host, such as example.atlassian.net.") {
+                TextInput(site) {
+                    classes("input")
+                    id("jira-site")
+                    attr("spellcheck", "false")
+                    attr("autocapitalize", "off")
+                    fieldAttrs("jira-site", errors["jira-site"])
+                    onInput { site = it.value }
+                }
+            }
+            FormField("jira-cloud", "Cloud ID", errors["jira-cloud"], "The cloudId value on the site's tenant info page.") {
+                TextInput(cloudId) {
+                    classes("input")
+                    id("jira-cloud")
+                    attr("spellcheck", "false")
+                    attr("autocapitalize", "off")
+                    fieldAttrs("jira-cloud", errors["jira-cloud"])
+                    onInput { cloudId = it.value }
+                }
+                if (tenantInfo != null) {
+                    A(tenantInfo, {
+                        classes("lnk", "field__hint")
+                        target(ATarget.Blank)
+                        attr("rel", "noopener noreferrer")
+                    }) {
+                        IconView(Icon.External, 14)
+                        Text(" Open the tenant info in a new tab")
+                    }
+                }
+            }
+            FormField("jira-email", "Account e-mail", errors["jira-email"], "The Atlassian account the token belongs to.") {
+                EmailInput(email) {
+                    classes("input")
+                    id("jira-email")
+                    attr("spellcheck", "false")
+                    fieldAttrs("jira-email", errors["jira-email"])
+                    onInput { email = it.value }
+                }
+            }
+            FormField("jira-token", "API token", errors["jira-token"], "A read-only token. It is never shown again after saving.") {
+                PasswordInput(token) {
+                    classes("input")
+                    id("jira-token")
+                    attr("autocomplete", "off")
+                    attr("spellcheck", "false")
+                    fieldAttrs("jira-token", errors["jira-token"])
+                    onInput { token = it.value }
+                }
+            }
+        }
+        Div({ classes("cform__acts") }) {
+            Button({
+                classes("btn", "btn--primary")
+                type(ButtonType.Submit)
+                id("jira-save")
+                if (saving) disabled()
+            }) { Text(if (replacing) "Save the new token" else "Save and connect") }
+            Button({
+                classes("btn", "btn--text")
+                type(ButtonType.Button)
+                onClick {
+                    token = ""
+                    onDone()
+                }
+            }) { Text("Cancel") }
+        }
+    }
+}
+
+/** GitHub connects in Phase 11. Until then the row only says whether a token from the M1 probe is on this device. */
+@Composable
+private fun GitHubRow(jira: JiraModel) {
+    var saved by remember { mutableStateOf(false) }
+    LaunchedEffect(jira.version) { saved = orFallback(null) { jira.services.connections.gitHub() } != null }
+    Div({ classes("conn") }) {
+        Span({ classes("conn__icon") }) { IconView(Icon.Pr, 20) }
+        Div({ classes("conn__body") }) {
+            P({ classes("conn__name") }) { Text(if (jira.isSynthetic) "GitHub (synthetic)" else "GitHub") }
+            P({ classes("conn__st") }) {
+                IconView(if (saved) Icon.Device else Icon.Unlink, 14)
+                Text(if (saved) " Token saved on this device. Pull requests come in the next build phase." else " Not connected")
+            }
+            P({ classes("pref__hint") }) { Text("Your open pull requests and review requests.") }
+        }
+    }
+}
+
+@Composable
+private fun SavedCopiesRow(jira: JiraModel) {
+    val toasts = LocalToasts.current
+    val scope = rememberCoroutineScope()
+    Div({ classes("conn") }) {
+        Span({ classes("conn__icon") }) { IconView(Icon.Device, 20) }
+        Div({ classes("conn__body") }) {
+            P({ classes("conn__name") }) { Text("Saved copies") }
+            P({ classes("pref__hint") }) {
+                Text("Tickets and lists saved on this device for offline reading: ${jira.saved.size} saved. Connections stay.")
+            }
+        }
+        Button({
+            classes("btn", "btn--text", "btn--danger-text")
+            type(ButtonType.Button)
+            id("delete-saved")
+            onClick {
+                scope.launch {
+                    try {
+                        jira.services.deleteSavedCopies()
+                        jira.connectionChanged()
+                        toasts.show("Saved copies deleted from this device.")
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Throwable) {
+                        toasts.show("Could not delete the saved copies on this device.")
+                    }
+                }
+            }
+        }) { Text("Delete saved copies") }
+    }
+}
+
+@Composable
+private fun FormField(
+    id: String,
+    label: String,
+    error: String?,
+    hint: String,
+    input: @Composable () -> Unit,
+) {
+    Div({ classes("field") }) {
+        Label(id, { classes("field__label") }) { Text(label) }
+        input()
+        P({
+            classes("field__hint")
+            if (error != null) classes("field__err")
+            id("$id-hint")
+        }) { Text(error ?: hint) }
+    }
+}
+
+private fun AttrsScope<*>.fieldAttrs(
+    id: String,
+    error: String?,
+) {
+    attr("aria-describedby", "$id-hint")
+    if (error != null) attr("aria-invalid", "true")
+}

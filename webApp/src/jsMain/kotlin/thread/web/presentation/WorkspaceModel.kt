@@ -34,6 +34,7 @@ import thread.domain.task.progressOf
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
 import thread.domain.topic.StatusId
+import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicId
 import thread.domain.topic.TopicStatus
@@ -49,6 +50,8 @@ import thread.domain.trash.trashEntries
 import thread.domain.trash.visibleWorkspace
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspaceEdit
@@ -59,11 +62,17 @@ import thread.domain.workspace.copyNoteLinks
 import thread.domain.workspace.createNoteWrites
 import thread.domain.workspace.createReminderWrite
 import thread.domain.workspace.createTaskWrite
+import thread.domain.workspace.createTopicLinkedTo
 import thread.domain.workspace.discardNote
 import thread.domain.workspace.discardTask
 import thread.domain.workspace.dismissReminder
+import thread.domain.workspace.linkExternal
+import thread.domain.workspace.linkedTopicIdsOf
+import thread.domain.workspace.referencesOf
 import thread.domain.workspace.savePrefs
 import thread.domain.workspace.seedWrites
+import thread.domain.workspace.setExternalLinks
+import thread.domain.workspace.unlinkExternal
 import thread.domain.workspace.workspaceSaveStates
 import thread.web.presentation.notes.notePlace
 import thread.web.presentation.topics.topicPlace
@@ -284,6 +293,26 @@ internal class WorkspaceModel(
         return TopicCreation.Created(topic)
     }
 
+    /**
+     * v3 "Create Topic from ticket": a Topic named after the ticket (cut to the name limit), "Created from KEY." where
+     * it left off, linked to [reference] in the same write.
+     */
+    fun createTopicLinkedTo(
+        title: String,
+        reference: ExternalReference,
+    ): TopicCreation {
+        val current = data
+        if (current == null || statuses.isEmpty()) return TopicCreation.Refused(EditProblem.NotReady)
+        val slot = maxOf(stored?.topics?.size ?: 0, lastColorSlot + 1)
+        val topic =
+            newTopic(TopicId(newId("t-")), title.trim().take(TOPIC_NAME_MAX_LENGTH), statuses, slot)
+                ?.copy(leftOff = "Created from ${reference.key}.")
+                ?: return TopicCreation.Refused(EditProblem.BlankName)
+        lastColorSlot = slot
+        store.write(createTopicLinkedTo(topic, reference, current))
+        return TopicCreation.Created(topic)
+    }
+
     fun newStatusId(): StatusId = StatusId(newId("s-"))
 
     /** Creates a Task. Without a Topic it waits in Inbox (D38: also when it is planned for today). */
@@ -340,6 +369,37 @@ internal class WorkspaceModel(
     ) {
         copyNoteLinks(from, to, stored?.noteLinks.orEmpty()).takeIf { it.isNotEmpty() }?.let(store::write)
     }
+
+    /** The records of [provider] linked to [topicId], in link order. Nothing while the Topic is in Trash. */
+    fun externalsOf(
+        topicId: TopicId,
+        provider: ExternalProvider,
+    ): List<ExternalReference> = data?.let { referencesOf(topicId, provider, it) }.orEmpty()
+
+    /** The Topics [referenceId] is linked to, in Topic order. Topics in Trash are left out. */
+    fun topicsLinkedTo(referenceId: String): List<Topic> {
+        val ids = linkedTopicIdsOf(referenceId, data?.externalLinks.orEmpty()).toSet()
+        return if (ids.isEmpty()) emptyList() else topics.filter { it.id in ids }
+    }
+
+    /**
+     * Makes [topicIds] the Topics of [reference] (v3 "Link to Topic"). Links to Topics in Trash stay as they are.
+     * Returns the edit for Undo, or null when nothing changed.
+     */
+    fun setTopicsOf(
+        reference: ExternalReference,
+        topicIds: List<TopicId>,
+    ): WorkspaceEdit? = data?.let { apply(setExternalLinks(reference, topicIds, it)) }
+
+    fun linkToTopic(
+        reference: ExternalReference,
+        topicId: TopicId,
+    ): WorkspaceEdit? = data?.let { apply(linkExternal(reference, topicId, it)) }
+
+    fun unlinkFromTopic(
+        reference: ExternalReference,
+        topicId: TopicId,
+    ): WorkspaceEdit? = data?.let { apply(unlinkExternal(reference, topicId, it)) }
 
     /** Everything in Trash, newest deletion first. */
     val trash: List<TrashEntry>
@@ -476,6 +536,21 @@ internal class WorkspaceModel(
                     "The link between “$title” and $topic was not saved. The server refused the change.",
                     NoteSaveState.SyncFailed,
                     notePlace(write.link.noteId),
+                )
+            }
+            is WorkspaceWrite.PutExternalRef ->
+                SyncProblem(
+                    "The link to ${write.reference.key} was not saved. The server refused the change.",
+                    NoteSaveState.SyncFailed,
+                    null,
+                )
+            is WorkspaceWrite.PutExternalLink -> {
+                val topic = storedTopic(write.link.topicId.value)
+                val key = write.link.referenceId.substringAfterLast('~')
+                SyncProblem(
+                    "The link between $key and ${topic?.name?.let { "“$it”" } ?: "a Topic"} was not saved. The server refused the change.",
+                    NoteSaveState.SyncFailed,
+                    topic?.let(::topicPlace),
                 )
             }
             is WorkspaceWrite.DeleteForever ->

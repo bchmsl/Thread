@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.update
 import thread.data.local.newJsObject
 import thread.domain.account.AccountId
+import thread.domain.note.LinkHref
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
 import thread.domain.note.NoteTopicLink
@@ -30,6 +31,9 @@ import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicId
 import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
+import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
@@ -61,6 +65,10 @@ class WorkspaceReadException(
  * - `users/{uid}/topicNoteLinks/{topicId}_{noteId}`: `{topicId, noteId, linked, updatedAt, schemaVersion: 1}`.
  *   Unlinking writes `linked: false`; the document stays.
  * - Topics also carry `deletedAt` while in Trash (adr/ADR-012-trash-and-search.md).
+ * - `users/{uid}/externalRefs/{provider~instance~key}`: `{provider, instance, key, url, updatedAt, schemaVersion: 1}`.
+ *   Ids and the canonical URL only, never a title or other content (adr/ADR-013-jira-in-the-workspace.md).
+ * - `users/{uid}/topicExternalLinks/{topicId}_{refId}`: `{topicId, refId, linked, updatedAt, schemaVersion: 1}`.
+ *   Unlinking writes `linked: false`; nothing is deleted and the external record is never changed.
  * - Delete forever replaces a Topic, Task, Reminder or Note document with the tombstone `{purgedAt, schemaVersion: 1}`.
  *   The rules refuse every later write to it, so a stale edit from another device cannot bring it back. Tombstones
  *   are left out of [WorkspaceData]; purged Notes are listed in [WorkspaceData.purgedNotes] so their versions can be
@@ -98,12 +106,16 @@ class FirestoreWorkspaceStore internal constructor(
             var reminders: QuerySnapshot? = null
             var notes: QuerySnapshot? = null
             var links: QuerySnapshot? = null
+            var externalRefs: QuerySnapshot? = null
+            var externalLinks: QuerySnapshot? = null
             var prefs: DocumentSnapshot? = null
             val emitWhenComplete = {
-                val collections = listOf(statuses, topics, tasks, reminders, notes, links)
+                val collections = listOf(statuses, topics, tasks, reminders, notes, links, externalRefs, externalLinks)
                 val p = prefs
                 if (p != null && collections.all { it != null }) {
-                    trySend(toWorkspaceData(Snapshots(statuses!!, topics!!, tasks!!, reminders!!, notes!!, links!!, p)))
+                    val snapshots =
+                        Snapshots(statuses!!, topics!!, tasks!!, reminders!!, notes!!, links!!, externalRefs!!, externalLinks!!, p)
+                    trySend(toWorkspaceData(snapshots))
                 }
             }
             val stop = { error: FirestoreError ->
@@ -142,6 +154,16 @@ class FirestoreWorkspaceStore internal constructor(
                     links = it
                     emitWhenComplete()
                 }, stop)
+            val stopExternalRefs =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, EXTERNAL_REFS), options, {
+                    externalRefs = it
+                    emitWhenComplete()
+                }, stop)
+            val stopExternalLinks =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, EXTERNAL_LINKS), options, {
+                    externalLinks = it
+                    emitWhenComplete()
+                }, stop)
             val stopPrefs =
                 onDocumentSnapshot(prefsRef(), options, {
                     prefs = it
@@ -154,6 +176,8 @@ class FirestoreWorkspaceStore internal constructor(
                 stopReminders()
                 stopNotes()
                 stopLinks()
+                stopExternalRefs()
+                stopExternalLinks()
                 stopPrefs()
             }
         }.conflate()
@@ -172,6 +196,8 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutReminder -> reminderData(write.reminder, write.isNew, write.before)
                     is WorkspaceWrite.PutNote -> noteData(write.note, write.isNew, write.before)
                     is WorkspaceWrite.PutNoteLink -> linkData(write.link)
+                    is WorkspaceWrite.PutExternalRef -> externalRefData(write.reference)
+                    is WorkspaceWrite.PutExternalLink -> externalLinkData(write.link)
                     is WorkspaceWrite.DeleteForever -> tombstone()
                 }
             if (reject) data.rejectedForTesting = true
@@ -191,6 +217,8 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutReminder -> doc(firestore, USERS, accountId.value, REMINDERS, write.reminder.id.value)
             is WorkspaceWrite.PutNote -> doc(firestore, USERS, accountId.value, NOTES, write.note.id.value)
             is WorkspaceWrite.PutNoteLink -> doc(firestore, USERS, accountId.value, LINKS, write.link.id)
+            is WorkspaceWrite.PutExternalRef -> doc(firestore, USERS, accountId.value, EXTERNAL_REFS, write.reference.id)
+            is WorkspaceWrite.PutExternalLink -> doc(firestore, USERS, accountId.value, EXTERNAL_LINKS, write.link.id)
             is WorkspaceWrite.DeleteForever -> {
                 val collection =
                     when (write.kind) {
@@ -334,6 +362,28 @@ class FirestoreWorkspaceStore internal constructor(
         return data
     }
 
+    /** Ids and the canonical URL only (owner-review-queue Q6). Titles stay in the device cache. */
+    private fun externalRefData(reference: ExternalReference): dynamic {
+        val data = newJsObject()
+        data.provider = reference.provider.id
+        data.instance = reference.instance
+        data.key = reference.key
+        data.url = reference.url.value
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
+    private fun externalLinkData(link: TopicExternalLink): dynamic {
+        val data = newJsObject()
+        data.topicId = link.topicId.value
+        data.refId = link.referenceId
+        data.linked = link.linked
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
     private fun merge(): dynamic {
         val options = newJsObject()
         options.merge = true
@@ -349,6 +399,8 @@ class FirestoreWorkspaceStore internal constructor(
         const val REMINDERS = "reminders"
         const val NOTES = "notes"
         const val LINKS = "topicNoteLinks"
+        const val EXTERNAL_REFS = "externalRefs"
+        const val EXTERNAL_LINKS = "topicExternalLinks"
         const val PREFS_ID = "main"
         const val SCHEMA_VERSION = 1
     }
@@ -361,6 +413,8 @@ private class Snapshots(
     val reminders: QuerySnapshot,
     val notes: QuerySnapshot,
     val links: QuerySnapshot,
+    val externalRefs: QuerySnapshot,
+    val externalLinks: QuerySnapshot,
     val prefs: DocumentSnapshot,
 )
 
@@ -373,8 +427,30 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
     val decodedReminders = snapshots.reminders.kept().map(::decodeReminder)
     val decodedNotes = snapshots.notes.kept().map(::decodeNote)
     val decodedLinks = snapshots.links.docs.map(::decodeLink)
-    val all = listOf(statuses, snapshots.topics, snapshots.tasks, snapshots.reminders, snapshots.notes, snapshots.links)
-    val decoded = listOf(decodedStatuses, decodedTopics, decodedTasks, decodedReminders, decodedNotes, decodedLinks)
+    val decodedRefs = snapshots.externalRefs.docs.map(::decodeExternalRef)
+    val decodedExternalLinks = snapshots.externalLinks.docs.map(::decodeExternalLink)
+    val all =
+        listOf(
+            statuses,
+            snapshots.topics,
+            snapshots.tasks,
+            snapshots.reminders,
+            snapshots.notes,
+            snapshots.links,
+            snapshots.externalRefs,
+            snapshots.externalLinks,
+        )
+    val decoded =
+        listOf(
+            decodedStatuses,
+            decodedTopics,
+            decodedTasks,
+            decodedReminders,
+            decodedNotes,
+            decodedLinks,
+            decodedRefs,
+            decodedExternalLinks,
+        )
     return WorkspaceData(
         statuses = decodedStatuses.filterNotNull(),
         topics = decodedTopics.filterNotNull(),
@@ -382,6 +458,8 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
         reminders = decodedReminders.filterNotNull(),
         notes = decodedNotes.filterNotNull(),
         noteLinks = decodedLinks.filterNotNull(),
+        externalRefs = decodedRefs.filterNotNull(),
+        externalLinks = decodedExternalLinks.filterNotNull(),
         purgedNotes =
             snapshots.notes.docs
                 .filter(::isTombstone)
@@ -521,6 +599,27 @@ private fun decodeLink(snapshot: DocumentSnapshot): NoteTopicLink? {
     val noteId = stringOrNull(data.noteId)?.takeIf { it.isNotBlank() } ?: return null
     val linked = booleanOrNull(data.linked) ?: return null
     return NoteTopicLink(TopicId(topicId), NoteId(noteId), linked).takeIf { it.id == snapshot.id }
+}
+
+/** The external record in [snapshot], or null when this app cannot read it or its id does not match its fields. */
+private fun decodeExternalRef(snapshot: DocumentSnapshot): ExternalReference? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val provider = ExternalProvider.fromId(stringOrNull(data.provider)) ?: return null
+    val instance = stringOrNull(data.instance)?.takeIf { it.isNotBlank() } ?: return null
+    val key = stringOrNull(data.key)?.takeIf { it.isNotBlank() } ?: return null
+    val url = stringOrNull(data.url)?.let(LinkHref::parse) ?: return null
+    return ExternalReference(provider, instance, key, url).takeIf { it.id == snapshot.id }
+}
+
+/** The Topic link to an external record in [snapshot], or null when this app cannot read it or its id does not match. */
+private fun decodeExternalLink(snapshot: DocumentSnapshot): TopicExternalLink? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val topicId = stringOrNull(data.topicId)?.takeIf { it.isNotBlank() } ?: return null
+    val refId = stringOrNull(data.refId)?.takeIf { it.isNotBlank() } ?: return null
+    val linked = booleanOrNull(data.linked) ?: return null
+    return TopicExternalLink(TopicId(topicId), refId, linked).takeIf { it.id == snapshot.id }
 }
 
 /** Missing or unknown values fall back to the defaults, field by field. */

@@ -1,0 +1,225 @@
+package thread.web.presentation.topics
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.browser.document
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.web.attributes.ButtonType
+import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.B
+import org.jetbrains.compose.web.dom.Button
+import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.Li
+import org.jetbrains.compose.web.dom.P
+import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.Ul
+import org.w3c.dom.HTMLElement
+import thread.domain.external.JiraIssueKey
+import thread.domain.topic.Topic
+import thread.domain.workspace.ExternalProvider
+import thread.web.presentation.Icon
+import thread.web.presentation.IconButton
+import thread.web.presentation.IconView
+import thread.web.presentation.LocalToasts
+import thread.web.presentation.Place
+import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.external.CONNECTIONS_PLACE
+import thread.web.presentation.external.JiraModel
+import thread.web.presentation.external.JiraTicket
+import thread.web.presentation.external.ViewBanner
+import thread.web.presentation.external.XD_TITLE_ID
+import thread.web.presentation.external.jiraItemPlace
+import thread.web.presentation.external.rememberJiraTicket
+import thread.web.presentation.external.savedOrNull
+
+/**
+ * The Jira tickets linked to the Topic (v3 topic.js `extSection('jira')`). Each row opens the ticket in the side panel
+ * at 1000px and wider, else as its own page. Unlinking removes only the link; the ticket is not changed. A ticket from
+ * another Jira site than the connected one shows its key only.
+ */
+@Composable
+internal fun TopicJiraSection(
+    workspace: WorkspaceModel,
+    jira: JiraModel,
+    topic: Topic,
+    open: Boolean,
+    onToggle: () -> Unit,
+    openKey: String?,
+    onOpen: (JiraIssueKey) -> Boolean,
+) {
+    val toasts = LocalToasts.current
+    var linking by remember(topic.id) { mutableStateOf(false) }
+    val references = workspace.externalsOf(topic.id, ExternalProvider.Jira)
+    if (!jira.connected) {
+        TopicSection("jira", "Jira", references.size.toString(), open, onToggle) {
+            P({ classes("sect__empty") }) {
+                Text("Jira is not connected. ")
+                A(CONNECTIONS_PLACE.hash, { classes("lnk") }) { Text("Connect in Settings") }
+            }
+        }
+        return
+    }
+    TopicSection(
+        "jira",
+        "Jira",
+        references.size.toString(),
+        open,
+        onToggle,
+        actions = {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                id("td-link-jira")
+                onClick { linking = true }
+            }) {
+                IconView(Icon.Link, 15)
+                Text(" Link")
+            }
+        },
+    ) {
+        if (references.isEmpty()) {
+            P({ classes("sect__empty") }) { Text("Nothing linked. Link a ticket here or from its page.") }
+            return@TopicSection
+        }
+        Ul({ classes("tlist") }) {
+            references.forEach { reference ->
+                val issueKey = JiraIssueKey.parse(reference.key)
+                val here = jira.isHere(reference) && issueKey != null
+                val summary = if (here) jira.summary(reference.key) else null
+                val isOpen = here && openKey == reference.key
+                key(reference.id) {
+                    Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
+                        Span({ classes("xrow__icon") }) { IconView(Icon.Jira, 18) }
+                        if (here && issueKey != null) {
+                            A(jiraItemPlace(issueKey, topic.id.value).hash, {
+                                classes("xrow__main")
+                                attr("data-key", reference.key)
+                                if (isOpen) attr("aria-current", "true")
+                                onClick { if (onOpen(issueKey)) it.preventDefault() }
+                            }) { RowText(reference.key, summary?.status?.name, summary?.title, here = true) }
+                        } else {
+                            Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false) }
+                        }
+                        IconButton(Icon.Unlink, "Unlink ${reference.key} from this Topic", small = true) {
+                            val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
+                            toasts.show("Unlinked from ${topic.name}. The ticket is unchanged.", undo = { workspace.undo(edit) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (linking) {
+        val linked = references.map { it.key }.toSet()
+        // Tickets that can be shown here: saved on this device, or listed while online (v3 jiraAvailable).
+        val items =
+            jira
+                .known()
+                .filter { it.key.value !in linked && jira.canShow(it.key.value) }
+                .map { PickItem(it.key.value, Icon.Jira, "${it.key.value} ${it.title}", it.status?.name.orEmpty()) }
+        ItemPickerDialog(
+            title = "Link a Jira ticket",
+            items = items,
+            empty = "Nothing else is available on this device. Search Jira or open Pull requests to find more.",
+            onPick = { picked ->
+                linking = false
+                val reference = JiraIssueKey.parse(picked)?.let(jira::reference) ?: return@ItemPickerDialog
+                val edit = workspace.linkToTopic(reference, topic.id) ?: return@ItemPickerDialog
+                toasts.show("Linked", undo = { workspace.undo(edit) })
+            },
+            onCancel = { linking = false },
+        )
+    }
+}
+
+@Composable
+private fun RowText(
+    key: String,
+    status: String?,
+    title: String?,
+    here: Boolean,
+) {
+    Span({ classes("xrow__key") }) {
+        B { Text(key) }
+        if (status != null) Span({ classes("jst") }) { Text(status) }
+    }
+    when {
+        title != null -> Span({ classes("xrow__title") }) { Text(title) }
+        here ->
+            Span({ classes("xrow__snip") }) {
+                Span({ classes("dl-badge") }) {
+                    IconView(Icon.Cloud, 13)
+                    Text("Not on this device yet")
+                }
+            }
+        else -> Span({ classes("xrow__snip") }) { Text("From another Jira site. Connect that site to read it.") }
+    }
+}
+
+/**
+ * The v3 side panel: a linked ticket next to the Topic at 1000px and wider, with "Back to sections" and "Open as
+ * page". A related ticket opens in the same panel.
+ */
+@Composable
+internal fun TopicSidePanel(
+    workspace: WorkspaceModel,
+    jira: JiraModel,
+    topic: Topic,
+    key: JiraIssueKey,
+    onOpen: (JiraIssueKey) -> Unit,
+    onClose: () -> Unit,
+    onGo: (Place) -> Unit,
+) {
+    var refresh by remember { mutableStateOf(0) }
+    val view = rememberJiraTicket(jira, key, refresh)
+    // The panel's title takes focus once the ticket is on screen (v3 td-open-ext).
+    val titleShown = view?.savedOrNull != null
+    LaunchedEffect(key, titleShown) {
+        if (titleShown) {
+            delay(16)
+            (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
+        }
+    }
+    Div({
+        classes("side-panel")
+        attr("role", "region")
+        attr("aria-label", "Linked item")
+    }) {
+        Div({ classes("side-panel__bar") }) {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                id("td-panel-close")
+                onClick { onClose() }
+            }) {
+                IconView(Icon.ChevLeft, 15)
+                Text(" Back to sections")
+            }
+            A(jiraItemPlace(key, topic.id.value).hash, { classes("btn", "btn--text", "btn--sm") }) {
+                Text("Open as page ")
+                IconView(Icon.External, 14)
+            }
+        }
+        if (view != null) ViewBanner(view, jira.name, "tickets") { onGo(CONNECTIONS_PLACE) }
+        JiraTicket(
+            jira = jira,
+            workspace = workspace,
+            view = view,
+            heading1 = false,
+            relatedHref = { jiraItemPlace(it, topic.id.value).hash },
+            onOpenRelated = { related ->
+                onOpen(related)
+                true
+            },
+            onRefresh = { refresh++ },
+            onGo = onGo,
+        )
+    }
+}

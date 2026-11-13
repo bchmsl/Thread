@@ -14,6 +14,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.JiraRelated
 import thread.domain.external.JiraSite
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
@@ -70,6 +71,23 @@ class JiraIssueRepositoryTest {
                     .any { it == ExternalBlock.Unsupported("Table") },
             )
             assertTrue(issue.description.blocks.isNotEmpty())
+            assertEquals(
+                listOf(
+                    JiraRelated(
+                        "is blocked by",
+                        requireNotNull(JiraIssueKey.parse("SYN-104")),
+                        "SYNTHETIC: Rate limit message when Jira slows down",
+                        JiraStatus("In Progress", JiraStatusCategory.InProgress),
+                    ),
+                    JiraRelated(
+                        "relates to",
+                        requireNotNull(JiraIssueKey.parse("SYN-106")),
+                        "SYNTHETIC: Search tickets by key, words or label",
+                        JiraStatus("In Progress", JiraStatusCategory.InProgress),
+                    ),
+                ),
+                issue.related,
+            )
         }
 
     @Test
@@ -85,7 +103,7 @@ class JiraIssueRepositoryTest {
                 listOf(
                     "$base/field",
                     "$base/issue/SYN-101?fields=summary%2Cissuetype%2Cstatus%2Cpriority%2Cassignee%2Creporter%2Clabels" +
-                        "%2Cupdated%2Cdescription%2Ccustomfield_10020",
+                        "%2Cupdated%2Cdescription%2Cissuelinks%2Ccustomfield_10020",
                     "$base/issue/SYN-101/comment?orderBy=-created&maxResults=100",
                 ),
                 urls,

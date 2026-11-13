@@ -37,6 +37,7 @@ import thread.domain.external.PullRequestSummary
 import thread.domain.external.ReviewerState
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
+import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 

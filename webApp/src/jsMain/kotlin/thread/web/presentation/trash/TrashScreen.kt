@@ -41,6 +41,7 @@ import thread.domain.topic.Topic
 import thread.domain.trash.TopicLink
 import thread.domain.trash.TopicState
 import thread.domain.trash.TrashEntry
+import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.TrashKind
 import thread.web.platform.WallClock
 import thread.web.platform.mediaMatches
@@ -88,6 +89,7 @@ internal fun TrashScreen(
     openId: String?,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
+    externalLabel: (ExternalReference) -> String,
 ) {
     val toasts = LocalToasts.current
     val scope = rememberCoroutineScope()
@@ -182,6 +184,7 @@ internal fun TrashScreen(
                         zone = workspace.prefs.timeZone,
                         noteBody = { noteId -> rememberRemoteNote(services, accountId, noteId) },
                         deviceIsThis = { it == services.deviceId.value },
+                        externalLabel = externalLabel,
                         onBack = { router.go(View.Trash.place) },
                         onRestore = { restore(shown) },
                         onDeleteForever = { purging = shown },
@@ -268,6 +271,7 @@ private fun TrashPreview(
     zone: String,
     noteBody: @Composable (NoteId) -> RemoteNote?,
     deviceIsThis: (String) -> Boolean,
+    externalLabel: (ExternalReference) -> String,
     onBack: () -> Unit,
     onRestore: () -> Unit,
     onDeleteForever: () -> Unit,
@@ -324,7 +328,7 @@ private fun TrashPreview(
             Callout(Icon.Alert, "$what, so that link cannot come back.")
         }
         when (entry) {
-            is TrashEntry.TopicEntry -> TopicBody(entry, now)
+            is TrashEntry.TopicEntry -> TopicBody(entry, now, externalLabel)
             is TrashEntry.NoteEntry -> NoteBody(entry, noteBody(entry.note.id), deviceIsThis)
             is TrashEntry.TaskEntry -> TaskBody(entry, now)
             is TrashEntry.ReminderEntry -> ReminderBody(entry, now)
@@ -363,6 +367,7 @@ private fun Callout(
 private fun TopicBody(
     entry: TrashEntry.TopicEntry,
     now: WallTime,
+    externalLabel: (ExternalReference) -> String,
 ) {
     Div({ classes("tprev__body") }) {
         if (entry.topic.goal.isNotEmpty()) P({ classes("tprev__goal") }) { Text(entry.topic.goal) }
@@ -376,11 +381,12 @@ private fun TopicBody(
             }
         }
         H3({ classes("tprev__h") }) { Text("Links that come back on restore") }
-        if (entry.notes.isEmpty()) {
+        if (entry.notes.isEmpty() && entry.externals.isEmpty()) {
             P({ classes("muted") }) { Text("No links to notes, tickets or pull requests.") }
         } else {
             Ul({ classes("tprev__list") }) {
                 entry.notes.forEach { Li { Text("Note: ${it.title.ifBlank { UNTITLED_NOTE }}") } }
+                entry.externals.forEach { Li { Text(externalLabel(it)) } }
             }
         }
         Callout(Icon.Lock, "Notes stay in Notes. Jira tickets and pull requests are not changed.")

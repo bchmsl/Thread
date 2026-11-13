@@ -37,7 +37,8 @@ data class JiraStatus(
 /**
  * A Jira issue as Thread shows it (v3 Jira detail). Read-only. Person fields hold display names.
  *
- * [comments] are the newest comments, oldest first. [commentTotal] counts all comments in Jira.
+ * [comments] are the newest comments, oldest first. [commentTotal] counts all comments in Jira. [related] are its
+ * issue links, as Jira lists them.
  */
 data class JiraIssue(
     val key: JiraIssueKey,
@@ -54,6 +55,17 @@ data class JiraIssue(
     val comments: List<JiraComment>,
     val commentTotal: Int,
     val webUrl: LinkHref?,
+    val related: List<JiraRelated> = emptyList(),
+) {
+    fun summary(): JiraIssueSummary = JiraIssueSummary(key, type, title, status, updatedAtMillis)
+}
+
+/** One issue link: how it relates ("blocks", "is blocked by"), and the other issue as Jira names it. */
+data class JiraRelated(
+    val relation: String,
+    val key: JiraIssueKey,
+    val title: String?,
+    val status: JiraStatus?,
 )
 
 data class JiraComment(
@@ -67,4 +79,34 @@ data class JiraComment(
 interface JiraIssueSource : ExternalRecordSource<JiraIssueKey, JiraIssue> {
     /** Every issue saved on this device, newest save first. */
     suspend fun allSaved(): List<Saved<JiraIssue>>
+}
+
+/** One row of a Jira list or search result (v3 `jiraRow`). */
+data class JiraIssueSummary(
+    val key: JiraIssueKey,
+    val type: String?,
+    val title: String,
+    val status: JiraStatus?,
+    val updatedAtMillis: Long?,
+)
+
+/** Tickets in Jira's order. [complete] is false when Jira had more than Thread fetched. */
+data class JiraIssueList(
+    val issues: List<JiraIssueSummary>,
+    val complete: Boolean,
+)
+
+/** The Jira lists Thread keeps a copy of on this device. */
+enum class JiraList {
+    /** Open tickets assigned to the connected account, latest change first. */
+    Assigned,
+}
+
+/** Explicit search of everything in Jira the token can read (v3 Jira "Search"). Nothing is saved on this device. */
+interface JiraSearch {
+    /** Searches by key, words or label. A blank [query] is not sent. */
+    suspend fun search(
+        query: String,
+        nowMillis: Long,
+    ): ExternalResult<JiraIssueList>
 }

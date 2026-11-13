@@ -14,8 +14,10 @@ import androidx.compose.runtime.setValue
 import kotlinx.browser.document
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Main
+import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Text
 import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountId
@@ -27,18 +29,28 @@ import thread.domain.note.RichTextDocument
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
+import thread.domain.search.searchJiraCopies
 import thread.domain.search.searchWorkspace
 import thread.domain.task.Task
 import thread.domain.topic.TopicId
 import thread.domain.topic.statusOf
+import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.external.JiraItemScreen
+import thread.web.presentation.external.JiraModel
+import thread.web.presentation.external.JiraScreen
+import thread.web.presentation.external.JiraServices
+import thread.web.presentation.external.jiraPlace
+import thread.web.presentation.external.jiraSearchPlace
 import thread.web.presentation.notes.NOTE_PARAM
 import thread.web.presentation.notes.NoteServices
 import thread.web.presentation.notes.NotesScreen
 import thread.web.presentation.notes.launchNoteWrite
 import thread.web.presentation.notes.notePlace
+import thread.web.presentation.settings.ConnectionsBlock
 import thread.web.presentation.settings.PreferencesBlock
 import thread.web.presentation.settings.SettingsScreen
 import thread.web.presentation.settings.StatusesBlock
@@ -75,6 +87,8 @@ class AppServices(
     val newId: (prefix: String) -> String,
     /** Note drafts on this device and Note sync with the server. */
     val notes: NoteServices,
+    /** Jira, read-only: the real provider or the SYNTHETIC fixtures (adr/ADR-013-jira-in-the-workspace.md). */
+    val jira: JiraServices,
 )
 
 @Composable
@@ -113,6 +127,7 @@ private fun Workspace(
     val syncCenter = remember { SyncCenter() }
     val capture = remember { CaptureState(CaptureType.Task) }
     val workspace = remember { WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId) }
+    val jira = remember { JiraModel(services.jira) }
     // Wall-clock "now" in the workspace zone, refreshed each minute (ADR-010).
     val now by rememberNow(workspace.prefs.timeZone)
     val online by rememberOnline()
@@ -140,14 +155,22 @@ private fun Workspace(
     // The Task sheet rides on any page as `?task=`, so the page under it is the place without that parameter.
     val page = place.with(TASK_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
-    // Opening another Note or Trash entry keeps the view; the Notes and Trash screens move focus themselves.
+    val jiraItem = place.head == "item" && place.segment(1) == "jira"
+    // Opening another Note, Trash entry or Jira ticket keeps the view; those screens move focus themselves.
     val focusPlace =
-        when (view) {
-            View.Notes -> page.with(NOTE_PARAM, null)
-            View.Trash -> page.with(TRASH_PARAM, null)
+        when {
+            jiraItem -> page
+            view == View.Notes -> page.with(NOTE_PARAM, null)
+            view == View.Trash -> page.with(TRASH_PARAM, null)
+            view == View.Jira -> View.Jira.place
             else -> page
         }
-    val title = if (place.head == "topic") placeTopicId?.let(workspace::topic)?.name ?: "Topic" else view.label
+    val title =
+        when {
+            place.head == "topic" -> placeTopicId?.let(workspace::topic)?.name ?: "Topic"
+            jiraItem -> place.segment(2) ?: view.label
+            else -> view.label
+        }
     LaunchedEffect(title) { document.title = "$title | Thread" }
     var firstPlace by remember { mutableStateOf(true) }
     LaunchedEffect(focusPlace) {
@@ -159,6 +182,7 @@ private fun Workspace(
         }
     }
     LaunchedEffect(workspace) { workspace.run() }
+    LaunchedEffect(jira) { jira.reload() }
     SweepPurgedNotes(workspace, services.notes, signedIn.accountId, online)
     val workspaceReport = workspace.syncReport(online)
     SideEffect { syncCenter.report("workspace", workspaceReport) }
@@ -199,7 +223,9 @@ private fun Workspace(
                 tabIndex(-1)
             }) {
                 when {
-                    place.head == "topic" -> TopicScreen(workspace, placeTopicId, openTask, openTarget, openNote)
+                    place.head == "topic" -> TopicScreen(workspace, jira, placeTopicId, openTask, openTarget, openNote, router::go)
+                    jiraItem -> JiraItemScreen(jira, workspace, router, place)
+                    view == View.Jira -> JiraScreen(jira, workspace, router, place)
                     view == View.Today -> TodayScreen(workspace, place.param("add") == "1", openTask, openTarget)
                     view == View.Inbox -> InboxScreen(workspace, router, capture, openTask, openNote)
                     view == View.Notes ->
@@ -214,9 +240,10 @@ private fun Workspace(
                             place.param(TRASH_PARAM),
                             openTask,
                             openTarget,
-                        )
+                        ) { reference -> externalLabel(reference, jira) }
                     view == View.Settings ->
                         SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
+                            ConnectionsBlock(jira)
                             StatusesBlock(workspace)
                             PreferencesBlock(workspace, capture)
                         }
@@ -334,7 +361,7 @@ private fun Workspace(
                     },
                 search = { query ->
                     val q = query.trim().lowercase()
-                    searchGroups(query, workspace, openTask = { task ->
+                    searchGroups(query, workspace, jira, openTask = { task ->
                         searchOpen = false
                         openTask(task)
                     }) { to ->
@@ -351,7 +378,7 @@ private fun Workspace(
                             },
                         )
                 },
-                noResults = { query -> NoSearchResults(query) },
+                noResults = { query -> NoSearchResults(query) { searchOpen = false } },
                 onQueryChange = {},
                 onClose = { searchOpen = false },
             )
@@ -360,12 +387,13 @@ private fun Workspace(
 }
 
 /**
- * The search groups of v3 openSearch for what is on this device: Topics, Tasks and Notes, nothing in Trash
- * (adr/ADR-012-trash-and-search.md). Jira and pull requests join in later phases.
+ * The search groups of v3 openSearch for what is on this device: Topics, Tasks, Notes and the Jira tickets saved
+ * here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013). Pull requests join in a later phase.
  */
 private fun searchGroups(
     query: String,
     workspace: WorkspaceModel,
+    jira: JiraModel,
     openTask: (Task) -> Unit,
     go: (Place) -> Unit,
 ): List<SearchGroup> {
@@ -394,8 +422,30 @@ private fun searchGroups(
                 SearchOption(note.title.ifBlank { UNTITLED_NOTE }, sub, { IconView(Icon.Notes, 18) }) { go(notePlace(note.id)) }
             },
         ),
+        SearchGroup(
+            "Jira (downloaded)",
+            if (!jira.connected) {
+                emptyList()
+            } else {
+                searchJiraCopies(query, jira.saved.values.map { it.value.summary() }).orEmpty().map { issue ->
+                    SearchOption("${issue.key.value} ${issue.title}", issue.status?.name.orEmpty(), { IconView(Icon.Jira, 18) }) {
+                        go(jiraPlace(issue.key))
+                    }
+                }
+            },
+        ),
     )
 }
+
+/** How Trash names a link that comes back with a Topic: the Jira key and title when known, or the PR number. */
+private fun externalLabel(
+    reference: ExternalReference,
+    jira: JiraModel,
+): String =
+    when (reference.provider) {
+        ExternalProvider.Jira -> jira.summary(reference.key)?.let { "${reference.key} ${it.title}" } ?: reference.key
+        else -> "${reference.instance}#${reference.key}"
+    }
 
 /**
  * Deletes the saved versions of each Note deleted forever, here or on another device (adr/ADR-012-trash-and-search.md).
@@ -426,11 +476,19 @@ private fun SweepPurgedNotes(
 }
 
 @Composable
-private fun NoSearchResults(query: String) {
+private fun NoSearchResults(
+    query: String,
+    onLeave: () -> Unit,
+) {
     Div({ classes("pal__none") }) {
-        org.jetbrains.compose.web.dom.P {
-            org.jetbrains.compose.web.dom
-                .B { Text("No local results for “$query”.") }
+        P { B { Text("No local results for “$query”.") } }
+        P { Text("Jira search of tickets not on this device is a separate step on the Jira page.") }
+        A(jiraSearchPlace(query.trim()).hash, {
+            classes("btn", "btn--line")
+            onClick { onLeave() }
+        }) {
+            IconView(Icon.Jira, 16)
+            Text(" Search Jira for “$query”")
         }
     }
 }

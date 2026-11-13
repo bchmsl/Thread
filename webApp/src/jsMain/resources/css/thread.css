@@ -80,3 +80,14 @@ img.ProseMirror-separator {
 .ProseMirror-hideselection *::-moz-selection { background: transparent; }
 .ProseMirror-hideselection * { caret-color: transparent; }
 .ProseMirror-focused .ProseMirror-gapcursor { display: block; }
+
+/* Phase 10: the Jira token form in Settings > Connections. v3 only had a demo Connect button, so this is a
+   Thread addition styled with v3 tokens (owner-review-queue, ADR-013). */
+.cform { margin: 4px 0 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--ink-900, transparent); }
+.cform__h { font-weight: 650; margin: 0 0 12px; }
+.cform__acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.field__hint.field__err { color: var(--danger); }
+.xd__note { margin-top: 10px; font-size: var(--fs-13); }
+@media (max-width: 759px) {
+  .cform .fgrid { grid-template-columns: minmax(0, 1fr); }
+}

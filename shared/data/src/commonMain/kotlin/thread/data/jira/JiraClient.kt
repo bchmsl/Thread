@@ -53,6 +53,25 @@ internal class JiraClient(
         return get(connection, url, "GET /rest/api/3/issue/{key}/comment", nowMillis)
     }
 
+    /**
+     * One page of the enhanced JQL search (`GET /rest/api/3/search/jql`). The answer has `issues`, `nextPageToken`
+     * and `isLast`, and no total. [nextPageToken] is null for the first page.
+     */
+    suspend fun search(
+        connection: JiraConnection,
+        jql: String,
+        fields: String,
+        nextPageToken: String?,
+        nowMillis: Long,
+    ): ExternalResult<JsonElement> {
+        val url =
+            buildString {
+                append("${api(connection)}/search/jql?jql=${urlEncode(jql)}&fields=${urlEncode(fields)}&maxResults=$SEARCH_PAGE")
+                if (nextPageToken != null) append("&nextPageToken=${urlEncode(nextPageToken)}")
+            }
+        return get(connection, url, "GET /rest/api/3/search/jql", nowMillis)
+    }
+
     /** The site's cloud id from its public tenant info, without a token. The browser may block it (CORS). */
     suspend fun cloudId(
         site: JiraSite,
@@ -90,6 +109,7 @@ internal class JiraClient(
 
     companion object {
         const val COMMENT_PAGE: Int = 100
+        const val SEARCH_PAGE: Int = 50
         private const val DEFAULT_WAIT_MILLIS = 60_000L
         private const val MAX_WAIT_SECONDS = 3_600L
 

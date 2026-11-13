@@ -1,5 +1,6 @@
 package thread.domain.search
 
+import thread.domain.external.JiraIssueSummary
 import thread.domain.note.NoteSummary
 import thread.domain.task.Task
 import thread.domain.topic.Topic
@@ -39,3 +40,22 @@ fun searchWorkspace(
 
 /** Most results per group (v3 `searchAll`). */
 const val SEARCH_GROUP_LIMIT: Int = 6
+
+/**
+ * Searches the Jira tickets saved on this device on key or title, ignoring case (v3 `searchAll`, "Jira (downloaded)").
+ * Search of tickets not on this device is a separate step on the Jira page. Returns null for a blank [query].
+ */
+fun searchJiraCopies(
+    query: String,
+    issues: List<JiraIssueSummary>,
+): List<JiraIssueSummary>? {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return null
+    return issues
+        .filter {
+            it.key.value
+                .lowercase()
+                .contains(q) ||
+                it.title.lowercase().contains(q)
+        }.take(SEARCH_GROUP_LIMIT)
+}

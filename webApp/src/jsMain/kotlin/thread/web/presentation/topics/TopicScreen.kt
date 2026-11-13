@@ -40,7 +40,9 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextArea
 import org.jetbrains.compose.web.dom.TextInput
+import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLTextAreaElement
+import thread.domain.external.JiraIssueKey
 import thread.domain.note.NoteId
 import thread.domain.reminder.ReminderTarget
 import thread.domain.task.Task
@@ -61,23 +63,29 @@ import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
+import thread.web.presentation.Place
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.external.JiraModel
+import thread.web.presentation.external.rememberWide
 import thread.web.presentation.tasks.focusById
 import thread.web.presentation.trash.trashPlace
 
 /**
- * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks, Notes and Reminders. Jira and
- * pull requests join in later phases. A Topic in Trash keeps its page: it says what went with it and offers Restore.
+ * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks and Notes, with Jira and
+ * Reminders beside them. Pull requests join in Phase 11. A linked ticket opens in a side panel at 1000px and wider.
+ * A Topic in Trash keeps its page: it says what went with it and offers Restore.
  */
 @Composable
 internal fun TopicScreen(
     workspace: WorkspaceModel,
+    jira: JiraModel,
     topicId: String?,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
     onOpenNote: (NoteId) -> Unit,
+    onGo: (Place) -> Unit,
 ) {
     if (!workspace.loaded) {
         if (workspace.readFailed) EmptyState(Icon.Alert, "Topics could not load", "Reload the page to try again.")
@@ -109,6 +117,10 @@ internal fun TopicScreen(
     var tasksOpen by remember(topic.id) { mutableStateOf(true) }
     var notesOpen by remember(topic.id) { mutableStateOf(true) }
     var remindersOpen by remember(topic.id) { mutableStateOf(false) }
+    var jiraOpen by remember(topic.id) { mutableStateOf(true) }
+    var panelKey by remember(topic.id) { mutableStateOf<JiraIssueKey?>(null) }
+    val wide = rememberWide()
+    val scope = rememberCoroutineScope()
     var focusAddTask by remember { mutableStateOf(0) }
     LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("td-new-task") }
     val statuses = workspace.statuses
@@ -219,7 +231,30 @@ internal fun TopicScreen(
             classes("td-side")
             attr("aria-label", "Linked work and reminders")
         }) {
-            TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, onOpenTarget)
+            val shown = panelKey
+            if (shown != null && wide) {
+                TopicSidePanel(
+                    workspace,
+                    jira,
+                    topic,
+                    shown,
+                    onOpen = { panelKey = it },
+                    onClose = {
+                        panelKey = null
+                        scope.launch {
+                            delay(16)
+                            (document.querySelector(".xrow__main[data-key=\"${shown.value}\"]") as? HTMLElement)?.focus()
+                        }
+                    },
+                    onGo = onGo,
+                )
+            } else {
+                TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, panelKey?.value) { key ->
+                    if (wide) panelKey = key
+                    wide
+                }
+                TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, onOpenTarget)
+            }
         }
     }
     if (editing) {
@@ -284,7 +319,11 @@ private fun wentWithTopic(entry: TrashEntry.TopicEntry): String {
     val went = if (parts.isEmpty()) "It had no tasks or reminders." else "Its ${parts.joinToString(" and ")} went with it."
     val stay = if (entry.notes.size == 1) "stays" else "stay"
     val kept = count(entry.notes.size, "note", "notes")?.let { " $it $stay in Notes, unlinked from it." }.orEmpty()
-    return went + kept
+    val links =
+        count(entry.externals.size, "Jira or pull request link was", "Jira and pull request links were")
+            ?.let { " $it removed. The tickets and pull requests are not changed." }
+            .orEmpty()
+    return went + kept + links
 }
 
 private fun count(

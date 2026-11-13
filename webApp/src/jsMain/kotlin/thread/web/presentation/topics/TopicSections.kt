@@ -55,7 +55,7 @@ import thread.web.presentation.whenText
 
 /** A Topic page section that opens and closes (v3 section()). */
 @Composable
-private fun TopicSection(
+internal fun TopicSection(
     key: String,
     title: String,
     count: String,

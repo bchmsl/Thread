@@ -9,6 +9,7 @@ import thread.data.external.ExternalTime
 import thread.data.external.arr
 import thread.data.external.asArray
 import thread.data.external.asObject
+import thread.data.external.bool
 import thread.data.external.copy
 import thread.data.external.int
 import thread.data.external.obj
@@ -19,6 +20,9 @@ import thread.data.external.str
 import thread.domain.external.JiraComment
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.JiraIssueList
+import thread.domain.external.JiraIssueSummary
+import thread.domain.external.JiraRelated
 import thread.domain.external.JiraSite
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
@@ -35,7 +39,10 @@ internal object JiraJson {
     /** The schema type of Jira Software's Sprint field. Its field id differs per site, so `/field` finds it. */
     const val SPRINT_SCHEMA: String = "com.pyxis.greenhopper.jira:gh-sprint"
 
-    const val ISSUE_FIELDS: String = "summary,issuetype,status,priority,assignee,reporter,labels,updated,description"
+    const val ISSUE_FIELDS: String = "summary,issuetype,status,priority,assignee,reporter,labels,updated,description,issuelinks"
+
+    /** The fields of a list or search row (v3 `jiraRow`). */
+    const val SUMMARY_FIELDS: String = "summary,issuetype,status,updated"
 
     fun sprintFieldId(fields: JsonElement): String? =
         fields
@@ -68,6 +75,8 @@ internal object JiraJson {
                     copy(fields, "labels")
                     copy(fields, "updated")
                     copy(fields, "description")
+                    val links = fields.objects("issuelinks").mapNotNull(::issueLink)
+                    if (links.isNotEmpty()) put("issuelinks", JsonArray(links))
                     val sprints = sprintFieldId?.let { fields.objects(it) }
                     if (!sprints.isNullOrEmpty()) put("sprint", JsonArray(sprints.map { it.pick("name", "state") }))
                 },
@@ -90,6 +99,70 @@ internal object JiraJson {
             )
         }
     }
+
+    /** One linked issue: the relation as this issue reads it ("is blocked by"), its key, title and status. */
+    private fun issueLink(link: JsonObject): JsonObject? {
+        val type = link.obj("type") ?: return null
+        val outward = link.obj("outwardIssue")
+        val other = outward ?: link.obj("inwardIssue") ?: return null
+        val relation = (if (outward != null) type.str("outward") else type.str("inward")) ?: type.str("name") ?: return null
+        val fields = other.obj("fields")
+        return buildJsonObject {
+            put("relation", JsonPrimitive(relation))
+            copy(other, "key")
+            if (fields != null) copy(fields, "summary")
+            putIfNotNull("status", fields?.obj("status")?.let(::status))
+        }
+    }
+
+    /** One page of the enhanced search, its issues cut down to the row fields. */
+    fun searchPage(page: JsonElement): SearchPage? {
+        val raw = page.asObject() ?: return null
+        val issues = raw.arr("issues") ?: return null
+        val token = raw.str("nextPageToken")
+        return SearchPage(
+            issues = issues.mapNotNull { it.asObject()?.let(::summaryBundle) },
+            nextPageToken = token,
+            isLast = raw.bool("isLast") ?: (token == null),
+        )
+    }
+
+    private fun summaryBundle(issue: JsonObject): JsonObject? {
+        val fields = issue.obj("fields") ?: return null
+        if (issue.str("key") == null || fields.str("summary") == null) return null
+        return buildJsonObject {
+            copy(issue, "key")
+            put(
+                "fields",
+                buildJsonObject {
+                    copy(fields, "summary")
+                    putIfNotNull("issuetype", fields.obj("issuetype")?.pick("name"))
+                    putIfNotNull("status", fields.obj("status")?.let(::status))
+                    copy(fields, "updated")
+                },
+            )
+        }
+    }
+
+    /** A row from a cut-down issue, or null when the key or title is missing. */
+    fun summary(bundle: JsonObject): JiraIssueSummary? {
+        val key = bundle.str("key")?.let(JiraIssueKey::parse) ?: return null
+        val fields = bundle.obj("fields") ?: return null
+        return JiraIssueSummary(
+            key = key,
+            type = fields.obj("issuetype")?.str("name"),
+            title = fields.str("summary") ?: return null,
+            status = fields.obj("status")?.let(::readStatus),
+            updatedAtMillis = ExternalTime.parseMillis(fields.str("updated")),
+        )
+    }
+
+    /** A saved list: `{issues: [cut-down issues], complete}`. */
+    fun issueList(data: JsonObject): JiraIssueList =
+        JiraIssueList(
+            issues = data.objects("issues").mapNotNull(::summary),
+            complete = data.bool("complete") ?: true,
+        )
 
     private fun status(status: JsonObject): JsonObject =
         buildJsonObject {
@@ -122,7 +195,14 @@ internal object JiraJson {
             comments = comments,
             commentTotal = maxOf(page?.int("total") ?: 0, comments.size),
             webUrl = LinkHref.parse("https://${site.host}/browse/${key.value}"),
+            related = fields.objects("issuelinks").mapNotNull(::related),
         )
+    }
+
+    private fun related(link: JsonObject): JiraRelated? {
+        val key = link.str("key")?.let(JiraIssueKey::parse) ?: return null
+        val relation = link.str("relation") ?: return null
+        return JiraRelated(relation, key, link.str("summary"), link.obj("status")?.let(::readStatus))
     }
 
     private fun readStatus(status: JsonObject): JiraStatus? {
@@ -156,3 +236,10 @@ internal object JiraJson {
         )
     }
 }
+
+/** One page of the enhanced JQL search. */
+internal class SearchPage(
+    val issues: List<JsonObject>,
+    val nextPageToken: String?,
+    val isLast: Boolean,
+)

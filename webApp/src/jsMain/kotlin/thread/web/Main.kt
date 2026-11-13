@@ -1,19 +1,31 @@
 package thread.web
 
 import org.jetbrains.compose.web.renderComposable
+import thread.data.external.KeyValueConnectionStore
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
 import thread.data.firebase.FirestoreNoteSyncRemote
 import thread.data.firebase.FirestoreWorkspaceStore
+import thread.data.http.FetchHttpTransport
+import thread.data.http.HttpTransport
+import thread.data.jira.JiraIssueRepository
+import thread.data.jira.JiraListRepository
 import thread.data.local.IndexedDbDraftStore
+import thread.data.local.IndexedDbKeyValueDatabase
 import thread.data.local.browserDeviceId
 import thread.data.local.randomRevisionId
 import thread.data.local.randomWorkspaceId
+import thread.data.synthetic.SyntheticConnectionStore
+import thread.data.synthetic.SyntheticHttpTransport
 import thread.domain.note.LocalDraftStore
+import thread.web.platform.isOnline
+import thread.web.platform.nowMillis
+import thread.web.platform.readSessionFlag
 import thread.web.platform.registerOfflineShell
 import thread.web.presentation.App
 import thread.web.presentation.AppServices
+import thread.web.presentation.external.JiraServices
 import thread.web.presentation.notes.NoteServices
 
 /**
@@ -27,6 +39,8 @@ fun main() {
     val account = FirebaseAccountSession(backend)
     val testFlags = TestFlags()
     if (backend.usesEmulators) installTestHooks(backend, account, testFlags)
+    // SYNTHETIC providers only on the emulators, and only when a check turned them on for this tab.
+    val synthetic = backend.usesEmulators && readSessionFlag(SYNTHETIC_PROVIDERS_FLAG)
     val services =
         AppServices(
             account = account,
@@ -34,6 +48,7 @@ fun main() {
             workspaceStore = { accountId -> FirestoreWorkspaceStore(backend, accountId) { testFlags.failServerWrites } },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
+            jira = jiraServices(synthetic, testFlags),
         )
     renderComposable(rootElementId = "root") {
         App(services)
@@ -56,6 +71,55 @@ private fun noteServices(
         },
         deviceId = browserDeviceId(),
         newRevisionId = ::randomRevisionId,
+    )
+}
+
+/**
+ * Jira (adr/ADR-006, ADR-008, ADR-013). Real: the browser's fetch, the connection in its own IndexedDB database
+ * (thread-connections) and saved copies in another. SYNTHETIC: fixture answers, an in-memory connection and a separate
+ * cache database, so fixture data never mixes with real saved copies.
+ */
+private fun jiraServices(
+    synthetic: Boolean,
+    testFlags: TestFlags,
+): JiraServices {
+    val transport: HttpTransport =
+        if (synthetic) {
+            SyntheticHttpTransport({ testFlags.jiraScenario }, ::isOnline, ::nowMillis, latencyMillis = 400)
+        } else {
+            FetchHttpTransport()
+        }
+    val connections =
+        if (synthetic) {
+            SyntheticConnectionStore()
+        } else {
+            val database =
+                IndexedDbKeyValueDatabase(
+                    IndexedDbKeyValueDatabase.CONNECTIONS,
+                    listOf(IndexedDbKeyValueDatabase.CONNECTIONS_STORE),
+                    strictDurability = true,
+                )
+            KeyValueConnectionStore(database.store(IndexedDbKeyValueDatabase.CONNECTIONS_STORE))
+        }
+    val cache =
+        IndexedDbKeyValueDatabase(
+            if (synthetic) IndexedDbKeyValueDatabase.EXTERNAL_CACHE_SYNTHETIC else IndexedDbKeyValueDatabase.EXTERNAL_CACHE,
+            IndexedDbKeyValueDatabase.EXTERNAL_CACHE_STORES,
+        )
+    val issues = cache.store(IndexedDbKeyValueDatabase.JIRA_ISSUES)
+    val meta = cache.store(IndexedDbKeyValueDatabase.JIRA_META)
+    val lists = JiraListRepository(connections, transport, meta)
+    return JiraServices(
+        isSynthetic = synthetic,
+        name = if (synthetic) "Jira (synthetic)" else "Jira",
+        connections = connections,
+        issues = JiraIssueRepository(connections, transport, issues, meta),
+        lists = lists,
+        search = lists,
+        deleteSavedCopies = {
+            issues.clear()
+            meta.clear()
+        },
     )
 }
 

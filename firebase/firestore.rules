@@ -70,6 +70,34 @@ service cloud.firestore {
         && link.linked is bool;
     }
 
+    // users/{uid}/externalRefs/{refId}: one Jira ticket or pull request that Topics link to. Ids and the canonical
+    // URL only, never a title or other content (adr/ADR-013-jira-in-the-workspace.md, owner-review-queue Q6). The id
+    // is made from the fields, so one record linked to several Topics is one document and only the URL can change.
+    function validExternalRef(ref, refId) {
+      return ref.keys().hasOnly(['provider', 'instance', 'key', 'url', 'updatedAt', 'schemaVersion'])
+        && ref.keys().hasAll(['provider', 'instance', 'key', 'url', 'updatedAt', 'schemaVersion'])
+        && ref.schemaVersion == 1
+        && ref.updatedAt == request.time
+        && ref.provider in ['jira', 'github']
+        && ref.instance is string && ref.instance.size() > 0 && ref.instance.size() <= 200
+        && ref.key is string && ref.key.size() > 0 && ref.key.size() <= 100
+        && ref.url is string && ref.url.size() <= 2048 && ref.url.matches('https://.+')
+        && refId == ref.provider + '~' + ref.instance.replace('/', '~') + '~' + ref.key;
+    }
+
+    // users/{uid}/topicExternalLinks/{topicId}_{refId}: one Topic's link to one external record. Unlinking writes
+    // linked: false; the record, the Topic and the external system stay as they are.
+    function validExternalLink(link, linkId) {
+      return link.keys().hasOnly(['topicId', 'refId', 'linked', 'updatedAt', 'schemaVersion'])
+        && link.keys().hasAll(['topicId', 'refId', 'linked', 'updatedAt', 'schemaVersion'])
+        && link.schemaVersion == 1
+        && link.updatedAt == request.time
+        && link.topicId is string && link.topicId.size() > 0
+        && link.refId is string && link.refId.size() > 0
+        && linkId == link.topicId + '_' + link.refId
+        && link.linked is bool;
+    }
+
     function validCopiedFrom(source) {
       return source is map
         && source.keys().hasOnly(['noteId', 'revisionId'])
@@ -225,6 +253,16 @@ service cloud.firestore {
     match /users/{uid}/topicNoteLinks/{linkId} {
       allow read: if signedInAs(uid);
       allow create, update: if signedInAs(uid) && validNoteLink(request.resource.data, linkId);
+    }
+
+    match /users/{uid}/externalRefs/{refId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validExternalRef(request.resource.data, refId);
+    }
+
+    match /users/{uid}/topicExternalLinks/{linkId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validExternalLink(request.resource.data, linkId);
     }
 
     match /users/{uid}/statuses/{statusId} {

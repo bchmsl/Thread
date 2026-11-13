@@ -100,6 +100,10 @@ class SyntheticHttpTransport(
     ): HttpResponse {
         val path = url.substringBefore('?')
         val query = url.substringAfter('?', "")
+        if (!gitHub && path.endsWith("/rest/api/3/search/jql")) {
+            val (status, body) = SyntheticJiraSearch.answer(query)
+            return HttpResponse(status, emptyMap(), body)
+        }
         val body = if (gitHub) SyntheticFixtures.gitHub(path, query) else SyntheticFixtures.jira(path)
         return if (body != null) ok(body, gitHub) else error(404, gitHub)
     }
@@ -152,8 +156,11 @@ object SyntheticFixtures {
     fun jira(path: String): String? {
         if (path.endsWith("/_edge/tenant_info")) return """{"cloudId":"$CLOUD_ID"}"""
         if (path.endsWith("/rest/api/3/field")) return FIELDS
-        JIRA_COMMENTS.matchEntire(path)?.let { return COMMENTS[it.groupValues[1]] }
-        JIRA_ISSUE.matchEntire(path)?.let { return ISSUES[it.groupValues[1]] }
+        JIRA_COMMENTS.matchEntire(path)?.let { match -> COMMENTS[match.groupValues[1]]?.let { return it } }
+        JIRA_COMMENTS.matchEntire(path)?.let { match ->
+            return SyntheticJiraSearch.issue(match.groupValues[1])?.let { """{"startAt":0,"maxResults":100,"total":0,"comments":[]}""" }
+        }
+        JIRA_ISSUE.matchEntire(path)?.let { return ISSUES[it.groupValues[1]] ?: SyntheticJiraSearch.issue(it.groupValues[1]) }
         return null
     }
 
@@ -262,6 +269,14 @@ object SyntheticFixtures {
                    "$SPRINT_FIELD":[
                      {"id":40,"name":"Synthetic Sprint 40","state":"closed","boardId":7},
                      {"id":41,"name":"Synthetic Sprint 41","state":"active","boardId":7,"goal":"Synthetic goal"}
+                   ],
+                   "issuelinks":[
+                     {"id":"30001","type":{"id":"1","name":"Blocks","inward":"is blocked by","outward":"blocks"},
+                      "inwardIssue":{"id":"10104","key":"SYN-104","fields":{"summary":"SYNTHETIC: Rate limit message when Jira slows down",
+                        "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}}}}},
+                     {"id":"30002","type":{"id":"2","name":"Relates","inward":"relates to","outward":"relates to"},
+                      "outwardIssue":{"id":"10106","key":"SYN-106","fields":{"summary":"SYNTHETIC: Search tickets by key, words or label",
+                        "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}}}}}
                    ]
                  }}
                 """.trimIndent(),

@@ -197,3 +197,12 @@ Status: **provisional**. Written in Phase 9 while the owner was away. Details: A
 - Nothing purges automatically. The retention period is still open.
 - Global search covers Topics (name, next step, goal), Tasks (title) and Notes (title and preview) on this device, at most 6 per group, nothing in Trash. No Jira payload is uploaded for search.
 
+## Phase 10 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 10 while the owner was away. Details: ADR-013 (Proposed). Checked on SYNTHETIC fixtures and the emulators only; nothing was checked against real Jira.
+
+- Firestore holds Jira references as ids only: `externalRefs/{provider~instance~key}` with `{provider, instance, key, url, updatedAt, schemaVersion}`, and `topicExternalLinks/{topicId}_{refId}` with `{topicId, refId, linked, updatedAt, schemaVersion}`. One ticket is stored once, however many Topics link it. Unlink writes `linked: false`; nothing is deleted.
+- Titles, statuses, descriptions and comments stay in IndexedDB on this device (`jiraIssues`, and the Assigned list in `jiraMeta`). Search results stay in memory.
+- A Topic in Trash hides its Jira links; Restore brings them back. Delete forever leaves the id-only refs and links.
+- Offline or rate limited shows the saved copy with its age and makes no request. Expired access keeps copies readable. Not found forgets the saved copy.
+- Copies refresh on open and every 5 minutes while visible and online.

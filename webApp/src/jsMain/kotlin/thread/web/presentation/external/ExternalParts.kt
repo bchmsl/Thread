@@ -17,7 +17,6 @@ import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Code
 import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.H3
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Pre
 import org.jetbrains.compose.web.dom.Span
@@ -34,6 +33,7 @@ import thread.domain.external.ReviewState
 import thread.domain.external.Saved
 import thread.domain.note.LinkHref
 import thread.web.platform.nowMillis
+import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.notes.Banner
@@ -115,7 +115,7 @@ internal fun describe(
                 BannerTone.Info,
                 Icon.Unlink,
                 "$provider is not connected",
-                "Connect it in Connections to see your $what here. Thread only reads; it never changes anything in $provider.",
+                "Connect it in Settings to see your $what here. Thread only reads; it never changes anything in $provider.",
             )
         ExternalProblem.Unauthorized ->
             Message(
@@ -123,9 +123,9 @@ internal fun describe(
                 Icon.Lock,
                 "$provider access expired",
                 if (savedAtMillis != null) {
-                    "Saved copies stay readable. Update the token in Connections to refresh them."
+                    "Saved copies stay readable. Reconnect to refresh them."
                 } else {
-                    "The token expired, was revoked or is wrong. Update it in Connections, then refresh."
+                    "The token expired, was revoked or is wrong. Replace it in Settings, then refresh."
                 },
             )
         ExternalProblem.Forbidden ->
@@ -170,7 +170,7 @@ internal fun ViewBanner(
             val message = describe(view.problem, provider, what, view.saved.savedAtMillis, now)
             Banner(message.tone, message.icon, message.title, message.text) {
                 if (view.problem == ExternalProblem.Unauthorized || view.problem == ExternalProblem.Forbidden) {
-                    BannerButton(Icon.Lock, "Update the token", onGoToConnections)
+                    BannerButton(Icon.Lock, "Reconnect", onGoToConnections)
                 }
             }
         }
@@ -212,23 +212,7 @@ internal fun GoToConnectionsButton(onClick: () -> Unit) {
         classes("btn", "btn--line")
         type(ButtonType.Button)
         onClick { onClick() }
-    }) { Text("Go to Connections") }
-}
-
-/** The v3 empty state (T.empty). */
-@Composable
-internal fun EmptyState(
-    icon: Icon,
-    title: String,
-    text: String?,
-    action: (@Composable () -> Unit)? = null,
-) {
-    Div({ classes("empty") }) {
-        Span({ classes("empty__icon") }) { IconView(icon, 26) }
-        H3({ classes("empty__title") }) { Text(title) }
-        if (text != null) P({ classes("empty__text") }) { Text(text) }
-        action?.invoke()
-    }
+    }) { Text("Open Settings") }
 }
 
 /** The v3 cache bar: when the copy on screen is from, and Refresh. */

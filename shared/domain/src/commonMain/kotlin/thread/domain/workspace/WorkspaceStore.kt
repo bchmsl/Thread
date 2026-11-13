@@ -105,6 +105,16 @@ sealed interface WorkspaceWrite {
         val link: NoteTopicLink,
     ) : WorkspaceWrite
 
+    /** Saves a record that Topics link to: ids and the canonical URL only (adr/ADR-013-jira-in-the-workspace.md). */
+    data class PutExternalRef(
+        val reference: ExternalReference,
+    ) : WorkspaceWrite
+
+    /** Saves one Topic link to an external record. Unlinking writes [TopicExternalLink.linked] false. */
+    data class PutExternalLink(
+        val link: TopicExternalLink,
+    ) : WorkspaceWrite
+
     /**
      * Deletes one Topic, Task, Reminder or Note forever (D43, adr/ADR-012-trash-and-search.md). The document stays
      * as a tombstone that no later write can change, so a stale offline edit from another device cannot bring it back.
@@ -139,6 +149,10 @@ data class WorkspaceData(
     val notes: List<NoteSummary> = emptyList(),
     /** Every stored Note to Topic link, unlinked ones included. */
     val noteLinks: List<NoteTopicLink> = emptyList(),
+    /** Every stored record that Topics link to. */
+    val externalRefs: List<ExternalReference> = emptyList(),
+    /** Every stored Topic link to an external record, unlinked ones included. */
+    val externalLinks: List<TopicExternalLink> = emptyList(),
     /** Notes deleted forever. Their documents are tombstones; their saved versions may still need deleting. */
     val purgedNotes: List<NoteId> = emptyList(),
     val prefs: WorkspacePrefs = WorkspacePrefs(),

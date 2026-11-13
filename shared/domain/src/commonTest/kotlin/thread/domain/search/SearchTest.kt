@@ -1,5 +1,7 @@
 package thread.domain.search
 
+import thread.domain.external.JiraIssueKey
+import thread.domain.external.JiraIssueSummary
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
 import thread.domain.task.Task
@@ -54,5 +56,16 @@ class SearchTest {
         assertEquals(SEARCH_GROUP_LIMIT, found.tasks.size)
         assertEquals(many.take(SEARCH_GROUP_LIMIT), found.tasks)
         assertTrue(searchWorkspace("zzz", topics, tasks, notes)!!.isEmpty)
+    }
+
+    @Test
+    fun downloadedJiraCopiesMatchOnKeyOrTitle() {
+        val issues =
+            (1..8).map { JiraIssueSummary(JiraIssueKey.parse("SYN-10$it")!!, "Story", "Synthetic payment step $it", null, null) } +
+                JiraIssueSummary(JiraIssueKey.parse("SYN-200")!!, "Bug", "Synthetic unrelated", null, null)
+        assertNull(searchJiraCopies(" ", issues))
+        assertEquals(listOf("SYN-200"), searchJiraCopies("syn-200", issues)?.map { it.key.value })
+        assertEquals(6, searchJiraCopies("PAYMENT", issues)?.size, "6 per group, like the other groups")
+        assertEquals(emptyList(), searchJiraCopies("nothing", issues))
     }
 }
