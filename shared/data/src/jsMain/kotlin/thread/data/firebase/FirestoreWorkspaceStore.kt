@@ -31,6 +31,7 @@ import thread.domain.topic.TopicId
 import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.TopicsView
+import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceStore
@@ -59,6 +60,11 @@ class WorkspaceReadException(
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
  * - `users/{uid}/topicNoteLinks/{topicId}_{noteId}`: `{topicId, noteId, linked, updatedAt, schemaVersion: 1}`.
  *   Unlinking writes `linked: false`; the document stays.
+ * - Topics also carry `deletedAt` while in Trash (adr/ADR-012-trash-and-search.md).
+ * - Delete forever replaces a Topic, Task, Reminder or Note document with the tombstone `{purgedAt, schemaVersion: 1}`.
+ *   The rules refuse every later write to it, so a stale edit from another device cannot bring it back. Tombstones
+ *   are left out of [WorkspaceData]; purged Notes are listed in [WorkspaceData.purgedNotes] so their versions can be
+ *   deleted too.
  *
  * The Firestore persistent cache is the device copy and the outbox. A write goes into it at once, also offline, and
  * the snapshot metadata says whether the server acknowledged it. A refused write is dropped from the cache by the SDK;
@@ -166,9 +172,11 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutReminder -> reminderData(write.reminder, write.isNew, write.before)
                     is WorkspaceWrite.PutNote -> noteData(write.note, write.isNew, write.before)
                     is WorkspaceWrite.PutNoteLink -> linkData(write.link)
+                    is WorkspaceWrite.DeleteForever -> tombstone()
                 }
             if (reject) data.rejectedForTesting = true
-            batch.set(reference(write), data, merge())
+            // A tombstone replaces the whole document, so none of its content stays.
+            if (write is WorkspaceWrite.DeleteForever) batch.set(reference(write), data) else batch.set(reference(write), data, merge())
         }
         // The cache has the writes now. The promise settles when the server answers, which waits while offline.
         batch.commit().catch { refusedWrites.update { it + writes } }
@@ -183,6 +191,16 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutReminder -> doc(firestore, USERS, accountId.value, REMINDERS, write.reminder.id.value)
             is WorkspaceWrite.PutNote -> doc(firestore, USERS, accountId.value, NOTES, write.note.id.value)
             is WorkspaceWrite.PutNoteLink -> doc(firestore, USERS, accountId.value, LINKS, write.link.id)
+            is WorkspaceWrite.DeleteForever -> {
+                val collection =
+                    when (write.kind) {
+                        TrashKind.Topic -> TOPICS
+                        TrashKind.Task -> TASKS
+                        TrashKind.Reminder -> REMINDERS
+                        TrashKind.Note -> NOTES
+                    }
+                doc(firestore, USERS, accountId.value, collection, write.id)
+            }
         }
 
     private fun prefsRef() = doc(firestore, USERS, accountId.value, PREFS, PREFS_ID)
@@ -216,6 +234,9 @@ class FirestoreWorkspaceStore internal constructor(
         if (base == null || base.goal != topic.goal) data.goal = topic.goal
         if (base == null || base.leftOff != topic.leftOff) data.leftOff = topic.leftOff
         if (base == null || base.nextStep != topic.nextStep) data.nextStep = topic.nextStep
+        if ((base == null && topic.deleted) || (base != null && base.deleted != topic.deleted)) {
+            data.deletedAt = if (topic.deleted) serverTimestamp() else null
+        }
         if (isNew) data.createdAt = serverTimestamp()
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
@@ -296,6 +317,13 @@ class FirestoreWorkspaceStore internal constructor(
         return data
     }
 
+    private fun tombstone(): dynamic {
+        val data = newJsObject()
+        data.purgedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
     private fun linkData(link: NoteTopicLink): dynamic {
         val data = newJsObject()
         data.topicId = link.topicId.value
@@ -340,10 +368,10 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
     val statuses = snapshots.statuses
     val prefs = snapshots.prefs
     val decodedStatuses = statuses.docs.map(::decodeStatus)
-    val decodedTopics = snapshots.topics.docs.map(::decodeTopic)
-    val decodedTasks = snapshots.tasks.docs.map(::decodeTask)
-    val decodedReminders = snapshots.reminders.docs.map(::decodeReminder)
-    val decodedNotes = snapshots.notes.docs.map(::decodeNote)
+    val decodedTopics = snapshots.topics.kept().map(::decodeTopic)
+    val decodedTasks = snapshots.tasks.kept().map(::decodeTask)
+    val decodedReminders = snapshots.reminders.kept().map(::decodeReminder)
+    val decodedNotes = snapshots.notes.kept().map(::decodeNote)
     val decodedLinks = snapshots.links.docs.map(::decodeLink)
     val all = listOf(statuses, snapshots.topics, snapshots.tasks, snapshots.reminders, snapshots.notes, snapshots.links)
     val decoded = listOf(decodedStatuses, decodedTopics, decodedTasks, decodedReminders, decodedNotes, decodedLinks)
@@ -354,6 +382,10 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
         reminders = decodedReminders.filterNotNull(),
         notes = decodedNotes.filterNotNull(),
         noteLinks = decodedLinks.filterNotNull(),
+        purgedNotes =
+            snapshots.notes.docs
+                .filter(::isTombstone)
+                .map { NoteId(it.id) },
         prefs = decodePrefs(prefs),
         prefsStored = prefs.exists(),
         // Only the server can say that an account has no status at all. The cache may just not have them yet.
@@ -361,6 +393,15 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
         pendingWrites = all.any { it.metadata.hasPendingWrites } || prefs.metadata.hasPendingWrites,
         unreadable = decoded.sumOf { list -> list.count { it == null } },
     )
+}
+
+/** The documents that are not tombstones. A tombstone is neither shown nor counted as unreadable. */
+private fun QuerySnapshot.kept(): List<DocumentSnapshot> = docs.filterNot(::isTombstone)
+
+/** True for a document deleted forever: `{purgedAt, schemaVersion}`. A pending tombstone counts at once. */
+private fun isTombstone(snapshot: DocumentSnapshot): Boolean {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    return data != null && data.purgedAt != null
 }
 
 /** The status in [snapshot], or null when this app cannot read it (another schema version, or damaged). */
@@ -397,6 +438,8 @@ private fun decodeTopic(snapshot: DocumentSnapshot): Topic? {
         leftOff = stringOrNull(data.leftOff).orEmpty(),
         nextStep = stringOrNull(data.nextStep).orEmpty(),
         createdAtMillis = if (createdAt == null) null else createdAt.unsafeCast<Timestamp>().toMillis().toLong(),
+        deleted = data.deletedAt != null,
+        deletedAtMillis = millisOrNull(data.deletedAt),
     )
 }
 
@@ -422,6 +465,7 @@ private fun decodeTask(snapshot: DocumentSnapshot): Task? {
         createdAtMillis = millisOrNull(data.createdAt),
         deleted = data.deletedAt != null,
         discarded = data.discarded == true,
+        deletedAtMillis = millisOrNull(data.deletedAt),
     )
 }
 
@@ -443,6 +487,7 @@ private fun decodeReminder(snapshot: DocumentSnapshot): Reminder? {
         dismissed = data.dismissedAt != null,
         deleted = data.deletedAt != null,
         createdAtMillis = millisOrNull(data.createdAt),
+        deletedAtMillis = millisOrNull(data.deletedAt),
     )
 }
 
@@ -463,6 +508,8 @@ private fun decodeNote(snapshot: DocumentSnapshot): NoteSummary? {
         createdAtMillis = millisOrNull(data.createdAt),
         updatedAtMillis = millisOrNull(data.updatedAt),
         pendingWrites = snapshot.metadata.hasPendingWrites,
+        fromConflict = data.copiedFrom != null,
+        deletedAtMillis = millisOrNull(data.deletedAt),
     )
 }
 

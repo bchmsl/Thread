@@ -48,6 +48,7 @@ internal external interface SnapshotMetadata {
 
 internal external interface DocumentSnapshot {
     val id: String
+    val ref: DocumentReference
     val metadata: SnapshotMetadata
 
     fun exists(): Boolean
@@ -72,6 +73,8 @@ internal external interface WriteBatch {
         reference: DocumentReference,
         data: dynamic,
     ): WriteBatch
+
+    fun delete(reference: DocumentReference): WriteBatch
 
     /** Resolves when the server acknowledged every write; rejects when it refused them. Waits while offline. */
     fun commit(): Promise<Unit>

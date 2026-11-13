@@ -32,7 +32,8 @@ import thread.domain.note.notePreview
  *   (adr/ADR-011-notes-in-the-workspace.md). The workspace store writes the other fields of this document (`inbox`,
  *   `discarded`, `createdAt`); writes here never name them, and merges keep them.
  * - `users/{uid}/notes/{noteId}/revisions/{revisionId}`: `{parentRevisionId, title, body, schemaVersion: 1, deviceId,
- *   createdAt, discardedAt?}`. `body` is the RichText JSON string. Revisions are never deleted.
+ *   createdAt, discardedAt?}`. `body` is the RichText JSON string. Revisions are deleted only after the Note was deleted
+ *   forever, when its document is the tombstone `{purgedAt, schemaVersion: 1}` (adr/ADR-012-trash-and-search.md).
  *
  * Every write is one batch, applied to the local cache at once and acknowledged per document. A revision counts as
  * acknowledged when its document has no pending writes. Only app-owned content is written: no Jira, GitHub or other
@@ -133,6 +134,23 @@ class FirestoreNoteSyncRemote internal constructor(
         commit(batch)
     }
 
+    override suspend fun deleteVersions(noteId: NoteId): Int {
+        val versions =
+            try {
+                getDocsFromServer(revisionsRef(noteId)).await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                throw NoteSyncRejectedException("Reading the versions failed (${errorCode(e)})", e)
+            }
+        versions.docs.toList().chunked(DELETE_BATCH_SIZE).forEach { chunk ->
+            val batch = writeBatch(firestore)
+            chunk.forEach { batch.delete(it.ref) }
+            commit(batch)
+        }
+        return versions.docs.size
+    }
+
     private suspend fun commit(batch: WriteBatch) {
         try {
             batch.commit().await()
@@ -189,6 +207,9 @@ class FirestoreNoteSyncRemote internal constructor(
         const val NOTES = "notes"
         const val REVISIONS = "revisions"
         const val SCHEMA_VERSION = 1
+
+        /** Firestore allows 500 writes in one batch. */
+        const val DELETE_BATCH_SIZE = 400
     }
 }
 
@@ -199,7 +220,7 @@ private fun toRemoteNote(
     val decoded = revisions.docs.map(::decodeRevision)
     val noteData: dynamic = if (note.exists()) note.data(estimatedTimestamps()) else null
     return RemoteNote(
-        exists = note.exists(),
+        exists = noteData != null && noteData.purgedAt == null,
         inTrash = noteData != null && noteData.deletedAt != null,
         history = RevisionHistory(decoded.filterNotNull()),
         fromServer = !note.metadata.fromCache && !revisions.metadata.fromCache,

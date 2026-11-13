@@ -10,6 +10,7 @@ import thread.domain.topic.TopicId
  * - [inTrash]: moved to Trash. Its text and versions stay.
  * - [discarded]: taken back right after it was made (the Undo of its toast). It leaves every view, Trash included.
  * - [pendingWrites]: this device changed the listing and the server has not acknowledged it yet.
+ * - [fromConflict]: the Note was made from the version not kept in a conflict (D41).
  */
 data class NoteSummary(
     val id: NoteId,
@@ -21,6 +22,9 @@ data class NoteSummary(
     val createdAtMillis: Long? = null,
     val updatedAtMillis: Long? = null,
     val pendingWrites: Boolean = false,
+    val fromConflict: Boolean = false,
+    /** When it went to Trash, for the Trash page. */
+    val deletedAtMillis: Long? = null,
 )
 
 /**

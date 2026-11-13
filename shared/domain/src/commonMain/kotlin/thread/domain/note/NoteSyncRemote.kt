@@ -38,6 +38,13 @@ interface NoteSyncRemote {
         noteId: NoteId,
         inTrash: Boolean,
     )
+
+    /**
+     * Deletes the saved versions of a Note that was deleted forever (adr/ADR-012-trash-and-search.md). Its document
+     * must already be a tombstone on the server; the rules refuse it otherwise. Reads the versions from the server, so
+     * it throws [NoteSyncRejectedException] offline too. Returns how many versions it deleted.
+     */
+    suspend fun deleteVersions(noteId: NoteId): Int
 }
 
 /**
@@ -47,6 +54,7 @@ interface NoteSyncRemote {
  * answer). [unreadableRevisions] counts revisions this app cannot read, for example from a newer RichText version.
  */
 data class RemoteNote(
+    /** False also for a Note deleted forever. */
     val exists: Boolean,
     val inTrash: Boolean,
     val history: RevisionHistory,

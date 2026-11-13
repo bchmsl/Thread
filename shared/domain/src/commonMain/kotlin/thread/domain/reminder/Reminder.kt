@@ -55,6 +55,8 @@ data class Reminder(
     val dismissed: Boolean = false,
     val deleted: Boolean = false,
     val createdAtMillis: Long? = null,
+    /** When it went to Trash, for the Trash page. */
+    val deletedAtMillis: Long? = null,
 )
 
 /** Longest reminder text. */

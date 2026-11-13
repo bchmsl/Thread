@@ -2,14 +2,35 @@ rules_version = '2';
 
 // Thread talks to Firestore straight from the browser, so these rules are the security boundary
 // (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
-// users/{uid}. Only the shapes below can be written; anything not matched is denied, and nothing can be deleted.
+// users/{uid}. Only the shapes below can be written; anything not matched is denied. Only the saved versions of a Note
+// deleted forever can be deleted.
 // Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes), adr/ADR-009-workspace-entities-and-sync.md
-// (statuses, Topics, preferences), adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders) and
-// adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links).
+// (statuses, Topics, preferences), adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders),
+// adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links) and adr/ADR-012-trash-and-search.md
+// (Topics in Trash, Delete forever).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(uid) {
       return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Delete forever replaces a Topic, Task, Reminder or Note document with {purgedAt, schemaVersion: 1}, so none of
+    // its content stays. Afterwards only another tombstone can be written (two devices deleting the same item): a
+    // stale edit from another device cannot bring the item back.
+    function isTombstone(data) {
+      return data.keys().hasOnly(['purgedAt', 'schemaVersion'])
+        && data.keys().hasAll(['purgedAt', 'schemaVersion'])
+        && data.schemaVersion == 1
+        && data.purgedAt == request.time;
+    }
+
+    function notPurged() {
+      return resource.data.get('purgedAt', null) == null;
+    }
+
+    function noteNotPurged(uid, noteId) {
+      let path = /databases/$(database)/documents/users/$(uid)/notes/$(noteId);
+      return !exists(path) || get(path).data.get('purgedAt', null) == null;
     }
 
     // users/{uid}/notes/{noteId}: the Note's current head, its listing (title, preview) and Trash state, written by the
@@ -91,9 +112,11 @@ service cloud.firestore {
         && (status.get('deletedAt', null) == null || status.deletedAt is timestamp);
     }
 
-    // users/{uid}/topics/{topicId}: one Topic. createdAt is set by the first write and never changes.
+    // users/{uid}/topics/{topicId}: one Topic. createdAt is set by the first write and never changes. deletedAt marks a
+    // Topic in Trash; its Tasks, Reminders and Note links are not written, so Restore brings them back as they are.
     function validTopic(topic) {
-      return topic.keys().hasOnly(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'schemaVersion'])
+      return topic.keys().hasOnly(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'deletedAt',
+          'schemaVersion'])
         && topic.keys().hasAll(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'schemaVersion'])
         && topic.schemaVersion == 1
         && topic.updatedAt == request.time
@@ -101,7 +124,8 @@ service cloud.firestore {
         && topic.color in ['lavender', 'mint', 'sky', 'peach', 'butter']
         && topic.statusId is string && topic.statusId.size() > 0
         && validText(topic.goal) && validText(topic.leftOff) && validText(topic.nextStep)
-        && topic.createdAt is timestamp;
+        && topic.createdAt is timestamp
+        && nullOrTimestamp(topic, 'deletedAt');
     }
 
     function validText(text) {
@@ -174,21 +198,27 @@ service cloud.firestore {
     match /users/{uid}/notes/{noteId} {
       allow read: if signedInAs(uid);
       allow create: if signedInAs(uid)
-        && validNote(request.resource.data)
-        && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == request.time);
+        && ((validNote(request.resource.data)
+          && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == request.time))
+          || isTombstone(request.resource.data));
       allow update: if signedInAs(uid)
-        && validNote(request.resource.data)
-        && keepsNoteCreatedAt(request.resource.data, resource.data);
+        && (isTombstone(request.resource.data)
+          || (notPurged() && validNote(request.resource.data) && keepsNoteCreatedAt(request.resource.data, resource.data)));
 
+      // A Note deleted forever loses its versions too. Nothing is written to the versions of such a Note.
       match /revisions/{revisionId} {
         allow read: if signedInAs(uid);
         allow create: if signedInAs(uid)
           && validRevision(request.resource.data)
           && request.resource.data.createdAt == request.time
-          && !('discardedAt' in request.resource.data);
+          && !('discardedAt' in request.resource.data)
+          && noteNotPurged(uid, noteId);
         allow update: if signedInAs(uid)
           && validRevision(request.resource.data)
-          && validRevisionChange(request.resource.data, resource.data);
+          && validRevisionChange(request.resource.data, resource.data)
+          && noteNotPurged(uid, noteId);
+        allow delete: if signedInAs(uid)
+          && get(/databases/$(database)/documents/users/$(uid)/notes/$(noteId)).data.get('purgedAt', null) != null;
       }
     }
 
@@ -205,31 +235,31 @@ service cloud.firestore {
     match /users/{uid}/topics/{topicId} {
       allow read: if signedInAs(uid);
       allow create: if signedInAs(uid)
-        && validTopic(request.resource.data)
-        && request.resource.data.createdAt == request.time;
+        && ((validTopic(request.resource.data) && request.resource.data.createdAt == request.time)
+          || isTombstone(request.resource.data));
       allow update: if signedInAs(uid)
-        && validTopic(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && (isTombstone(request.resource.data)
+          || (notPurged() && validTopic(request.resource.data) && request.resource.data.createdAt == resource.data.createdAt));
     }
 
     match /users/{uid}/tasks/{taskId} {
       allow read: if signedInAs(uid);
       allow create: if signedInAs(uid)
-        && validTask(request.resource.data)
-        && request.resource.data.createdAt == request.time;
+        && ((validTask(request.resource.data) && request.resource.data.createdAt == request.time)
+          || isTombstone(request.resource.data));
       allow update: if signedInAs(uid)
-        && validTask(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && (isTombstone(request.resource.data)
+          || (notPurged() && validTask(request.resource.data) && request.resource.data.createdAt == resource.data.createdAt));
     }
 
     match /users/{uid}/reminders/{reminderId} {
       allow read: if signedInAs(uid);
       allow create: if signedInAs(uid)
-        && validReminder(request.resource.data)
-        && request.resource.data.createdAt == request.time;
+        && ((validReminder(request.resource.data) && request.resource.data.createdAt == request.time)
+          || isTombstone(request.resource.data));
       allow update: if signedInAs(uid)
-        && validReminder(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && (isTombstone(request.resource.data)
+          || (notPurged() && validReminder(request.resource.data) && request.resource.data.createdAt == resource.data.createdAt));
     }
 
     match /users/{uid}/prefs/{prefsId} {

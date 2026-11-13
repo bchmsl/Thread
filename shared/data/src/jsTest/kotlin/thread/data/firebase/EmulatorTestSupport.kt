@@ -75,6 +75,10 @@ internal class MemoryDraftStore : LocalDraftStore {
     override suspend fun write(draft: LocalDraft) {
         drafts[draft.noteId] = draft
     }
+
+    override suspend fun delete(noteId: NoteId) {
+        drafts.remove(noteId)
+    }
 }
 
 internal fun jsObject(vararg fields: Pair<String, Any?>): dynamic {

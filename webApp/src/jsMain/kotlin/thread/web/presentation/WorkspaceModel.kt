@@ -40,8 +40,16 @@ import thread.domain.topic.TopicStatus
 import thread.domain.topic.newTopic
 import thread.domain.topic.topicsInOrder
 import thread.domain.topic.visibleStatuses
+import thread.domain.trash.TrashEntry
+import thread.domain.trash.deleteForeverWrites
+import thread.domain.trash.restoreReminder
+import thread.domain.trash.restoreTask
+import thread.domain.trash.restoreTopic
+import thread.domain.trash.trashEntries
+import thread.domain.trash.visibleWorkspace
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspaceEdit
 import thread.domain.workspace.WorkspacePrefs
@@ -60,6 +68,7 @@ import thread.domain.workspace.workspaceSaveStates
 import thread.web.presentation.notes.notePlace
 import thread.web.presentation.topics.topicPlace
 import thread.domain.note.inboxNotes as inboxNotesOf
+import thread.domain.trash.trashTopic as trashTopicEdit
 
 internal sealed interface TopicCreation {
     data class Created(
@@ -84,17 +93,32 @@ internal sealed interface TaskCreation {
 /**
  * The signed-in account's Topics, statuses, Tasks, Reminders, Note listings and preferences for the screens
  * (adr/ADR-009-workspace-entities-and-sync.md, adr/ADR-010-tasks-reminders-and-dates.md,
- * adr/ADR-011-notes-in-the-workspace.md). A Note's text is not here: an open Note syncs through its own NoteSyncer.
- * State comes from [WorkspaceStore.observe]; screens change it only through writes, so what they show is always what
- * the device stored.
+ * adr/ADR-011-notes-in-the-workspace.md, adr/ADR-012-trash-and-search.md). A Note's text is not here: an open Note
+ * syncs through its own NoteSyncer. State comes from [WorkspaceStore.observe]; screens change it only through writes, so
+ * what they show is always what the device stored. Screens see [data]: a Topic in Trash is not in it, nor what went to
+ * Trash with it. Only Trash and the Topic page read [stored].
  */
 internal class WorkspaceModel(
     private val store: WorkspaceStore,
     private val newId: (prefix: String) -> String,
 ) {
-    /** Null until the first answer from the device cache or the server. */
-    var data: WorkspaceData? by mutableStateOf(null)
+    /** Everything the device stored, Topics in Trash included. Null until the first answer from the cache or the server. */
+    var stored: WorkspaceData? by mutableStateOf(null)
         private set
+
+    /** What the views show: [stored] without the Topics in Trash and what went to Trash with them. */
+    val data: WorkspaceData?
+        get() {
+            val current = stored
+            if (current !== visibleFrom) {
+                visibleCache = current?.let(::visibleWorkspace)
+                visibleFrom = current
+            }
+            return visibleCache
+        }
+
+    private var visibleFrom: WorkspaceData? = null
+    private var visibleCache: WorkspaceData? = null
 
     var readFailed: Boolean by mutableStateOf(false)
         private set
@@ -117,7 +141,10 @@ internal class WorkspaceModel(
 
     fun topic(id: String): Topic? = data?.topics?.firstOrNull { it.id.value == id }
 
-    /** Every stored Task, Trash and undone creations included: the input of the Task rules. */
+    /** The stored Topic [id], also when it is in Trash. Null once it is deleted forever. */
+    fun storedTopic(id: String): Topic? = stored?.topics?.firstOrNull { it.id.value == id }
+
+    /** Every Task, Trash and undone creations included, but not those of a Topic in Trash: the input of the Task rules. */
     val storedTasks: List<Task> get() = data?.tasks.orEmpty()
 
     /** Tasks not in Trash. */
@@ -133,10 +160,10 @@ internal class WorkspaceModel(
 
     val inbox: List<Task> get() = derived().inbox
 
-    /** Every stored Note listing, Trash and undone creations included: the input of the Note edits. */
+    /** Every Note listing, Trash and undone creations included: the input of the Note edits. */
     val storedNotes: List<NoteSummary> get() = data?.notes.orEmpty()
 
-    /** Every stored Topic link, unlinked ones included. */
+    /** Every Topic link, unlinked ones included, but not those to a Topic in Trash. Edits leave those links alone. */
     val noteLinks: List<NoteTopicLink> get() = data?.noteLinks.orEmpty()
 
     /** Notes not in Trash, newest change first. */
@@ -217,7 +244,7 @@ internal class WorkspaceModel(
                 launch { store.refused.collect { refused = it } }
                 var seeded = false
                 store.observe().collect { next ->
-                    data = next
+                    stored = next
                     if (next.needsSeed && !seeded) {
                         seeded = true
                         store.write(seedWrites())
@@ -248,7 +275,7 @@ internal class WorkspaceModel(
     /** Creates a Topic named [name] in the first Planned status, or says why it cannot. */
     fun createTopic(name: String): TopicCreation {
         if (statuses.isEmpty()) return TopicCreation.Refused(EditProblem.NotReady)
-        val slot = maxOf(data?.topics?.size ?: 0, lastColorSlot + 1)
+        val slot = maxOf(stored?.topics?.size ?: 0, lastColorSlot + 1)
         val topic =
             newTopic(TopicId(newId("t-")), name, statuses, slot)
                 ?: return TopicCreation.Refused(if (name.isBlank()) EditProblem.BlankName else EditProblem.NameTooLong)
@@ -306,12 +333,54 @@ internal class WorkspaceModel(
         discardNote(current).takeIf { it.isNotEmpty() }?.let(store::write)
     }
 
-    /** Links the Note made from a conflict to the Topics of the Note it came from (D41). */
+    /** Links the Note made from a conflict to the Topics of the Note it came from (D41), those in Trash too. */
     fun copyLinks(
         from: NoteId,
         to: NoteId,
     ) {
-        copyNoteLinks(from, to, noteLinks).takeIf { it.isNotEmpty() }?.let(store::write)
+        copyNoteLinks(from, to, stored?.noteLinks.orEmpty()).takeIf { it.isNotEmpty() }?.let(store::write)
+    }
+
+    /** Everything in Trash, newest deletion first. */
+    val trash: List<TrashEntry>
+        get() {
+            val current = stored
+            if (current !== trashFrom) {
+                trashCache = current?.let(::trashEntries).orEmpty()
+                trashFrom = current
+            }
+            return trashCache
+        }
+
+    private var trashFrom: WorkspaceData? = null
+    private var trashCache: List<TrashEntry> = emptyList()
+
+    /** Moves [topic] to Trash with its Tasks, Reminders and Note links. Returns the edit, for Undo. */
+    fun trashTopic(topic: Topic): WorkspaceEdit? = apply(trashTopicEdit(topic))
+
+    /**
+     * Restores a Topic, Task or Reminder from Trash. Returns the edit, or null when nothing changed. A Note is restored
+     * through its note sync instead, so [entry] must not be a [TrashEntry.NoteEntry].
+     */
+    fun restore(entry: TrashEntry): WorkspaceEdit? =
+        when (entry) {
+            is TrashEntry.TopicEntry -> apply(restoreTopic(entry.topic, storedStatuses))
+            is TrashEntry.TaskEntry -> stored?.let { apply(restoreTask(entry.task, it)) }
+            is TrashEntry.ReminderEntry -> apply(restoreReminder(entry.reminder))
+            is TrashEntry.NoteEntry -> error("A Note is restored through its note sync")
+        }
+
+    /** How many reminders Delete forever takes with [entry]. */
+    fun remindersGoingWith(entry: TrashEntry): Int =
+        stored
+            ?.let { deleteForeverWrites(entry, it) }
+            .orEmpty()
+            .count { it is WorkspaceWrite.DeleteForever && it.kind == TrashKind.Reminder }
+
+    /** Deletes [entry] forever, with what went to Trash with it (D43). There is no Undo. */
+    fun deleteForever(entry: TrashEntry) {
+        val current = stored ?: return
+        store.write(deleteForeverWrites(entry, current))
     }
 
     /** Adds a reminder, or returns null when its text is too long. */
@@ -335,7 +404,7 @@ internal class WorkspaceModel(
 
     /** What the status line chip and the sync panel show for the workspace. */
     fun syncReport(online: Boolean): SyncReport {
-        val current = data
+        val current = stored
         val states = workspaceSaveStates(current, refused.size, online) + if (readFailed) listOf(NoteSaveState.SyncFailed) else emptyList()
         val problems =
             buildList {
@@ -402,13 +471,19 @@ internal class WorkspaceModel(
             }
             is WorkspaceWrite.PutNoteLink -> {
                 val title = note(write.link.noteId.value)?.title?.ifBlank { null } ?: UNTITLED_NOTE
-                val topic = topic(write.link.topicId.value)?.name ?: "a Topic"
+                val topic = storedTopic(write.link.topicId.value)?.name ?: "a Topic"
                 SyncProblem(
                     "The link between “$title” and $topic was not saved. The server refused the change.",
                     NoteSaveState.SyncFailed,
                     notePlace(write.link.noteId),
                 )
             }
+            is WorkspaceWrite.DeleteForever ->
+                SyncProblem(
+                    "“${write.title}” was not deleted forever. The server refused the change.",
+                    NoteSaveState.SyncFailed,
+                    View.Trash.place,
+                )
         }
 }
 

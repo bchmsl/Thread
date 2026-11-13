@@ -48,6 +48,9 @@ interface LocalDraftStore {
      * as durably committed. Throws [LocalDraftStoreException] when it is not.
      */
     suspend fun write(draft: LocalDraft)
+
+    /** Removes the draft of [noteId], if any (Delete forever). Throws [LocalDraftStoreException] when it fails. */
+    suspend fun delete(noteId: NoteId)
 }
 
 class LocalDraftStoreException(

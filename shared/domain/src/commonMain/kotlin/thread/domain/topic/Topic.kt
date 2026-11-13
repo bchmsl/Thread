@@ -76,6 +76,9 @@ data class TopicStatus(
  * One piece of work (01-product-spec.md, "Topic"). Only [name] is required. [leftOff] and [nextStep] are the
  * "Pick up here" fields. [createdAtMillis] orders Topics inside a status; it is null until the device has the
  * server's time or its own estimate of it.
+ *
+ * [deleted] marks a Topic in Trash (D42). Its Tasks, Reminders and Note links stay as stored and are hidden with it,
+ * so Restore brings all of them back (adr/ADR-012-trash-and-search.md).
  */
 data class Topic(
     val id: TopicId,
@@ -86,4 +89,6 @@ data class Topic(
     val leftOff: String = "",
     val nextStep: String = "",
     val createdAtMillis: Long? = null,
+    val deleted: Boolean = false,
+    val deletedAtMillis: Long? = null,
 )

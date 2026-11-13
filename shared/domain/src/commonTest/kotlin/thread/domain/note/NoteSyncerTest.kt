@@ -501,6 +501,8 @@ class NoteSyncerTest {
             this.inTrash = inTrash
             publish()
         }
+
+        override suspend fun deleteVersions(noteId: NoteId): Int = 0
     }
 
     private data class Resolution(
@@ -513,6 +515,8 @@ class NoteSyncerTest {
         override suspend fun read(noteId: NoteId): LocalDraft? = null
 
         override suspend fun write(draft: LocalDraft) = Unit
+
+        override suspend fun delete(noteId: NoteId) = Unit
     }
 
     private companion object {

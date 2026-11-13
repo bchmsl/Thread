@@ -50,6 +50,7 @@ import thread.domain.topic.TOPIC_TEXT_MAX_LENGTH
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
 import thread.domain.topic.statusOf
+import thread.domain.trash.TrashEntry
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
 import thread.domain.workspace.editPickUp
@@ -64,10 +65,11 @@ import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.tasks.focusById
+import thread.web.presentation.trash.trashPlace
 
 /**
- * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks, Notes and Reminders. Jira,
- * pull requests and Move to Trash join in later phases.
+ * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks, Notes and Reminders. Jira and
+ * pull requests join in later phases. A Topic in Trash keeps its page: it says what went with it and offers Restore.
  */
 @Composable
 internal fun TopicScreen(
@@ -81,14 +83,27 @@ internal fun TopicScreen(
         if (workspace.readFailed) EmptyState(Icon.Alert, "Topics could not load", "Reload the page to try again.")
         return
     }
+    val toasts = LocalToasts.current
+    // Where focus goes once the page has switched between the Topic and its Trash state (v3 #gone-h, .td-name).
+    var focusAfterSwitch by remember { mutableStateOf<String?>(null) }
     val topic = topicId?.let(workspace::topic)
     if (topic == null) {
-        EmptyState(Icon.Topics, "Topic not found", "It may have been removed in another tab.") {
-            A(View.Topics.place.hash, { classes("btn", "btn--line") }) { Text("Open Topics") }
+        val entry = workspace.trash.firstOrNull { it is TrashEntry.TopicEntry && it.id == topicId } as? TrashEntry.TopicEntry
+        if (entry != null) {
+            TopicInTrash(entry) {
+                workspace.restore(entry) ?: return@TopicInTrash
+                focusAfterSwitch = TOPIC_NAME_ID
+                toasts.show("Restored: ${entry.title}")
+            }
+        } else {
+            EmptyState(Icon.Topics, "Topic not found", "It may have been removed in another tab.") {
+                A(View.Topics.place.hash, { classes("btn", "btn--line") }) { Text("Open Topics") }
+            }
         }
+        FocusAfterSwitch(focusAfterSwitch, GONE_HEADING_ID) { focusAfterSwitch = null }
         return
     }
-    val toasts = LocalToasts.current
+    FocusAfterSwitch(focusAfterSwitch, TOPIC_NAME_ID) { focusAfterSwitch = null }
     var editing by remember { mutableStateOf(false) }
     // v3 opens Tasks and Notes and closes Reminders by default; the choice lasts while the page is open.
     var tasksOpen by remember(topic.id) { mutableStateOf(true) }
@@ -110,6 +125,7 @@ internal fun TopicScreen(
         TopicHex(topic.name, topic.color, HexSize.Lg)
         H1({
             classes("td-name")
+            id(TOPIC_NAME_ID)
             tabIndex(-1)
         }) { Text(topic.name) }
         Div({ classes("td-meta") }) {
@@ -155,6 +171,27 @@ internal fun TopicScreen(
                     focusAddTask++
                 }
             }) { Text("Add task") }
+            // Move to Trash is instant with Undo (v3, owner decision 2026-11-13). The page then shows what went with it.
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--danger-text")
+                attr("aria-describedby", "td-trash-hint")
+                onClick {
+                    val edit = workspace.trashTopic(topic) ?: return@onClick
+                    focusAfterSwitch = GONE_HEADING_ID
+                    toasts.show("Moved to Trash: ${topic.name}", undo = {
+                        focusAfterSwitch = TOPIC_NAME_ID
+                        workspace.undo(edit)
+                    })
+                }
+            }) {
+                IconView(Icon.Trash, 16)
+                Text(" Move to Trash")
+            }
+            Span({
+                classes("vh")
+                id("td-trash-hint")
+            }) { Text("Its tasks and reminders go with it. Notes stay in Notes. You can undo or restore it from Trash.") }
         }
     }
     Section({
@@ -189,6 +226,75 @@ internal fun TopicScreen(
         EditTopicDialog(topic, workspace) { editing = false }
     }
 }
+
+/** Moves focus to [target] once the element with that id is on the page, then calls [onDone]. */
+@Composable
+private fun FocusAfterSwitch(
+    target: String?,
+    shownId: String,
+    onDone: () -> Unit,
+) {
+    LaunchedEffect(target, shownId) {
+        if (target != shownId) return@LaunchedEffect
+        focusById(target)
+        onDone()
+    }
+}
+
+/** The page of a Topic in Trash (v3 topic.js trashedState). */
+@Composable
+private fun TopicInTrash(
+    entry: TrashEntry.TopicEntry,
+    onRestore: () -> Unit,
+) {
+    val topic = entry.topic
+    A(View.Topics.place.hash, { classes("back") }) {
+        IconView(Icon.ChevLeft, 16)
+        Text(" Topics")
+    }
+    Section({
+        classes("gone")
+        attr("style", topicStyle(topic.color))
+        attr("aria-labelledby", GONE_HEADING_ID)
+    }) {
+        TopicHex(topic.name, topic.color, HexSize.Lg)
+        H1({
+            classes("gone__h")
+            id(GONE_HEADING_ID)
+            tabIndex(-1)
+        }) { Text("${topic.name} is in Trash") }
+        P({ classes("gone__p") }) { Text(wentWithTopic(entry)) }
+        P({ classes("gone__p") }) {
+            Text("Restore brings back the Topic, its tasks and reminders, and its links to notes, tickets and pull requests.")
+        }
+        Div({ classes("gone__acts") }) {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--primary")
+                onClick { onRestore() }
+            }) { Text("Restore Topic") }
+            A(trashPlace(entry.id).hash, { classes("btn", "btn--line") }) { Text("Open in Trash") }
+        }
+    }
+}
+
+/** "Its 2 tasks and 1 reminder went with it. 3 notes stay in Notes, unlinked from it." (v3 trashedState). */
+private fun wentWithTopic(entry: TrashEntry.TopicEntry): String {
+    val parts = listOfNotNull(count(entry.tasks.size, "task", "tasks"), count(entry.reminders.size, "reminder", "reminders"))
+    val went = if (parts.isEmpty()) "It had no tasks or reminders." else "Its ${parts.joinToString(" and ")} went with it."
+    val stay = if (entry.notes.size == 1) "stays" else "stay"
+    val kept = count(entry.notes.size, "note", "notes")?.let { " $it $stay in Notes, unlinked from it." }.orEmpty()
+    return went + kept
+}
+
+private fun count(
+    n: Int,
+    one: String,
+    many: String,
+): String? = if (n == 0) null else "$n ${if (n == 1) one else many}"
+
+private const val TOPIC_NAME_ID = "td-name"
+private const val GONE_HEADING_ID = "gone-h"
 
 /**
  * A "Pick up here" text box. It saves when it loses focus (v3), and also a second after typing stops and when the

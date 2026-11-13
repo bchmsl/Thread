@@ -65,6 +65,9 @@ internal external fun onCollectionSnapshot(
 /** Writes that apply together or not at all. Applied to the local cache at once, also offline. */
 internal external fun writeBatch(firestore: Firestore): WriteBatch
 
+/** Reads the documents of [query] from the server only. Rejects offline. */
+internal external fun getDocsFromServer(query: CollectionReference): Promise<QuerySnapshot>
+
 /** The server's time of the write. Shown as the device's estimate until acknowledged (with `serverTimestamps`). */
 internal external fun serverTimestamp(): dynamic
 

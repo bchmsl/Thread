@@ -37,7 +37,7 @@ class WorkspaceEditsTest {
                     is WorkspaceWrite.PutStatus -> statuses = statuses.filterNot { it.id == write.status.id } + write.status
                     is WorkspaceWrite.PutTopic -> topics = topics.filterNot { it.id == write.topic.id } + write.topic
                     is WorkspaceWrite.PutPrefs, is WorkspaceWrite.PutTask, is WorkspaceWrite.PutReminder,
-                    is WorkspaceWrite.PutNote, is WorkspaceWrite.PutNoteLink,
+                    is WorkspaceWrite.PutNote, is WorkspaceWrite.PutNoteLink, is WorkspaceWrite.DeleteForever,
                     -> Unit
                 }
             }

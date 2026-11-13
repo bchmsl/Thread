@@ -2,6 +2,7 @@ package thread.domain.workspace
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
 import thread.domain.note.NoteSummary
 import thread.domain.note.NoteTopicLink
@@ -103,6 +104,26 @@ sealed interface WorkspaceWrite {
     data class PutNoteLink(
         val link: NoteTopicLink,
     ) : WorkspaceWrite
+
+    /**
+     * Deletes one Topic, Task, Reminder or Note forever (D43, adr/ADR-012-trash-and-search.md). The document stays
+     * as a tombstone that no later write can change, so a stale offline edit from another device cannot bring it back.
+     * The store leaves tombstones out of [WorkspaceData].
+     */
+    data class DeleteForever(
+        val kind: TrashKind,
+        val id: String,
+        /** Shown when the server refuses the change. */
+        val title: String,
+    ) : WorkspaceWrite
+}
+
+/** What can go to Trash. Jira tickets and pull requests never do. */
+enum class TrashKind {
+    Topic,
+    Task,
+    Reminder,
+    Note,
 }
 
 /** What this device knows of the workspace: its own changes included, acknowledged or not. */
@@ -118,6 +139,8 @@ data class WorkspaceData(
     val notes: List<NoteSummary> = emptyList(),
     /** Every stored Note to Topic link, unlinked ones included. */
     val noteLinks: List<NoteTopicLink> = emptyList(),
+    /** Notes deleted forever. Their documents are tombstones; their saved versions may still need deleting. */
+    val purgedNotes: List<NoteId> = emptyList(),
     val prefs: WorkspacePrefs = WorkspacePrefs(),
     /** True when the account has a stored preferences document. Until then [prefs] are the defaults. */
     val prefsStored: Boolean = false,

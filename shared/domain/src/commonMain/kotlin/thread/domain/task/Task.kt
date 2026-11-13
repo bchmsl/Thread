@@ -71,4 +71,6 @@ data class Task(
     val createdAtMillis: Long? = null,
     val deleted: Boolean = false,
     val discarded: Boolean = false,
+    /** When it went to Trash, for the Trash page. Null while not in Trash, or before the time is known. */
+    val deletedAtMillis: Long? = null,
 )

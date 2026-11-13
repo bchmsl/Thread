@@ -354,5 +354,7 @@ class DraftAutosaverTest {
             writes += pending
             pending.result.await()
         }
+
+        override suspend fun delete(noteId: NoteId) = Unit
     }
 }

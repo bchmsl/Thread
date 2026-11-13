@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.browser.document
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Main
@@ -23,10 +24,13 @@ import thread.domain.account.AccountState
 import thread.domain.note.NewRevision
 import thread.domain.note.NoteId
 import thread.domain.note.RichTextDocument
+import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
+import thread.domain.search.searchWorkspace
 import thread.domain.task.Task
 import thread.domain.topic.TopicId
+import thread.domain.topic.statusOf
 import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
@@ -41,6 +45,7 @@ import thread.web.presentation.settings.StatusesBlock
 import thread.web.presentation.shell.CaptureDestination
 import thread.web.presentation.shell.CaptureState
 import thread.web.presentation.shell.CaptureType
+import thread.web.presentation.shell.SearchGroup
 import thread.web.presentation.shell.SearchOption
 import thread.web.presentation.shell.SearchPalette
 import thread.web.presentation.shell.StatusLine
@@ -51,10 +56,14 @@ import thread.web.presentation.tasks.InboxScreen
 import thread.web.presentation.tasks.ReminderBanners
 import thread.web.presentation.tasks.TaskSheet
 import thread.web.presentation.tasks.TodayScreen
+import thread.web.presentation.topics.HexSize
+import thread.web.presentation.topics.TopicHex
 import thread.web.presentation.topics.TopicScreen
 import thread.web.presentation.topics.TopicsScreen
 import thread.web.presentation.topics.topicPlace
 import thread.web.presentation.topics.topicProblemText
+import thread.web.presentation.trash.TRASH_PARAM
+import thread.web.presentation.trash.TrashScreen
 
 /** What the app reads from the composition root (Main.kt). */
 class AppServices(
@@ -131,8 +140,13 @@ private fun Workspace(
     // The Task sheet rides on any page as `?task=`, so the page under it is the place without that parameter.
     val page = place.with(TASK_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
-    // Opening another Note keeps the Notes view; the Notes screen moves focus itself.
-    val focusPlace = if (view == View.Notes) page.with(NOTE_PARAM, null) else page
+    // Opening another Note or Trash entry keeps the view; the Notes and Trash screens move focus themselves.
+    val focusPlace =
+        when (view) {
+            View.Notes -> page.with(NOTE_PARAM, null)
+            View.Trash -> page.with(TRASH_PARAM, null)
+            else -> page
+        }
     val title = if (place.head == "topic") placeTopicId?.let(workspace::topic)?.name ?: "Topic" else view.label
     LaunchedEffect(title) { document.title = "$title | Thread" }
     var firstPlace by remember { mutableStateOf(true) }
@@ -145,6 +159,7 @@ private fun Workspace(
         }
     }
     LaunchedEffect(workspace) { workspace.run() }
+    SweepPurgedNotes(workspace, services.notes, signedIn.accountId, online)
     val workspaceReport = workspace.syncReport(online)
     SideEffect { syncCenter.report("workspace", workspaceReport) }
     // Capture starts as the type in Preferences when the app opens (v3); later picks are remembered there.
@@ -190,6 +205,16 @@ private fun Workspace(
                     view == View.Notes ->
                         NotesScreen(workspace, router, services.notes, signedIn.accountId, place.param(NOTE_PARAM), syncCenter)
                     view == View.Topics -> TopicsScreen(workspace, place, router, capture)
+                    view == View.Trash ->
+                        TrashScreen(
+                            workspace,
+                            router,
+                            services.notes,
+                            signedIn.accountId,
+                            place.param(TRASH_PARAM),
+                            openTask,
+                            openTarget,
+                        )
                     view == View.Settings ->
                         SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
                             StatusesBlock(workspace)
@@ -309,8 +334,14 @@ private fun Workspace(
                     },
                 search = { query ->
                     val q = query.trim().lowercase()
-                    listOf(
-                        thread.web.presentation.shell.SearchGroup(
+                    searchGroups(query, workspace, openTask = { task ->
+                        searchOpen = false
+                        openTask(task)
+                    }) { to ->
+                        searchOpen = false
+                        router.go(to)
+                    } +
+                        SearchGroup(
                             "Go to",
                             View.entries.filter { it.label.lowercase().contains(q) }.map { target ->
                                 SearchOption(target.label, "", { IconView(target.icon, 18) }) {
@@ -318,13 +349,78 @@ private fun Workspace(
                                     router.go(target.place)
                                 }
                             },
-                        ),
-                    )
+                        )
                 },
                 noResults = { query -> NoSearchResults(query) },
                 onQueryChange = {},
                 onClose = { searchOpen = false },
             )
+        }
+    }
+}
+
+/**
+ * The search groups of v3 openSearch for what is on this device: Topics, Tasks and Notes, nothing in Trash
+ * (adr/ADR-012-trash-and-search.md). Jira and pull requests join in later phases.
+ */
+private fun searchGroups(
+    query: String,
+    workspace: WorkspaceModel,
+    openTask: (Task) -> Unit,
+    go: (Place) -> Unit,
+): List<SearchGroup> {
+    val found = searchWorkspace(query, workspace.topics, workspace.tasks, workspace.notes) ?: return emptyList()
+    val statuses = workspace.statuses
+    return listOf(
+        SearchGroup(
+            "Topics",
+            found.topics.map { topic ->
+                SearchOption(topic.name, statusOf(topic, statuses).name, { TopicHex(topic.name, topic.color, HexSize.Sm) }) {
+                    go(topicPlace(topic))
+                }
+            },
+        ),
+        SearchGroup(
+            "Tasks",
+            found.tasks.map { task ->
+                val sub = if (task.done) "Completed" else task.topicId?.let { workspace.topic(it.value)?.name } ?: "Standalone"
+                SearchOption(task.title, sub, { IconView(Icon.Task, 18) }) { openTask(task) }
+            },
+        ),
+        SearchGroup(
+            "Notes",
+            found.notes.map { note ->
+                val sub = workspace.topicsOf(note.id).joinToString(", ") { it.name }.ifEmpty { "Standalone" }
+                SearchOption(note.title.ifBlank { UNTITLED_NOTE }, sub, { IconView(Icon.Notes, 18) }) { go(notePlace(note.id)) }
+            },
+        ),
+    )
+}
+
+/**
+ * Deletes the saved versions of each Note deleted forever, here or on another device (adr/ADR-012-trash-and-search.md).
+ * Each one is tried once per app start while online; one that fails is tried again on the next reconnect.
+ */
+@Composable
+private fun SweepPurgedNotes(
+    workspace: WorkspaceModel,
+    notes: NoteServices,
+    accountId: AccountId,
+    online: Boolean,
+) {
+    val swept = remember { mutableSetOf<String>() }
+    val purged = workspace.data?.purgedNotes.orEmpty()
+    LaunchedEffect(purged, online) {
+        if (!online) return@LaunchedEffect
+        purged.filter { swept.add(it.value) }.forEach { id ->
+            try {
+                notes.syncRemote(accountId).deleteVersions(id)
+            } catch (e: CancellationException) {
+                swept.remove(id.value)
+                throw e
+            } catch (e: Throwable) {
+                swept.remove(id.value)
+            }
         }
     }
 }

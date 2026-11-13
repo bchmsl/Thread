@@ -185,3 +185,15 @@ Status: **provisional**. Written in Phase 8 while the owner was away. Details: A
 - D39: a Note made outside a Topic has `inbox = true`. Linking any Topic clears it. Unlinking every Topic leaves the Note standalone.
 - Conflict copies get the same Topic links as the Note they came from.
 - The Notes index searches the title and the preview only.
+
+## Phase 9 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 9 while the owner was away. Details: ADR-012 (Proposed).
+
+- A Topic in Trash is one field, `deletedAt`, on the Topic. Its Tasks, Reminders and Note links are not written; every view hides them while the Topic is in Trash. Restore and Undo clear the field, so everything comes back, also what another device changed meanwhile.
+- Delete forever replaces the document with a tombstone `{purgedAt, schemaVersion: 1}`. The rules refuse every later write except another tombstone, so an old offline write cannot bring the item back. Document deletes stay refused, except the versions of a Note deleted forever.
+- A Topic deleted forever takes the Tasks and Reminders that went to Trash with it. A Task or Note takes the Reminders still on it. Notes and external records are never touched.
+- The versions of a Note deleted forever are deleted by the app once per app start while online. Its local draft goes on this device at once; other devices keep theirs for now.
+- Nothing purges automatically. The retention period is still open.
+- Global search covers Topics (name, next step, goal), Tasks (title) and Notes (title and preview) on this device, at most 6 per group, nothing in Trash. No Jira payload is uploaded for search.
+

@@ -44,7 +44,11 @@ class IndexedDbDraftStore(
 
     override suspend fun write(draft: LocalDraft) {
         val record = toRecord(draft)
-        writeRecord(database(), record)
+        change(database(), failWritesForTesting()) { it.put(record) }
+    }
+
+    override suspend fun delete(noteId: NoteId) {
+        change(database(), abort = false) { it.delete(noteId.value) }
     }
 
     /** The open database. Does not suspend once the database is open. */
@@ -122,9 +126,11 @@ class IndexedDbDraftStore(
             request.onsuccess = { value = request.result }
         }
 
-    private suspend fun writeRecord(
+    /** Runs [apply] on the drafts store in one durable transaction. [abort] is the test hook's failure path. */
+    private suspend fun change(
         db: IdbDatabase,
-        record: dynamic,
+        abort: Boolean,
+        apply: (IdbObjectStore) -> Unit,
     ): Unit =
         suspendCancellableCoroutine { continuation ->
             val transaction =
@@ -139,9 +145,9 @@ class IndexedDbDraftStore(
                 continuation.failOnce(LocalDraftStoreException("Saving locally failed: ${transaction.error?.name ?: "AbortError"}"))
             }
             try {
-                transaction.objectStore(STORE_DRAFTS).put(record)
+                apply(transaction.objectStore(STORE_DRAFTS))
                 when {
-                    failWritesForTesting() -> transaction.abort()
+                    abort -> transaction.abort()
                     // commit() ends the transaction now instead of after the next task. Older browsers lack it.
                     transaction.asDynamic().commit != undefined -> transaction.commit()
                 }

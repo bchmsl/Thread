@@ -178,6 +178,9 @@ internal fun SearchPalette(
     val flat = groups.flatMap { it.options }
     LaunchedEffect(query) { selected = 0 }
     val active = selected.coerceIn(0, (flat.size - 1).coerceAtLeast(0))
+
+    // Reads the state, not [active]: two keys can arrive before the next recomposition.
+    fun current() = selected.coerceIn(0, (flat.size - 1).coerceAtLeast(0))
     LaunchedEffect(active, query) {
         document.getElementById("opt-$active")?.asDynamic()?.scrollIntoView(js("({ block: 'nearest' })"))
     }
@@ -205,17 +208,17 @@ internal fun SearchPalette(
                         when (event.key) {
                             "ArrowDown" -> {
                                 event.preventDefault()
-                                selected = (active + 1).coerceAtMost(flat.size - 1)
+                                selected = (current() + 1).coerceAtMost(flat.size - 1)
                             }
 
                             "ArrowUp" -> {
                                 event.preventDefault()
-                                selected = (active - 1).coerceAtLeast(0)
+                                selected = (current() - 1).coerceAtLeast(0)
                             }
 
                             "Enter" -> {
                                 event.preventDefault()
-                                flat.getOrNull(active)?.onPick?.invoke()
+                                flat.getOrNull(current())?.onPick?.invoke()
                             }
                         }
                     }
