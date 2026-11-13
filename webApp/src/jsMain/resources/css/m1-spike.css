@@ -1,0 +1,233 @@
+/* M1 spike styles. Uses tokens.css (copied unchanged from design/claude-pilot-prototype-v3).
+   Rules below are copied from the approved v3 app.css (D33) unless marked "Spike:".
+   Tiptap's injected base CSS is turned off (injectCSS: false), so its required ProseMirror rules are copied here. */
+
+/* ---------------- Base (v3) ---------------- */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text);
+  font: 15px/1.5 var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4, p { margin: 0; }
+svg { flex-shrink: 0; }
+
+.vh {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:where(a, button, input, select, textarea, [tabindex], summary):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+main:focus, :is(h1, h2, h3)[tabindex="-1"]:focus { outline: none; }
+
+/* Spike: icons are SVG markup inside a wrapper span, which must not affect layout. */
+.icon { display: contents; }
+
+/* ---------------- Page frame (v3) ---------------- */
+main { max-width: 1240px; margin: 0 auto; padding: 36px 40px 40px; }
+.ph {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px 24px; flex-wrap: wrap; margin-bottom: 28px;
+}
+.ph__title { font: 500 var(--fs-38)/1.08 var(--font-display); }
+.ph__sub { margin-top: 8px; color: var(--text-2); font-size: var(--fs-15); }
+.back {
+  display: inline-flex; gap: 4px; align-items: center; color: var(--text-2); text-decoration: none;
+  font-size: var(--fs-14); font-weight: 600; margin: 0 0 14px -6px; padding: 6px 10px 6px 4px; border-radius: 8px;
+}
+.back:hover { color: var(--text); background: var(--ink-850); }
+.muted { color: var(--text-3); }
+
+/* Spike: page heading, aligned with the 780px note page. */
+.spike__head { max-width: 780px; margin: 0 auto 28px; }
+
+/* ---------------- Buttons and controls (v3) ---------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: var(--control-h); padding: 0 16px; border-radius: var(--r-pill);
+  border: 1px solid transparent; background: none; color: var(--text);
+  font: 600 var(--fs-14) var(--font-text); white-space: nowrap; cursor: pointer; text-decoration: none;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.btn--line { border-color: var(--border-strong); }
+.btn--line:hover { background: var(--ink-800); border-color: var(--fog-500); }
+.btn--text { color: var(--text-2); padding: 0 10px; }
+.btn--text:hover { color: var(--text); background: var(--ink-800); }
+.btn--sm { height: 32px; padding: 0 12px; font-size: var(--fs-13); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+.input {
+  width: 100%; height: var(--control-h); padding: 0 12px; background: var(--bg-input); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--r-control); font-size: var(--fs-15);
+}
+.input::placeholder { color: var(--text-3); }
+.input:hover { border-color: var(--fog-700); }
+.input:focus { border-color: var(--fog-300); }
+.input[aria-invalid="true"] { border-color: var(--danger); } /* Spike: v3 marks the field only with aria-invalid. */
+
+.switch {
+  appearance: none; -webkit-appearance: none; width: 42px; height: 24px; border-radius: 12px; flex-shrink: 0;
+  background: var(--ink-650); position: relative; cursor: pointer; transition: background var(--t-fast); margin: 0;
+}
+.switch::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--fog-300); transition: transform var(--t-fast), background var(--t-fast);
+}
+.switch:checked { background: var(--fog-200); }
+.switch:checked::after { transform: translateX(18px); background: var(--ink-900); }
+
+/* Prototype-only control (v3 demo bar). */
+.demo {
+  display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 12px;
+  border: 1px dashed var(--border-strong); border-radius: 12px; font-size: var(--fs-13); color: var(--text-2);
+}
+.demo__tag { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; color: var(--text); }
+.demo__switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; } /* Spike */
+
+/* ---------------- Toast (v3, no status line in the spike) ---------------- */
+.toast {
+  position: fixed; left: 0; right: 0; margin: 0 auto; width: max-content;
+  bottom: 24px; z-index: 70;
+  display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px;
+  min-height: 50px;
+  background: var(--fog-100); color: var(--ink-900); border-radius: 12px; box-shadow: var(--shadow-pop);
+  transform: translateY(16px); opacity: 0; pointer-events: none;
+  transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
+}
+.toast.is-on { transform: none; opacity: 1; pointer-events: auto; }
+.toast__msg { font-weight: 600; font-size: var(--fs-14); margin-right: 8px; }
+
+/* ---------------- Note page (v3 Notes) ---------------- */
+.npane { min-width: 0; }
+.pagebar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; max-width: 780px; margin: 0 auto 14px; min-height: 32px; }
+.pagedemo { max-width: 780px; margin: 16px auto 0; }
+.savest { display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-13); font-weight: 650; }
+.savest.tone-ok { color: var(--cat-done); }
+.savest.tone-busy { color: var(--cat-active); }
+.savest.tone-warn { color: var(--cat-paused); }
+.savest.tone-bad { color: var(--danger); }
+/* Spike: "Saved locally" is the final state while there is no sync, so it stays quiet (no green, which v3 keeps for Synced). */
+.savest.tone-quiet { color: var(--text-2); }
+.savest small { font-weight: 500; color: var(--text-3); font-size: 12px; }
+.page {
+  position: relative; max-width: 780px; margin: 0 auto; padding: 52px 64px 72px; color: var(--page-text);
+  background-color: var(--page-bg);
+  background-image: radial-gradient(circle, var(--page-dot) 1.1px, transparent 1.5px);
+  background-size: 22px 22px; background-position: 11px 11px;
+  border: 1px solid var(--page-edge); border-radius: var(--r-page); box-shadow: var(--shadow-page);
+}
+.page__title {
+  display: block; width: 100%; background: transparent; border: 0; resize: none; overflow: hidden; padding: 0;
+  margin: 0 0 18px; color: var(--text); font: 500 var(--fs-30)/1.2 var(--font-display); border-radius: 4px;
+}
+.page__title::placeholder { color: var(--fog-700); }
+.page__title:focus { outline: none; }
+.page__title:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 6px; }
+.tb {
+  position: sticky; top: 8px; z-index: 5; display: flex; gap: 2px; flex-wrap: wrap; align-items: center;
+  padding: 4px; margin: 0 -10px 22px; background: rgba(15, 23, 42, 0.94); border: 1px solid var(--page-edge); border-radius: 10px;
+}
+.tb__btn { width: 36px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: var(--text-2); cursor: pointer; }
+.tb__btn:hover { background: var(--ink-750); color: var(--text); }
+.tb__btn[aria-pressed="true"], .tb__btn[aria-expanded="true"] { background: var(--ink-650); color: var(--text); }
+.tb__btn:disabled { opacity: 0.4; cursor: not-allowed; } /* Spike: editor turned off after a failure. */
+.tb__sep { width: 1px; height: 20px; background: var(--page-edge); margin: 0 4px; }
+.tb__link { display: flex; gap: 6px; align-items: center; flex: 1 1 280px; padding: 2px; flex-wrap: wrap; }
+.tb__link .input { height: 32px; font-size: var(--fs-14); flex: 1 1 180px; width: auto; }
+.tb__err { flex-basis: 100%; font-size: 12px; color: var(--danger); padding: 0 6px 4px; }
+
+.editor { font: 17px/1.65 var(--font-text); color: var(--page-text); min-height: 280px; caret-color: var(--text); border-radius: 4px; overflow-wrap: anywhere; }
+.editor:focus { outline: none; }
+.editor:focus-visible { outline: 2px solid rgba(233, 237, 247, 0.32); outline-offset: 12px; }
+.editor h2 { font: 500 22px/1.3 var(--font-display); color: var(--text); margin: 1.3em 0 0.45em; }
+/* Spike: RichText v1 also has heading levels 1 and 3 (from paste or "# " / "### "), which v3 did not style. */
+.editor h1 { font: 500 26px/1.25 var(--font-display); color: var(--text); margin: 1.2em 0 0.45em; }
+.editor h3 { font: 600 18px/1.4 var(--font-text); color: var(--text); margin: 1.2em 0 0.4em; }
+.editor > :first-child { margin-top: 0; }
+.editor p { margin: 0 0 0.8em; }
+.editor ul, .editor ol { margin: 0 0 1em; padding-left: 1.4em; }
+.editor li { margin: 0.2em 0; }
+/* Spike: list items hold paragraphs in the editor DOM (checklist items inside a div), so they get no paragraph margin. */
+.editor li > p, .editor li > div > p { margin: 0; }
+.editor a { color: var(--text); text-decoration: underline; text-decoration-color: var(--fog-500); text-underline-offset: 3px; }
+.editor b, .editor strong { color: var(--text); font-weight: 700; }
+
+/* Checklist. v3 drew the box with li::before; Tiptap renders a real checkbox, styled the same way. */
+.editor ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.editor ul[data-type="taskList"] > li { display: flex; gap: 14px; align-items: flex-start; }
+.editor ul[data-type="taskList"] > li > label { flex: 0 0 auto; display: flex; padding-top: 0.28em; user-select: none; }
+.editor ul[data-type="taskList"] > li > div { flex: 1 1 auto; min-width: 0; }
+.editor ul[data-type="taskList"] input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0;
+  border: 2px solid var(--fog-500); border-radius: 5px; background: transparent; cursor: pointer;
+}
+.editor ul[data-type="taskList"] input[type="checkbox"]:checked {
+  border-color: var(--cat-done);
+  background: var(--cat-done) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230e1322' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 12px no-repeat;
+}
+.editor ul[data-type="taskList"] > li[data-checked="true"] > div { color: var(--text-3); text-decoration: line-through; }
+
+.nbanner {
+  display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; padding: 12px 16px; margin: 0 auto 16px;
+  max-width: 780px; border: 1px solid; border-radius: 12px;
+}
+.nbanner > .icon > svg { margin-top: 2px; }
+.nbanner--bad { background: rgba(255, 123, 123, 0.08); border-color: rgba(255, 123, 123, 0.45); }
+.nbanner--bad > .icon > svg { color: var(--danger); }
+.nbanner__body { flex: 1; min-width: 200px; }
+.nbanner__title { font-weight: 700; }
+.nbanner__text { color: var(--text-2); font-size: var(--fs-14); margin-top: 2px; }
+.nbanner__acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------------- Narrow screens (v3) ---------------- */
+@media (max-width: 759px) {
+  main { padding: 20px 16px 24px; }
+  .ph__title { font-size: 30px; }
+  .page { padding: 40px 20px 48px; margin: 0 -6px; }
+  .tb { margin: 0 -8px 18px; }
+}
+
+/* ---------------- ProseMirror base (copied from @tiptap/core 3.33.1, injected CSS) ---------------- */
+.ProseMirror { position: relative; }
+.ProseMirror {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+.ProseMirror [contenteditable="false"] { white-space: normal; }
+.ProseMirror [contenteditable="false"] [contenteditable="true"] { white-space: pre-wrap; }
+.ProseMirror pre { white-space: pre-wrap; }
+img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.ProseMirror-gapcursor { display: none; pointer-events: none; position: absolute; margin: 0; }
+.ProseMirror-gapcursor:after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: -2px;
+  width: 20px;
+  border-top: 1px solid var(--text); /* Spike: black in Tiptap, invisible on the dark page. */
+  animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+}
+@keyframes ProseMirror-cursor-blink { to { visibility: hidden; } }
+.ProseMirror-hideselection *::selection { background: transparent; }
+.ProseMirror-hideselection *::-moz-selection { background: transparent; }
+.ProseMirror-hideselection * { caret-color: transparent; }
+.ProseMirror-focused .ProseMirror-gapcursor { display: block; }

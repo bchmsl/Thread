@@ -1,0 +1,132 @@
+/* Thread v3 design tokens.
+   Three layers: primitive -> semantic -> component.
+   Dark only (D31). Approved as the pilot design reference on 2026-11-13 (D33). */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------- Primitive: ink-navy shell ---------- */
+  --ink-1000: #070a12;
+  --ink-950: #0a0e18;
+  --ink-900: #0e1322;
+  --ink-850: #131a2b;
+  --ink-800: #192135;
+  --ink-750: #1f2840;
+  --ink-700: #28324d;
+  --ink-650: #34405f;
+  --fog-100: #e9edf7;
+  --fog-200: #ced5e6;
+  --fog-300: #b2bbd2;
+  --fog-500: #8792ae;
+  --fog-700: #5b6681;
+
+  /* Status category families (D17/D18): gray / blue / orange / green */
+  --cat-planned: #a7b0c6;
+  --cat-active: #82b6ff;
+  --cat-paused: #f5a65b;
+  --cat-done: #7bd49f;
+
+  /* Topic pastels: identity only, never status. Colors may repeat; the monogram disambiguates. */
+  --topic-lavender: #cbb8ff;
+  --topic-mint: #9de5c9;
+  --topic-sky: #a8d3ff;
+  --topic-peach: #ffc7a1;
+  --topic-butter: #f0dd8c;
+
+  /* Single action color */
+  --magenta-400: #ff74b4;
+  --magenta-500: #f2559e;
+  --magenta-600: #d9418a;
+  --magenta-ink: #1c0814;
+
+  --red-400: #ff7b7b;
+  --green-ci: #3fb96b;
+  --pr-open: #238045;
+
+  /* ---------- Semantic ---------- */
+  --bg-app: var(--ink-900);
+  --bg-line: var(--ink-950);
+  --bg-surface: var(--ink-850);
+  --bg-raised: var(--ink-800);
+  --bg-hover: var(--ink-750);
+  --bg-input: #111829;
+  --border: #252e46;
+  --border-strong: var(--ink-650);
+
+  --text: var(--fog-100);
+  --text-2: var(--fog-300);
+  --text-3: var(--fog-500);
+  --text-disabled: var(--fog-700);
+
+  --action: var(--magenta-500);
+  --action-hover: var(--magenta-400);
+  --action-pressed: var(--magenta-600);
+  --on-action: var(--magenta-ink);
+
+  --danger: var(--red-400);
+  --warning: var(--cat-paused);
+  --success: var(--cat-done);
+  --focus-ring: #f4f6ff;
+
+  /* Notes: engineering notebook page */
+  --page-bg: #0f172a;
+  --page-edge: #24304c;
+  --page-dot: rgba(160, 182, 255, 0.11);
+  --page-text: #e3e8f5;
+
+  /* ---------- Type ---------- */
+  --font-display: "Futura", "Futura PT", "Century Gothic", "URW Gothic", "Trebuchet MS", sans-serif;
+  --font-text: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-17: 17px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-30: 30px;
+  --fs-38: 38px;
+
+  /* ---------- Space, radius, elevation ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-14: 56px;
+
+  --r-swatch: 3px;
+  --r-control: 10px;
+  --r-row: 10px;
+  --r-surface: 14px;
+  --r-page: 6px;
+  --r-pill: 999px;
+
+  --shadow-pop: 0 18px 48px rgba(3, 6, 14, 0.6), 0 0 0 1px var(--border-strong);
+  --shadow-page: 0 24px 60px rgba(2, 5, 12, 0.45);
+
+  /* ---------- Component ---------- */
+  --line-h: 56px;
+  --control-h: 40px;
+  --row-min-h: 48px;
+  --primary-h: 44px;
+  --hex-xs: 16px;
+  --hex-sm: 24px;
+  --hex-md: 34px;
+  --hex-lg: 84px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 120ms;
+  --t-med: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-med: 0ms;
+  }
+}

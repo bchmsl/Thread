@@ -2,10 +2,15 @@
 kotlin = "2.4.21"
 compose = "1.12.2"
 coroutines = "1.11.0"
+serialization = "1.13.0"
 ktlint-plugin = "14.2.0"
+# Note editor (adr/ADR-003-editor-and-richtext.md). All Tiptap packages share one version.
+tiptap = "3.33.1"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose" }
 compose-html-core = { module = "org.jetbrains.compose.html:html-core", version.ref = "compose" }
 

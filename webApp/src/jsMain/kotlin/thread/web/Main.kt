@@ -1,13 +1,15 @@
 package thread.web
 
 import org.jetbrains.compose.web.renderComposable
-import thread.data.DataLayer
+import thread.data.local.IndexedDbDraftStore
 import thread.web.presentation.App
+import thread.web.presentation.m1spike.SpikeTestHooks
 
-/** Entry point and, for now, the composition root: the only webApp code that may touch the data module. */
+/** Composition root: the only place that picks data implementations. */
 fun main() {
-    val layers = listOf("webApp", DataLayer.NAME, DataLayer.DEPENDS_ON)
+    val spikeTestHooks = SpikeTestHooks()
+    val draftStore = IndexedDbDraftStore(failWritesForTesting = { spikeTestHooks.failLocalSaves })
     renderComposable(rootElementId = "root") {
-        App(layers = layers)
+        App(draftStore, spikeTestHooks)
     }
 }

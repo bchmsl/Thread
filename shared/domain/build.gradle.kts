@@ -16,9 +16,13 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(libs.kotlinx.coroutines.core)
+            // Only the JsonElement tree API, inside the RichText codec. No serialization plugin and no
+            // serialization types in the public domain API (adr/ADR-003-editor-and-richtext.md).
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
