@@ -154,3 +154,13 @@ Status: **provisional**. Written in Phase 4 while the owner was away. Details an
 - Cloud references for Jira and PR links: proposed default is provider, instance, key or number, and canonical URL, with no title (owner decision O11 open).
 - Dates (proposed for Phase 7): `plannedDate` and a date-only deadline are calendar dates in the workspace time zone, never instants.
 
+
+## Phase 6 outcome (proposed, 2026-11-13)
+
+Status: **provisional**. Written in Phase 6 while the owner was away. Details: ADR-009 (Proposed).
+
+- Statuses, Topics and preferences are one document each under `users/{uid}`: `statuses/{id}`, `topics/{id}`, `prefs/main`. Client-made ids. Seed statuses have fixed ids (`s-planned`, `s-active`, `s-paused`, `s-done`).
+- Field names in the pilot: Topic `name`, `goal`, `leftOff` (the "continuationNote" above), `nextStep`, `color`, `statusId`, `createdAt`. Preferences hold `topicsView` and `captureType`; the time zone joins in Phase 7.
+- Status delete is a `deletedAt` write that moves its Topics in the same batch. Nothing is hard-deleted.
+- Edits write only the changed fields. Different fields edited on two devices both survive. The same field: the last write to reach the server wins.
+- The Firestore persistent cache is the outbox. Save state comes from snapshot metadata. A refused write shows Sync failed and is named in the sync panel.

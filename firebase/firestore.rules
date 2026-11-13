@@ -3,7 +3,8 @@ rules_version = '2';
 // Thread talks to Firestore straight from the browser, so these rules are the security boundary
 // (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
 // users/{uid}. Only the shapes below can be written; anything not matched is denied, and nothing can be deleted.
-// Document shapes: adr/ADR-004-note-revisions-and-conflicts.md.
+// Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes) and adr/ADR-009-workspace-entities-and-sync.md
+// (statuses, Topics, preferences).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(uid) {
@@ -51,6 +52,46 @@ service cloud.firestore {
         && (!('discardedAt' in changed) || after.get('discardedAt', null) == request.time);
     }
 
+    // users/{uid}/statuses/{statusId}: one workspace status. Deleting a status is a deletedAt write, so Undo works and
+    // the document stays. The four category ids are fixed; the name is the person's.
+    function validStatus(status) {
+      return status.keys().hasOnly(['name', 'category', 'sortOrder', 'deletedAt', 'updatedAt', 'schemaVersion'])
+        && status.keys().hasAll(['name', 'category', 'sortOrder', 'updatedAt', 'schemaVersion'])
+        && status.schemaVersion == 1
+        && status.updatedAt == request.time
+        && status.name is string && status.name.size() > 0 && status.name.size() <= 24
+        && status.category in ['planned', 'active', 'paused', 'done']
+        && status.sortOrder is int
+        && (status.get('deletedAt', null) == null || status.deletedAt is timestamp);
+    }
+
+    // users/{uid}/topics/{topicId}: one Topic. createdAt is set by the first write and never changes.
+    function validTopic(topic) {
+      return topic.keys().hasOnly(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'schemaVersion'])
+        && topic.keys().hasAll(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'schemaVersion'])
+        && topic.schemaVersion == 1
+        && topic.updatedAt == request.time
+        && topic.name is string && topic.name.size() > 0 && topic.name.size() <= 200
+        && topic.color in ['lavender', 'mint', 'sky', 'peach', 'butter']
+        && topic.statusId is string && topic.statusId.size() > 0
+        && validText(topic.goal) && validText(topic.leftOff) && validText(topic.nextStep)
+        && topic.createdAt is timestamp;
+    }
+
+    function validText(text) {
+      return text is string && text.size() <= 10000;
+    }
+
+    // users/{uid}/prefs/main: the workspace preferences.
+    function validPrefs(prefs) {
+      return prefs.keys().hasOnly(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
+        && prefs.keys().hasAll(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
+        && prefs.schemaVersion == 1
+        && prefs.updatedAt == request.time
+        && prefs.topicsView in ['list', 'board']
+        && prefs.captureType in ['task', 'note', 'topic'];
+    }
+
     match /users/{uid}/notes/{noteId} {
       allow read: if signedInAs(uid);
       allow create, update: if signedInAs(uid) && validNote(request.resource.data);
@@ -65,6 +106,26 @@ service cloud.firestore {
           && validRevision(request.resource.data)
           && validRevisionChange(request.resource.data, resource.data);
       }
+    }
+
+    match /users/{uid}/statuses/{statusId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validStatus(request.resource.data);
+    }
+
+    match /users/{uid}/topics/{topicId} {
+      allow read: if signedInAs(uid);
+      allow create: if signedInAs(uid)
+        && validTopic(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedInAs(uid)
+        && validTopic(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{uid}/prefs/{prefsId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && prefsId == 'main' && validPrefs(request.resource.data);
     }
   }
 }

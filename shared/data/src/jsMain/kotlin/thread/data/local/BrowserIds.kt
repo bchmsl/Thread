@@ -28,6 +28,9 @@ fun browserDeviceId(): DeviceId {
     return DeviceId(created)
 }
 
+/** A new random id for a workspace entity, for example "t-" + a UUID for a Topic. Made on the device, so offline works. */
+fun randomWorkspaceId(prefix: String): String = prefix + randomId()
+
 /** A new random revision id. */
 fun randomRevisionId(): RevisionId = RevisionId(randomId())
 

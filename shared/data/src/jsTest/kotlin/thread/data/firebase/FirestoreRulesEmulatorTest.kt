@@ -2,7 +2,6 @@ package thread.data.firebase
 
 import kotlinx.coroutines.await
 import thread.domain.note.RichTextJson
-import kotlin.js.Promise
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -11,19 +10,6 @@ import kotlin.test.assertTrue
  * fresh synthetic account ids, so tests do not see each other's data.
  */
 class FirestoreRulesEmulatorTest {
-    private fun rulesTest(block: suspend (env: RulesTestEnvironment, owner: String, other: String) -> Unit): Promise<Unit> =
-        emulatorTest {
-            // The library also reads Node environment variables for emulators we do not use. The browser has none.
-            js("if (typeof globalThis.process === 'undefined') { globalThis.process = { env: {} }; }")
-            val firestore = jsObject("host" to FirebaseBackend.EMULATOR_HOST, "port" to FirebaseBackend.FIRESTORE_EMULATOR_PORT)
-            val env = initializeTestEnvironment(jsObject("projectId" to FirebaseBackend.PROJECT_ID, "firestore" to firestore)).await()
-            try {
-                block(env, syntheticSubject(), syntheticSubject())
-            } finally {
-                env.cleanup().await()
-            }
-        }
-
     private fun note(vararg extra: Pair<String, Any?>): dynamic =
         jsObject(
             "title" to "Synthetic title",

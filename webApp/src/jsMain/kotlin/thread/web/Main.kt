@@ -4,6 +4,8 @@ import org.jetbrains.compose.web.renderComposable
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
+import thread.data.firebase.FirestoreWorkspaceStore
+import thread.data.local.randomWorkspaceId
 import thread.web.platform.registerOfflineShell
 import thread.web.presentation.App
 import thread.web.presentation.AppServices
@@ -19,7 +21,13 @@ fun main() {
     val account = FirebaseAccountSession(backend)
     val testFlags = TestFlags()
     if (backend.usesEmulators) installTestHooks(backend, account, testFlags)
-    val services = AppServices(account = account, usesEmulators = backend.usesEmulators)
+    val services =
+        AppServices(
+            account = account,
+            usesEmulators = backend.usesEmulators,
+            workspaceStore = { accountId -> FirestoreWorkspaceStore(backend, accountId) { testFlags.failServerWrites } },
+            newId = ::randomWorkspaceId,
+        )
     renderComposable(rootElementId = "root") {
         App(services)
     }

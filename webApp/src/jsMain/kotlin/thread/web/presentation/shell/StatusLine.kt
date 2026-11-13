@@ -23,6 +23,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
+import thread.domain.workspace.CaptureKind
 import thread.web.platform.mediaMatches
 import thread.web.platform.observeMedia
 import thread.web.platform.observeSize
@@ -37,10 +38,16 @@ import thread.web.presentation.View
 internal enum class CaptureType(
     val id: String,
     val label: String,
+    val kind: CaptureKind,
 ) {
-    Task("task", "Task"),
-    Note("note", "Note"),
-    Topic("topic", "Topic"),
+    Task("task", "Task", CaptureKind.Task),
+    Note("note", "Note", CaptureKind.Note),
+    Topic("topic", "Topic", CaptureKind.Topic),
+    ;
+
+    companion object {
+        fun of(kind: CaptureKind): CaptureType = entries.first { it.kind == kind }
+    }
 }
 
 /** A Topic quick capture can file into. */
@@ -60,12 +67,20 @@ internal class CaptureState(
     var destination by mutableStateOf<String?>(null)
     var destinationTouched by mutableStateOf(false)
 
-    /** Counts requests to focus the capture field; each one also flashes the line. */
+    /** Counts requests to focus the capture field. */
     var focusRequests by mutableStateOf(0)
         private set
 
-    fun requestFocus(type: CaptureType? = null) {
+    /** Whether the latest focus request also flashes the line (v3 T.focusCapture), or only returns focus. */
+    var flash = true
+        private set
+
+    fun requestFocus(
+        type: CaptureType? = null,
+        flash: Boolean = true,
+    ) {
         if (type != null) this.type = type
+        this.flash = flash
         focusRequests++
     }
 }
@@ -96,11 +111,13 @@ internal fun StatusLine(
     }
     LaunchedEffect(capture.focusRequests) {
         if (capture.focusRequests == 0) return@LaunchedEffect
-        lineElement?.let { line ->
-            // Restart the flash animation, as v3 does.
-            line.classList.remove("is-flash")
-            line.offsetWidth
-            line.classList.add("is-flash")
+        if (capture.flash) {
+            lineElement?.let { line ->
+                // Restart the flash animation, as v3 does.
+                line.classList.remove("is-flash")
+                line.offsetWidth
+                line.classList.add("is-flash")
+            }
         }
         inputElement?.focus()
     }

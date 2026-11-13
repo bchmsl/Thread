@@ -11,7 +11,7 @@ internal class TestFlags {
     /** When true, every local save aborts its IndexedDB transaction. */
     var failLocalSaves: Boolean = false
 
-    /** When true, every Note write to the server carries a field the security rules refuse. */
+    /** When true, every Note and workspace write to the server carries a field the security rules refuse. */
     var failServerWrites: Boolean = false
 }
 

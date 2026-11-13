@@ -2,6 +2,7 @@ package thread.data.firebase
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.await
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.promise
@@ -29,6 +30,20 @@ internal fun emulatorTest(block: suspend CoroutineScope.() -> Unit): Promise<Uni
     CoroutineScope(Dispatchers.Default).promise {
         withTimeout(25.seconds) {
             coroutineScope { block() }
+        }
+    }
+
+/** Runs [block] with a rules test environment and two fresh synthetic account ids, so tests never share data. */
+internal fun rulesTest(block: suspend (env: RulesTestEnvironment, owner: String, other: String) -> Unit): Promise<Unit> =
+    emulatorTest {
+        // The library also reads Node environment variables for emulators we do not use. The browser has none.
+        js("if (typeof globalThis.process === 'undefined') { globalThis.process = { env: {} }; }")
+        val firestore = jsObject("host" to FirebaseBackend.EMULATOR_HOST, "port" to FirebaseBackend.FIRESTORE_EMULATOR_PORT)
+        val env = initializeTestEnvironment(jsObject("projectId" to FirebaseBackend.PROJECT_ID, "firestore" to firestore)).await()
+        try {
+            block(env, syntheticSubject(), syntheticSubject())
+        } finally {
+            env.cleanup().await()
         }
     }
 
