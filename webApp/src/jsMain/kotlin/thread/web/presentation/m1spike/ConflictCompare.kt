@@ -15,6 +15,7 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
 import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
+import org.jetbrains.compose.web.dom.H4
 import org.jetbrains.compose.web.dom.I
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Li
@@ -119,23 +120,32 @@ private fun KeepButton(
  */
 @Composable
 internal fun RichTextView(document: RichTextDocument) {
-    document.blocks.forEach { Block(it) }
+    document.blocks.forEach { RichTextBlockView(it) }
 }
 
+/**
+ * One read-only block. [smallHeadings] shows every heading as h4, for text inside a page section such as a Jira
+ * description (v3 external detail).
+ */
 @Composable
-private fun Block(block: RichTextBlock) {
+internal fun RichTextBlockView(
+    block: RichTextBlock,
+    smallHeadings: Boolean = false,
+) {
     when (block) {
         is RichTextBlock.Paragraph -> P { Inlines(block.content) }
         is RichTextBlock.Heading ->
-            when (block.level) {
-                1 -> H1 { Inlines(block.content) }
-                2 -> H2 { Inlines(block.content) }
+            when {
+                smallHeadings -> H4 { Inlines(block.content) }
+                block.level == 1 -> H1 { Inlines(block.content) }
+                block.level == 2 -> H2 { Inlines(block.content) }
                 else -> H3 { Inlines(block.content) }
             }
-        is RichTextBlock.BulletList -> Ul { block.items.forEach { item -> Li { item.blocks.forEach { Block(it) } } } }
+        is RichTextBlock.BulletList ->
+            Ul { block.items.forEach { item -> Li { item.blocks.forEach { RichTextBlockView(it, smallHeadings) } } } }
         is RichTextBlock.OrderedList ->
             Ol({ if (block.start != 1) attr("start", block.start.toString()) }) {
-                block.items.forEach { item -> Li { item.blocks.forEach { Block(it) } } }
+                block.items.forEach { item -> Li { item.blocks.forEach { RichTextBlockView(it, smallHeadings) } } }
             }
         is RichTextBlock.TaskList ->
             Ul({ attr("data-type", "taskList") }) {
@@ -147,7 +157,7 @@ private fun Block(block: RichTextBlock) {
                                 attr("aria-label", if (item.checked) "Done checklist item" else "Open checklist item")
                             }
                         }
-                        Div { item.blocks.forEach { Block(it) } }
+                        Div { item.blocks.forEach { RichTextBlockView(it, smallHeadings) } }
                     }
                 }
             }

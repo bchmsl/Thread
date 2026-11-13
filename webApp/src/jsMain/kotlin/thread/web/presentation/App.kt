@@ -17,6 +17,8 @@ import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Text
 import org.w3c.dom.events.Event
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.m1connections.ConnectionsSpike
+import thread.web.presentation.m1connections.M1ConnectionsScreen
 import thread.web.presentation.m1spike.M1SpikeScreen
 import thread.web.presentation.m1spike.SpikeServices
 import thread.web.presentation.m1spike.SpikeTestHooks
@@ -28,6 +30,7 @@ internal enum class Route(
 ) {
     Home("#/", "Thread"),
     M1Spike("#/m1-spike", "M1 spike | Thread"),
+    M1Connections("#/m1-connections", "M1 connections | Thread"),
     ;
 
     companion object {
@@ -39,6 +42,7 @@ internal enum class Route(
 fun App(
     spikeServices: SpikeServices,
     spikeTestHooks: SpikeTestHooks,
+    connections: ConnectionsSpike,
 ) {
     var route by remember { mutableStateOf(Route.fromHash(window.location.hash)) }
     val toasts = remember { ToastState() }
@@ -59,6 +63,7 @@ fun App(
         when (route) {
             Route.Home -> HomeScreen()
             Route.M1Spike -> M1SpikeScreen(spikeServices, spikeTestHooks, toasts)
+            Route.M1Connections -> M1ConnectionsScreen(connections, toasts)
         }
     }
     ToastHost(toasts)
@@ -69,8 +74,11 @@ private fun HomeScreen() {
     Div({ classes("ph") }) {
         Div {
             H1({ classes("ph__title") }) { Text("Thread") }
-            P({ classes("ph__sub") }) { Text("Phase 2 build. The real screens come in later phases.") }
+            P({ classes("ph__sub") }) { Text("Phase 3 build. The real screens come in later phases.") }
         }
     }
-    A(Route.M1Spike.hash, { classes("btn", "btn--line") }) { Text("Open the M1 spike") }
+    Div({ classes("home__links") }) {
+        A(Route.M1Spike.hash, { classes("btn", "btn--line") }) { Text("Open the M1 spike") }
+        A(Route.M1Connections.hash, { classes("btn", "btn--line") }) { Text("Open the M1 connections") }
+    }
 }

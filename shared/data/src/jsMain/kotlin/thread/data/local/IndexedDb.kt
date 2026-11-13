@@ -73,6 +73,12 @@ internal external interface IdbObjectStore {
     fun put(value: dynamic): IdbRequest
 
     fun get(key: dynamic): IdbRequest
+
+    fun delete(key: dynamic): IdbRequest
+
+    fun clear(): IdbRequest
+
+    fun getAll(): IdbRequest
 }
 
 /** The browser's IndexedDB factory, or null where IndexedDB does not exist. */

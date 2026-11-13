@@ -24,6 +24,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":shared:domain"))
+            // JsonElement tree API only, to read Jira and GitHub answers (adr/ADR-006, ADR-007). No plugin.
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
