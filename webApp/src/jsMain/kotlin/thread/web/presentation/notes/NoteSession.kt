@@ -1,4 +1,4 @@
-package thread.web.presentation.m1spike
+package thread.web.presentation.notes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -53,10 +53,10 @@ import thread.web.presentation.ToastState
  */
 @Composable
 internal fun NoteSession(
-    services: SpikeServices,
+    services: NoteServices,
     accountId: AccountId?,
     store: LocalDraftStore,
-    ready: SpikeLoad.Ready,
+    ready: NoteLoad.Ready,
     toasts: ToastState,
     onCompareShown: (Boolean) -> Unit,
 ) {

@@ -1,4 +1,4 @@
-package thread.web.presentation.m1connections
+package thread.web.presentation.external
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,10 +36,10 @@ import thread.domain.note.LinkHref
 import thread.web.platform.nowMillis
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
-import thread.web.presentation.m1spike.Banner
-import thread.web.presentation.m1spike.BannerButton
-import thread.web.presentation.m1spike.BannerTone
-import thread.web.presentation.m1spike.RichTextBlockView
+import thread.web.presentation.notes.Banner
+import thread.web.presentation.notes.BannerButton
+import thread.web.presentation.notes.BannerTone
+import thread.web.presentation.notes.RichTextBlockView
 import kotlin.js.Date
 import kotlin.math.ceil
 

@@ -1,0 +1,8 @@
+/* Thread additions to the v3 styles. tokens.css and app.css are copied unchanged from
+   design/claude-pilot-prototype-v3 (D33). Only rules the Compose port needs, and that app.css does not have, go here. */
+
+/* Icons are SVG markup inside a wrapper span, which must not affect layout. */
+.icon { display: contents; }
+
+/* Sign-in shows the test-mode note under the privacy note; v3 has only one .safe line there. */
+.safe + .safe { margin-top: 12px; }

@@ -49,3 +49,24 @@ fun noteSaveState(
         !online -> NoteSaveState.Offline
         else -> NoteSaveState.Syncing
     }
+
+/**
+ * The one state the status line's sync chip shows for everything the app saves (v3 shell.js, `overall`). A problem
+ * the person must act on comes first, then work still under way. With nothing pending, it is Synced when the device
+ * is online and Offline when it is not.
+ */
+fun overallSaveState(
+    states: Collection<NoteSaveState>,
+    online: Boolean,
+): NoteSaveState = OVERALL_ORDER.firstOrNull { it in states } ?: if (online) NoteSaveState.Synced else NoteSaveState.Offline
+
+private val OVERALL_ORDER =
+    listOf(
+        NoteSaveState.Conflict,
+        NoteSaveState.LocalFailed,
+        NoteSaveState.SyncFailed,
+        NoteSaveState.Saving,
+        NoteSaveState.LocalOnly,
+        NoteSaveState.Offline,
+        NoteSaveState.Syncing,
+    )

@@ -10,6 +10,8 @@ local.properties
 .env
 .env.*
 !.env.example
+# Real Firebase project web config (firebase/web-config.example.properties shows the keys).
+firebase/web-config.properties
 
 # Firebase CLI and emulator logs
 firebase-debug.log

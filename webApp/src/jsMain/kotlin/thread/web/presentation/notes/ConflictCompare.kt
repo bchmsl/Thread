@@ -1,4 +1,4 @@
-package thread.web.presentation.m1spike
+package thread.web.presentation.notes
 
 import androidx.compose.runtime.Composable
 import org.jetbrains.compose.web.attributes.ATarget

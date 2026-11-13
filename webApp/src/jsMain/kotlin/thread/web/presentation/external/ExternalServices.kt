@@ -1,4 +1,4 @@
-package thread.web.presentation.m1connections
+package thread.web.presentation.external
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

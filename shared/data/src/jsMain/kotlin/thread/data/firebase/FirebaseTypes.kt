@@ -13,6 +13,7 @@ internal external interface FirebaseOptions {
     var apiKey: String
     var projectId: String
     var authDomain: String
+    var appId: String
 }
 
 internal external interface Auth

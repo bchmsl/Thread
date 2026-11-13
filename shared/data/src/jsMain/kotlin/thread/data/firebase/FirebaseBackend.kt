@@ -4,10 +4,24 @@ import kotlinx.coroutines.await
 import thread.data.local.newJsObject
 
 /**
- * One Firebase app with Auth and Firestore, connected to the local emulators (adr/ADR-002-local-store-and-sync.md).
+ * The web config of a real Firebase project (owner decision O4, queued as Q5). Firebase web config values identify
+ * the project; they are not secrets. The build still reads them only from a git-ignored local file, so the
+ * repository never names a real project.
+ */
+class FirebaseProjectConfig(
+    val apiKey: String,
+    val authDomain: String,
+    val projectId: String,
+    val appId: String,
+) {
+    override fun toString(): String = "FirebaseProjectConfig(projectId=$projectId)"
+}
+
+/**
+ * One Firebase app with Auth and Firestore (adr/ADR-002-local-store-and-sync.md, ADR-005).
  *
- * M1-B runs only against the emulators with the `demo-thread` project: a `demo-` project has no cloud resources, and
- * the emulators accept any API key. Connecting to a real project is a later, separate decision.
+ * With no [project], it connects to the local emulators with the `demo-thread` project: a `demo-` project has no
+ * cloud resources, and the emulators accept any API key. With a [project], it talks to that real project.
  *
  * [persistentCache] keeps Firestore's local copy in IndexedDB, shared by all tabs, so it survives reloads and works
  * offline. Tests use the in-memory cache.
@@ -16,20 +30,26 @@ class FirebaseBackend(
     appName: String = DEFAULT_APP_NAME,
     persistentCache: Boolean = true,
     emulatorHost: String = EMULATOR_HOST,
+    project: FirebaseProjectConfig? = null,
 ) {
-    internal val app: FirebaseApp = initializeApp(emulatorOptions(), appName)
+    /** True when Auth and Firestore are the local emulators. Test hooks exist only then. */
+    val usesEmulators: Boolean = project == null
+
+    internal val app: FirebaseApp = initializeApp(project?.let(::projectOptions) ?: emulatorOptions(), appName)
 
     internal val auth: Auth =
         getAuth(app).also {
-            val options = newJsObject()
-            // The emulator banner would cover the v3 layout. The emulator use is shown on the page instead.
-            options.disableWarnings = true
-            connectAuthEmulator(it, "http://$emulatorHost:$AUTH_EMULATOR_PORT", options)
+            if (project == null) {
+                val options = newJsObject()
+                // The emulator banner would cover the v3 layout. The emulator use is shown on the page instead.
+                options.disableWarnings = true
+                connectAuthEmulator(it, "http://$emulatorHost:$AUTH_EMULATOR_PORT", options)
+            }
         }
 
     internal val firestore: Firestore =
         initializeFirestore(app, firestoreSettings(persistentCache)).also {
-            connectFirestoreEmulator(it, emulatorHost, FIRESTORE_EMULATOR_PORT)
+            if (project == null) connectFirestoreEmulator(it, emulatorHost, FIRESTORE_EMULATOR_PORT)
         }
 
     /** Stops sending Firestore writes and listening to the server, as if the device were offline. Test hook. */
@@ -64,6 +84,15 @@ private fun emulatorOptions(): FirebaseOptions {
     options.apiKey = FirebaseBackend.EMULATOR_API_KEY
     options.projectId = FirebaseBackend.PROJECT_ID
     options.authDomain = "${FirebaseBackend.PROJECT_ID}.firebaseapp.com"
+    return options
+}
+
+private fun projectOptions(project: FirebaseProjectConfig): FirebaseOptions {
+    val options = newJsObject().unsafeCast<FirebaseOptions>()
+    options.apiKey = project.apiKey
+    options.projectId = project.projectId
+    options.authDomain = project.authDomain
+    options.appId = project.appId
     return options
 }
 
