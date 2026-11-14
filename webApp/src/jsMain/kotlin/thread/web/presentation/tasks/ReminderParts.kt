@@ -68,7 +68,7 @@ internal fun targetInfo(
             }
     }
 
-/** The v3 "New reminder" dialog for a Task, Topic or Note: day, time (15:00 by default) and text. */
+/** The v3 "New reminder" dialog for a Task or a Note (D54): day, time (15:00 by default) and text. */
 @Composable
 internal fun ReminderDialog(
     workspace: WorkspaceModel,
@@ -162,7 +162,7 @@ internal fun ReminderBanners(
     onOpenTarget: (ReminderTarget) -> Unit,
 ) {
     val now = LocalNow.current
-    dueReminders(workspace.reminders, now).forEach { reminder ->
+    dueReminders(workspace.reminders, now, workspace.doneTaskIds).forEach { reminder ->
         val info = targetInfo(workspace, reminder.target) ?: return@forEach
         key(reminder.id.value) { ReminderBanner(reminder, info, now, workspace, onOpenTarget) }
     }

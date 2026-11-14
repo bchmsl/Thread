@@ -48,6 +48,7 @@ Upcoming and No date follow Earlier planned (D53). A Task is in the first group 
 - No date: open Tasks with neither date, not waiting in Inbox, newest first, with the Topic tag.
 - Each shows 10 rows, then "Show all (N)" and "Show fewer". Empty, they are not shown.
 - Every group's heading is a button with a chevron (`aria-expanded`, `aria-controls`, the body `hidden` when closed), like a Topic Details section. The open count stays in the heading when closed. Overdue, Today and Earlier planned start open; Upcoming and No date start closed. Each device remembers the choice; it is not synced.
+- Since D54 a reminder day counts as a date: a Task with a reminder today (or one due and not dismissed) is under Today, a later one under Upcoming, and No date means no planned day, deadline or reminder. The heading hints say so: "Planned, due or reminded today", "Planned, due or reminded after today", "No planned day, deadline or reminder".
 - The page header count ("N open tasks") counts Overdue, Today and Earlier planned only.
 Topic labels provide context.
 A Task that qualifies for multiple sections should not create confusing duplicates.
@@ -74,7 +75,7 @@ Preserve an intentional accessible horizontal-scroll experience on narrow displa
 Header with title/status and short goal.
 Main flow: Additional information, personal Tasks, Notes.
 Additional information (D52) replaces v3's "Pick up here": the same tinted section, one text box (4 rows) labelled by its heading, placeholder "Context, links, decisions: anything worth keeping with this Topic". It saves on blur, a second after typing stops, and when the page leaves. A Topic saved before shows its "Where I left off" and "Next step" text in the box until it is edited.
-Secondary region: Jira, PRs, Reminders.
+Secondary region: Jira, PRs. Since D54 there is no Reminders section: Task rows show a bell with the next reminder, and "Topic reminders" appears only while the Topic has some left from an older build.
 Sections collapse; exact default expansion behavior to be designed.
 Open Jira/PR details in one contextual side panel on wide screens.
 Do not stack multiple competing sidebars; related links may collapse into the panel header.
@@ -158,7 +159,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Type | Futura for display, system UI for text. Scale 12, 13, 14, 15, 17, 20, 24, 30, 38 px. Futura ships with Apple platforms; other systems use the listed fallbacks (Century Gothic, URW Gothic, Trebuchet MS). |
 | Space and shape | 4 px spacing base. Radius 10 px for controls and rows, 14 px for surfaces, pills for primary actions. Controls 40 px, primary 44 px, rows 48 px minimum, status line 56 px. |
 | Notes | The editor is a notebook page on a faint dot grid. |
-| Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). |
+| Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). A Task's reminder day counts as a date (D54). |
 | Motion | Short transitions (120 and 220 ms) that drop to zero with reduced motion. |
 
 ## Accessibility and interaction quality

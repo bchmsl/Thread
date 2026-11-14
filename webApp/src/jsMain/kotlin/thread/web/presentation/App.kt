@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.browser.document
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.web.dom.A
@@ -38,6 +39,7 @@ import thread.domain.search.searchWorkspace
 import thread.domain.task.Task
 import thread.domain.topic.TopicId
 import thread.domain.topic.statusOf
+import thread.domain.workspace.ConversionBackup
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.WorkspaceStore
@@ -97,6 +99,8 @@ class AppServices(
     val usesEmulators: Boolean,
     /** The workspace store for one signed-in account. */
     val workspaceStore: (AccountId) -> WorkspaceStore,
+    /** Where one account keeps, on this device, a copy of what the Topic reminder conversion changes (D54). */
+    val conversionBackup: (AccountId) -> ConversionBackup,
     /** A new random id with this prefix, for entities made on this device. */
     val newId: (prefix: String) -> String,
     /** Note drafts on this device and Note sync with the server. */
@@ -149,7 +153,10 @@ private fun Workspace(
     val router = remember { Router() }
     val syncCenter = remember { SyncCenter() }
     val capture = remember { CaptureState(CaptureType.Task) }
-    val workspace = remember { WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId) }
+    val workspace =
+        remember {
+            WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId, services.conversionBackup(signedIn.accountId))
+        }
     // Lists load in the workspace's scope, so leaving a page does not cancel a refresh; signing out stops them all.
     val workspaceScope = rememberCoroutineScope()
     val jira = remember { JiraModel(services.jira, workspaceScope) }
@@ -218,6 +225,13 @@ private fun Workspace(
         }
     }
     LaunchedEffect(workspace) { workspace.run() }
+    // Reminders an older build put on a Topic move onto Tasks once the server's data is here (D54). One run at a time.
+    LaunchedEffect(workspace) {
+        snapshotFlow { workspace.stored to online }.collect {
+            val moved = workspace.convertTopicReminders { online }
+            if (moved.isNotEmpty()) toasts.show(conversionText(moved.size), undo = { workspace.undoConversion(moved) })
+        }
+    }
     LaunchedEffect(jira) { jira.reload() }
     LaunchedEffect(gitHub) { gitHub.reload() }
     // On sign-in and each time the network comes or goes: save a change waiting here, or take another device's.
@@ -583,3 +597,7 @@ private fun NotBuiltYet(view: View) {
     PageHeader(view.label)
     EmptyState(Icon.Sparkle, "Not built yet", "This view comes in a later phase of the build.")
 }
+
+/** The toast after Topic reminders moved onto Tasks (D54). */
+internal fun conversionText(count: Int): String =
+    if (count == 1) "Moved 1 Topic reminder into a Task" else "Moved $count Topic reminders into Tasks"

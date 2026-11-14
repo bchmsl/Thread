@@ -11,8 +11,8 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * An IndexedDB database of simple string stores, for connections and saved copies of Jira and GitHub records
- * (adr/ADR-006, ADR-007, ADR-008), and each account's record of workspace changes on their way to the server
- * (adr/ADR-009). Each store holds records `{key, value}` with key path `key`. The connection sync key is the one
+ * (adr/ADR-006, ADR-007, ADR-008), each account's record of workspace changes on their way to the server
+ * (adr/ADR-009) and each account's local copy of automatic changes (D54). Each store holds records `{key, value}` with key path `key`. The connection sync key is the one
  * value that is not a string ([getObject], adr/ADR-016).
  *
  * It is separate from the Note drafts database (thread-local and thread-drafts-*), so clearing saved copies can
@@ -214,6 +214,11 @@ class IndexedDbKeyValueDatabase(
         fun vaultFor(accountId: AccountId): String = "thread-vault-${accountId.value}"
 
         const val VAULT_STORE: String = "keys"
+
+        /** One account's local copies of automatic changes, such as the Topic reminder conversion (D54). */
+        fun workspaceBackupFor(accountId: AccountId): String = "thread-backup-${accountId.value}"
+
+        const val WORKSPACE_BACKUP_STORE: String = "conversions"
     }
 }
 

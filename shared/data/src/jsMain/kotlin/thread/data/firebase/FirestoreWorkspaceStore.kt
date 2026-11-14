@@ -66,7 +66,9 @@ class WorkspaceReadException(
  *   updatedAt, deletedAt, discarded, schemaVersion: 1}`. Days and deadlines are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`
  *   strings in the workspace time zone, never instants.
  * - `users/{uid}/reminders/{reminderId}`: `{at, zone, text, targetKind, targetId, dismissedAt, createdAt, updatedAt,
- *   deletedAt, schemaVersion: 1}`.
+ *   deletedAt, schemaVersion: 1}`. `targetKind` is `task` or `note` since D54; `topic` is still read, for reminders an
+ *   older build made, and [TopicReminderConverter][thread.domain.workspace.TopicReminderConverter] moves those onto a
+ *   Task by changing `targetKind` and `targetId` only.
  * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, updatedAt, schemaVersion: 1}`.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
@@ -522,6 +524,8 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
         prefsStored = prefs.exists(),
         // Only the server can say that an account has no status at all. The cache may just not have them yet.
         needsSeed = !statuses.metadata.fromCache && statuses.docs.isEmpty(),
+        // Every listener has heard from the server, so the data is current, not an older device copy (D54).
+        fromServer = all.none { it.metadata.fromCache } && !prefs.metadata.fromCache,
         pendingWrites = all.any { it.metadata.hasPendingWrites } || prefs.metadata.hasPendingWrites,
         unreadable = decoded.sumOf { list -> list.count { it == null } },
     )

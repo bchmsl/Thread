@@ -22,7 +22,7 @@ A parallel architectural task is a separate Topic.
 
 - Name, optional goal/description, editable status.
 - Additional information: one free text box for context, links and decisions (D52). It replaced "Where I left off" and "Next step"; a Topic saved before shows that older text in the box until it is edited.
-- Associated Tasks, Notes, Jira tickets, PRs, and Reminders.
+- Associated Tasks, Notes, Jira tickets and PRs. Reminders sit on its Tasks (D54).
 - A Topic can exist with only a name; do not force a lengthy creation form.
 - Completion is independent of Jira completion.
 - A completed Topic can be reopened.
@@ -73,7 +73,7 @@ Category colors are the agreed baseline; arbitrary color overrides are not requi
 - One Jira ticket or PR may be linked to multiple Topics.
 - One Note may be linked to multiple Topics or none.
 - Personal Tasks can be standalone or belong to one Topic.
-- Reminders attach to a Task, Note, or Topic.
+- Reminders attach to a Task or a Note (D54, superseding D14 in part). Reminders an older build put on a Topic move onto a Task of their own in that Topic, with Undo.
 - Removing a link must not delete the linked object.
 - Removing an Inbox entry means triaged, not deleted.
 
@@ -137,7 +137,7 @@ One page with collapsible sections, not a primary tab layout:
 - Header: name, status, goal.
 - Main: Additional information (D52), Tasks.
 - Notes.
-- Related Jira tickets, PRs, and Reminders.
+- Related Jira tickets and PRs. Task rows show their next reminder (D54); "Topic reminders" lists only Topic reminders not moved yet or kept by Undo.
 - External item details open in a side panel on wide screens and a separate detail view on narrow screens.
 - Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click.
 

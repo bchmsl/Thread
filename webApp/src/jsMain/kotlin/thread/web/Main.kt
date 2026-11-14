@@ -26,10 +26,12 @@ import thread.data.synthetic.SyntheticScenario
 import thread.data.vault.IndexedDbDeviceVaultStore
 import thread.data.vault.VaultConnectionSync
 import thread.data.vault.WebCryptoVault
+import thread.data.workspace.KeyValueConversionBackup
 import thread.domain.account.AccountId
 import thread.domain.external.ConnectionStore
 import thread.domain.external.ConnectionSync
 import thread.domain.note.LocalDraftStore
+import thread.domain.workspace.ConversionBackup
 import thread.web.platform.installZoomGuard
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
@@ -65,6 +67,7 @@ fun main() {
             workspaceStore = { accountId ->
                 FirestoreWorkspaceStore(backend, accountId, workspaceOutbox(accountId)) { testFlags.failServerWrites }
             },
+            conversionBackup = ::conversionBackup,
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
             jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),
@@ -142,6 +145,20 @@ private fun workspaceOutbox(accountId: AccountId): KeyValueStore =
         listOf(IndexedDbKeyValueDatabase.WORKSPACE_OUTBOX_STORE),
         strictDurability = true,
     ).store(IndexedDbKeyValueDatabase.WORKSPACE_OUTBOX_STORE)
+
+/**
+ * This account's local copy of what the Topic reminder conversion changes (D54): its own IndexedDB database, written
+ * durably, never synced. The conversion writes nothing until the copy is stored.
+ */
+private fun conversionBackup(accountId: AccountId): ConversionBackup =
+    KeyValueConversionBackup(
+        IndexedDbKeyValueDatabase(
+            IndexedDbKeyValueDatabase.workspaceBackupFor(accountId),
+            listOf(IndexedDbKeyValueDatabase.WORKSPACE_BACKUP_STORE),
+            strictDurability = true,
+        ).store(IndexedDbKeyValueDatabase.WORKSPACE_BACKUP_STORE),
+        now = ::nowMillis,
+    )
 
 /** Saved Jira and GitHub copies. SYNTHETIC copies use a separate database, so fixture data never mixes with real copies. */
 private fun externalCache(synthetic: Boolean): IndexedDbKeyValueDatabase =

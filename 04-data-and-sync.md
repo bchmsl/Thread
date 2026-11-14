@@ -27,7 +27,7 @@ Names are illustrative, not existing classes.
 - Topic <-> Note is many-to-many.
 - Topic <-> ExternalReference is many-to-many.
 - ExternalReference identifies an external object once, across Topics.
-- Reminder has one typed target: Task, Note, or Topic.
+- Reminder has one typed target: Task or Note (D54). `topic` is still read for reminders older builds made; those move onto a Task of their own (ADR-018 part B).
 - FocusSession has at most one direct Task/Topic association; a Task can resolve its Topic.
 - Inbox triage is separate from whether an object has a Topic.
 - Link deletion does not delete source content.

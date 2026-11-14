@@ -89,7 +89,7 @@ internal fun TodayScreen(
     val now = LocalNow.current
     var adding by remember { mutableStateOf(startAdding) }
     var focusAddRequest by remember { mutableStateOf(0) }
-    val groups = todayTasks(workspace.storedTasks, now, workspace.prefs.keepCompleted)
+    val groups = todayTasks(workspace.storedTasks, now, workspace.prefs.keepCompleted, workspace.taskReminderTimes)
     val open = groups.openCount
     val done = groups.doneCount
 
@@ -124,7 +124,8 @@ internal fun TodayScreen(
             TaskGroup("overdue", "Overdue", groups.overdue, "Deadline passed", openByDefault = true) {
                 TaskList(groups.overdue, workspace, onOpenTask)
             }
-            TaskGroup("today", "Today", groups.today, "Planned or due today", openByDefault = true) {
+            // D54: a reminder day counts as a date, so the hints name reminders too.
+            TaskGroup("today", "Today", groups.today, "Planned, due or reminded today", openByDefault = true) {
                 if (groups.today.isEmpty()) {
                     P({
                         classes("muted")
@@ -138,10 +139,10 @@ internal fun TodayScreen(
                 TaskList(groups.earlier, workspace, onOpenTask)
             }
             // D53: the open Tasks the groups above leave out. They start closed.
-            TaskGroup("upcoming", "Upcoming", groups.upcoming, "Planned or due after today", openByDefault = false) {
+            TaskGroup("upcoming", "Upcoming", groups.upcoming, "Planned, due or reminded after today", openByDefault = false) {
                 UpcomingList(groups.upcoming, workspace, onOpenTask)
             }
-            TaskGroup("nodate", "No date", groups.noDate, "No planned day or deadline", openByDefault = false) {
+            TaskGroup("nodate", "No date", groups.noDate, "No planned day, deadline or reminder", openByDefault = false) {
                 ShortenedList(groups.noDate) { shown -> TaskList(shown, workspace, onOpenTask) }
             }
         }
@@ -287,7 +288,7 @@ private fun UpcomingList(
 ) {
     val today = LocalNow.current.day
     ShortenedList(tasks) { shown ->
-        shown.groupBy { firstDayOf(it) }.forEach { (day, onDay) ->
+        shown.groupBy { firstDayOf(it, workspace.taskReminderTimes[it.id]) }.forEach { (day, onDay) ->
             key(day.toString()) {
                 if (day != null) H3({ classes("tgroup__day") }) { Text(dayText(day, today)) }
                 TaskList(onDay, workspace, onOpenTask)
@@ -353,7 +354,7 @@ private fun RemindersRail(
             }
         }
         if (list.isEmpty()) {
-            P({ classes("muted") }) { Text("No reminders today. Add one from a Task, Note or Topic.") }
+            P({ classes("muted") }) { Text("No reminders today. Add one from a Task or Note.") }
             return@Section
         }
         Ul({ classes("rems") }) {

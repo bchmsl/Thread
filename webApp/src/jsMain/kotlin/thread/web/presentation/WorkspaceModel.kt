@@ -22,6 +22,7 @@ import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.reminder.liveReminders
 import thread.domain.reminder.newReminder
+import thread.domain.reminder.taskReminderTimes
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
 import thread.domain.task.TaskId
@@ -48,11 +49,14 @@ import thread.domain.trash.restoreTask
 import thread.domain.trash.restoreTopic
 import thread.domain.trash.trashEntries
 import thread.domain.trash.visibleWorkspace
+import thread.domain.workspace.ConversionBackup
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.RefusedChange
+import thread.domain.workspace.ReminderConversion
+import thread.domain.workspace.TopicReminderConverter
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
 import thread.domain.workspace.WorkspaceEdit
@@ -105,11 +109,17 @@ internal sealed interface TaskCreation {
  * syncs through its own NoteSyncer. State comes from [WorkspaceStore.observe]; screens change it only through writes, so
  * what they show is always what the device stored. Screens see [data]: a Topic in Trash is not in it, nor what went to
  * Trash with it. Only Trash and the Topic page read [stored].
+ *
+ * Reminders an older build put on a Topic move onto Tasks of their own ([convertTopicReminders], D54), after a copy is
+ * saved through [conversionBackup].
  */
 internal class WorkspaceModel(
     private val store: WorkspaceStore,
     private val newId: (prefix: String) -> String,
+    conversionBackup: ConversionBackup,
 ) {
+    private val converter = TopicReminderConverter(store, conversionBackup)
+
     /** Everything the device stored, Topics in Trash included. Null until the first answer from the cache or the server. */
     var stored: WorkspaceData? by mutableStateOf(null)
         private set
@@ -166,6 +176,12 @@ internal class WorkspaceModel(
 
     /** A Task's reminders, oldest first. */
     fun remindersOf(task: Task): List<Reminder> = derived().remindersByTask[task.id.value].orEmpty()
+
+    /** Each Task's next reminder that is not dismissed (D54): its day counts as a date in Today. */
+    val taskReminderTimes: Map<TaskId, WallTime> get() = derived().reminderTimes
+
+    /** Ids of completed Tasks: their reminders show no banner (D54). */
+    val doneTaskIds: Set<String> get() = derived().doneTaskIds
 
     val inbox: List<Task> get() = derived().inbox
 
@@ -233,6 +249,8 @@ internal class WorkspaceModel(
                 }
             }
         val remindersByTask = reminders.filter { it.target.kind == TargetKind.Task }.groupBy { it.target.id }
+        val reminderTimes = taskReminderTimes(reminders)
+        val doneTaskIds = tasks.filter { it.done }.map { it.id.value }.toSet()
         val inbox = inboxTasks(data?.tasks.orEmpty())
         val progress = mutableMapOf<TopicId, TaskProgress>()
         val nextTasks = firstOpenTasks(data?.tasks.orEmpty())
@@ -250,7 +268,10 @@ internal class WorkspaceModel(
         return derivedCache
     }
 
-    /** Follows the store until cancelled. Seeds the four default statuses once the server says there are none. */
+    /**
+     * Follows the store until cancelled. Seeds the four default statuses once the server says there are none, and drops
+     * refused Topic reminder conversions that the server data shows are no longer needed (D54).
+     */
     suspend fun run() {
         try {
             coroutineScope {
@@ -262,6 +283,7 @@ internal class WorkspaceModel(
                         seeded = true
                         store.write(seedWrites())
                     }
+                    converter.dropSettled(next)
                 }
             }
         } catch (e: CancellationException) {
@@ -270,6 +292,16 @@ internal class WorkspaceModel(
             readFailed = true
         }
     }
+
+    /**
+     * Moves the open Topic reminders in [stored] onto Tasks of their own (D54) and returns what moved, for the toast
+     * and its Undo. It acts only on the server's data while [online] and nothing of this device waits to sync, and it
+     * saves the local copy first ([TopicReminderConverter]).
+     */
+    suspend fun convertTopicReminders(online: () -> Boolean): List<ReminderConversion> = converter.run({ stored }, online)
+
+    /** Takes [conversions] back: each reminder returns to its Topic, and later runs leave it there. */
+    fun undoConversion(conversions: List<ReminderConversion>) = converter.undo(conversions)
 
     /** Writes [result] when it changes something. Returns the edit, for Undo. */
     fun apply(result: EditResult): WorkspaceEdit? {

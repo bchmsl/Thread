@@ -30,7 +30,7 @@ import thread.domain.note.NoteId
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
-import thread.domain.reminder.remindersForTopic
+import thread.domain.reminder.remindersFor
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
 import thread.domain.task.topicTasks
@@ -47,10 +47,8 @@ import thread.web.presentation.TaskCreation
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.notes.notePlace
 import thread.web.presentation.taskProblemText
-import thread.web.presentation.tasks.ReminderDialog
 import thread.web.presentation.tasks.TaskRow
 import thread.web.presentation.tasks.focusNow
-import thread.web.presentation.tasks.targetInfo
 import thread.web.presentation.whenText
 
 /** A Topic page section that opens and closes (v3 section()). */
@@ -271,7 +269,11 @@ internal fun TopicNotesSection(
     }
 }
 
-/** Reminders for the Topic, its Tasks and its linked Notes (v3 remindersSection). */
+/**
+ * Reminders an older build put on the Topic itself, while any is not dismissed (D54). Since D54 a reminder belongs to a
+ * Task or a Note, and Task rows show theirs, so this only lists Topic reminders that were not moved yet or whose move
+ * was undone. It has no Add, and it is not drawn when there is nothing to list.
+ */
 @Composable
 internal fun TopicRemindersSection(
     workspace: WorkspaceModel,
@@ -282,33 +284,11 @@ internal fun TopicRemindersSection(
 ) {
     val toasts = LocalToasts.current
     val today = LocalNow.current.day
-    var adding by remember(topic.id) { mutableStateOf(false) }
-    val noteIds = workspace.notesFor(topic.id).map { it.id.value }.toSet()
-    val reminders = remindersForTopic(topic.id, workspace.reminders, workspace.tasks, noteIds)
-    TopicSection(
-        "reminders",
-        "Reminders",
-        reminders.size.toString(),
-        open,
-        onToggle,
-        actions = {
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--text", "btn--sm")
-                onClick { adding = true }
-            }) {
-                IconView(Icon.Plus, 15)
-                Text(" Add")
-            }
-        },
-    ) {
-        if (reminders.isEmpty()) {
-            P({ classes("sect__empty") }) { Text("No reminders for this Topic or its tasks and notes.") }
-            return@TopicSection
-        }
+    val reminders = remindersFor(ReminderTarget(TargetKind.Topic, topic.id.value), workspace.reminders).filter { !it.dismissed }
+    if (reminders.isEmpty()) return
+    TopicSection("reminders", "Topic reminders", reminders.size.toString(), open, onToggle) {
         Ul({ classes("tlist") }) {
             reminders.forEach { reminder ->
-                val info = targetInfo(workspace, reminder.target)
                 val time = whenText(reminder.at, today)
                 key(reminder.id.value) {
                     Li({ classes("xrow") }) {
@@ -318,14 +298,7 @@ internal fun TopicRemindersSection(
                             classes("xrow__main")
                             onClick { onOpenTarget(reminder.target) }
                         }) {
-                            Span({ classes("xrow__key") }) {
-                                B { Text(time) }
-                                when (info?.kind) {
-                                    TargetKind.Task -> Span { Text("Task: ${info.label}") }
-                                    TargetKind.Note -> Span { Text("Note: ${info.label}") }
-                                    else -> Unit
-                                }
-                            }
+                            Span({ classes("xrow__key") }) { B { Text(time) } }
                             Span({ classes("xrow__title") }) { Text(reminder.text) }
                         }
                         IconButton(Icon.Trash, "Move reminder $time to Trash", small = true) {
@@ -336,8 +309,5 @@ internal fun TopicRemindersSection(
                 }
             }
         }
-    }
-    if (adding) {
-        ReminderDialog(workspace, ReminderTarget(TargetKind.Topic, topic.id.value), "Check ${topic.name}") { adding = false }
     }
 }

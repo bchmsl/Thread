@@ -96,10 +96,16 @@ private fun TaskMeta(
             }
         }
     }
-    workspace.remindersOf(task).forEach { reminder ->
-        Span({ classes("meta", "meta--rem") }) {
+    // The next reminder that is not dismissed, and how many more there are (D54).
+    val pending = workspace.remindersOf(task).filter { !it.dismissed }
+    pending.firstOrNull()?.let { next ->
+        Span({
+            classes("meta", "meta--rem")
+            if (pending.size > 1) title("Next of ${pending.size} reminders")
+        }) {
             IconView(Icon.Bell, 14)
-            Text(if (reminder.at.day == today) clockText(reminder.at.minuteOfDay) else whenText(reminder.at, today))
+            Text(if (next.at.day == today) clockText(next.at.minuteOfDay) else whenText(next.at, today))
+            if (pending.size > 1) Text(" +${pending.size - 1}")
         }
     }
     if (task.inbox) {

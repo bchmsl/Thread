@@ -63,6 +63,41 @@ class ReminderTest {
     }
 
     @Test
+    fun d54ADoneTasksReminderShowsNoBanner() {
+        val onOpenTask = reminder("a", at(9), target = ReminderTarget(TargetKind.Task, "k-open"))
+        val onDoneTask = reminder("b", at(9), target = ReminderTarget(TargetKind.Task, "k-done"))
+        val onNoteSameId = reminder("c", at(9), target = ReminderTarget(TargetKind.Note, "k-done"))
+        val due = dueReminders(listOf(onOpenTask, onDoneTask, onNoteSameId), at(10), doneTaskIds = setOf("k-done"))
+        assertEquals(listOf(onOpenTask, onNoteSameId), due)
+    }
+
+    @Test
+    fun d54EachTaskGetsItsNextOpenReminder() {
+        fun onTask(
+            id: String,
+            task: String,
+            at: WallTime,
+            dismissed: Boolean = false,
+            deleted: Boolean = false,
+        ) = reminder(id, at, ReminderTarget(TargetKind.Task, task), dismissed, deleted)
+        val reminders =
+            listOf(
+                onTask("a", "k1", at(15)),
+                onTask("b", "k1", at(9)),
+                onTask("c", "k1", at(7), dismissed = true),
+                onTask("d", "k2", at(8), deleted = true),
+                onTask("e", "k3", at(11, day = today.plusDays(2))),
+                reminder("f", at(6)),
+                reminder("g", at(6), target = ReminderTarget(TargetKind.Note, "k4")),
+            )
+        assertEquals(
+            mapOf(TaskId("k1") to at(9), TaskId("k3") to at(11, day = today.plusDays(2))),
+            taskReminderTimes(reminders),
+            "dismissed and trashed reminders, and those on a Topic or Note, are left out",
+        )
+    }
+
+    @Test
     fun liveRemindersDropTrashAndMissingTargets() {
         val kept = reminder("a", at(10))
         val trashed = reminder("b", at(9), deleted = true)
@@ -72,16 +107,13 @@ class ReminderTest {
     }
 
     @Test
-    fun aTopicListsItsOwnAndItsTasksReminders() {
-        val ownTask = Task(TaskId("k1"), "Synthetic task", topicId = topic)
-        val otherTask = Task(TaskId("k2"), "Other synthetic task", topicId = TopicId("t-other"))
-        val trashedTask = Task(TaskId("k3"), "Trashed synthetic task", topicId = topic, deleted = true)
+    fun aTargetListsItsOwnRemindersByTime() {
         val onTopic = reminder("a", at(12))
         val onTask = reminder("b", at(11), target = ReminderTarget(TargetKind.Task, "k1"))
-        val onOther = reminder("c", at(10), target = ReminderTarget(TargetKind.Task, "k2"))
-        val onTrashed = reminder("d", at(9), target = ReminderTarget(TargetKind.Task, "k3"))
-        val list = remindersForTopic(topic, listOf(onTopic, onTask, onOther, onTrashed), listOf(ownTask, otherTask, trashedTask))
-        assertEquals(listOf(onTask, onTopic), list)
-        assertEquals(listOf(onTask), remindersFor(ReminderTarget(TargetKind.Task, "k1"), listOf(onTopic, onTask, onOther)))
+        val laterOnTask = reminder("c", at(13), target = ReminderTarget(TargetKind.Task, "k1"))
+        val trashedOnTask = reminder("d", at(9), target = ReminderTarget(TargetKind.Task, "k1"), deleted = true)
+        val all = listOf(laterOnTask, onTopic, onTask, trashedOnTask)
+        assertEquals(listOf(onTask, laterOnTask), remindersFor(ReminderTarget(TargetKind.Task, "k1"), all))
+        assertEquals(listOf(onTopic), remindersFor(ReminderTarget(TargetKind.Topic, topic.value), all))
     }
 }

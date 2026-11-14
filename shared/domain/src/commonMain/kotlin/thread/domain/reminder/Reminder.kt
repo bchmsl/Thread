@@ -1,8 +1,7 @@
 package thread.domain.reminder
 
-import thread.domain.task.Task
+import thread.domain.task.TaskId
 import thread.domain.time.WallTime
-import thread.domain.topic.TopicId
 import kotlin.jvm.JvmInline
 
 /** A Reminder's id. Made on the device that creates it, so it works offline. */
@@ -17,7 +16,10 @@ value class ReminderId(
     override fun toString(): String = value
 }
 
-/** What a Reminder can point at (04-data-and-sync.md: "Reminder has one typed target"). */
+/**
+ * What a Reminder can point at (04-data-and-sync.md: "Reminder has one typed target"). Since D54 new reminders go on a
+ * Task or a Note; [Topic] stays readable for reminders an older build made, until they move onto a Task.
+ */
 enum class TargetKind(
     val id: String,
 ) {
@@ -99,28 +101,6 @@ fun remindersFor(
     reminders: List<Reminder>,
 ): List<Reminder> = reminders.filter { !it.deleted && it.target == target }.sortedWith(TIME_ORDER)
 
-/**
- * The reminders a Topic's page lists: its own, those of its Tasks and those of its linked Notes (v3
- * `remindersForTopic`). [tasks] are the live Tasks; [noteIds] are the live Notes linked to the Topic.
- */
-fun remindersForTopic(
-    topicId: TopicId,
-    reminders: List<Reminder>,
-    tasks: List<Task>,
-    noteIds: Set<String> = emptySet(),
-): List<Reminder> {
-    val taskIds = tasks.filter { it.topicId == topicId && !it.deleted }.map { it.id.value }.toSet()
-    return reminders
-        .filter { reminder ->
-            !reminder.deleted &&
-                when (reminder.target.kind) {
-                    TargetKind.Topic -> reminder.target.id == topicId.value
-                    TargetKind.Task -> reminder.target.id in taskIds
-                    TargetKind.Note -> reminder.target.id in noteIds
-                }
-        }.sortedWith(TIME_ORDER)
-}
-
 /** A reminder in Today's side column. [past] when its time has come. [next] marks the first one still to come. */
 data class TodayReminder(
     val reminder: Reminder,
@@ -141,10 +121,27 @@ fun todayReminders(
 /**
  * Reminders whose time has come and whose banner is still open, oldest first. A reminder that came due while Thread
  * was closed shows when it opens, so none is missed silently. [live] are the [liveReminders].
+ *
+ * A reminder on a completed Task shows no banner (D54): [doneTaskIds] are the ids of the completed Tasks.
  */
 fun dueReminders(
     live: List<Reminder>,
     now: WallTime,
-): List<Reminder> = live.filter { !it.dismissed && it.at <= now }.sortedWith(TIME_ORDER)
+    doneTaskIds: Set<String> = emptySet(),
+): List<Reminder> =
+    live
+        .filter { !it.dismissed && it.at <= now }
+        .filterNot { it.target.kind == TargetKind.Task && it.target.id in doneTaskIds }
+        .sortedWith(TIME_ORDER)
+
+/**
+ * The next open reminder of each Task (D54): its earliest reminder that is not dismissed and not in Trash. Today counts
+ * its day as a date of the Task, and Task rows show it with a bell.
+ */
+fun taskReminderTimes(reminders: List<Reminder>): Map<TaskId, WallTime> =
+    reminders
+        .filter { it.target.kind == TargetKind.Task && !it.dismissed && !it.deleted }
+        .groupBy { TaskId(it.target.id) }
+        .mapValues { (_, own) -> own.minOf { it.at } }
 
 private val TIME_ORDER: Comparator<Reminder> = compareBy<Reminder> { it.at }.thenBy { it.id.value }

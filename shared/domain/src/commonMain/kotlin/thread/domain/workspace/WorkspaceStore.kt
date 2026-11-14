@@ -160,6 +160,11 @@ data class WorkspaceData(
     val prefsStored: Boolean = false,
     /** True only when the server confirmed that the account has no status at all: a new workspace to seed. */
     val needsSeed: Boolean = false,
+    /**
+     * True when every collection in it comes from the server, not only from this device's cache. Changes made from what
+     * the data holds, such as the conversion of Topic reminders (D54), wait for it.
+     */
+    val fromServer: Boolean = false,
     /** True while a change made on this device is not acknowledged by the server. */
     val pendingWrites: Boolean = false,
     /** Stored documents this version of the app cannot read. They are left alone and not shown. */

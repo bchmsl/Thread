@@ -164,6 +164,69 @@ class TaskRulesTest {
     }
 
     @Test
+    fun d54AReminderDayCountsAsADateInToday() {
+        val remindedToday = task("rt")
+        val remindedTomorrow = task("rm")
+        val dueNotDismissed = task("rd")
+        val plannedLaterRemindedToday = task("pr", plannedDay = tomorrow)
+        val plannedEarlierRemindedToday = task("pe", plannedDay = yesterday)
+        val overdueWithReminder = task("ov", deadline = Deadline(yesterday))
+        val inboxReminded = task("ir", topicId = null, inbox = true)
+        val inboxNoReminder = task("in", topicId = null, inbox = true)
+        val noDate = task("nd")
+        val remindAt =
+            mapOf(
+                remindedToday.id to WallTime.of(today, 18, 0),
+                remindedTomorrow.id to WallTime.of(tomorrow, 9, 0),
+                dueNotDismissed.id to WallTime.of(yesterday, 9, 0),
+                plannedLaterRemindedToday.id to WallTime.of(today, 9, 0),
+                plannedEarlierRemindedToday.id to WallTime.of(today, 20, 0),
+                overdueWithReminder.id to WallTime.of(today, 20, 0),
+                inboxReminded.id to WallTime.of(tomorrow, 8, 0),
+            )
+        val all =
+            listOf(
+                remindedToday,
+                remindedTomorrow,
+                dueNotDismissed,
+                plannedLaterRemindedToday,
+                plannedEarlierRemindedToday,
+                overdueWithReminder,
+                inboxReminded,
+                inboxNoReminder,
+                noDate,
+            )
+        val groups = todayTasks(all, noon, keepCompleted = true, remindAt = remindAt)
+        assertEquals(listOf(overdueWithReminder), groups.overdue)
+        assertEquals(
+            setOf(remindedToday, dueNotDismissed, plannedLaterRemindedToday, plannedEarlierRemindedToday),
+            groups.today.toSet(),
+            "a reminder today, or one due and not dismissed, puts the Task in Today",
+        )
+        assertEquals(emptyList(), groups.earlier)
+        assertEquals(listOf(inboxReminded, remindedTomorrow), groups.upcoming, "an Inbox Task with a reminder shows")
+        assertEquals(listOf(noDate), groups.noDate)
+        assertEquals(tomorrow, firstDayOf(inboxReminded, remindAt[inboxReminded.id]))
+        assertEquals(TodayGroup.NoDate, todayGroupOf(remindedToday, noon), "without its reminder the Task has no date")
+    }
+
+    @Test
+    fun d54UpcomingSortsByAReminderTimeOnTheFirstDay() {
+        val dueTomorrowAtNine = task("a", deadline = Deadline(tomorrow, 9 * 60), createdAt = 1)
+        val remindedTomorrowAtEight = task("b", createdAt = 2)
+        val plannedTomorrowRemindedAtTen = task("c", plannedDay = tomorrow, createdAt = 0)
+        val remindedLaterThanItsPlan = task("d", plannedDay = tomorrow, createdAt = 3)
+        val remindAt =
+            mapOf(
+                remindedTomorrowAtEight.id to WallTime.of(tomorrow, 8, 0),
+                plannedTomorrowRemindedAtTen.id to WallTime.of(tomorrow, 10, 0),
+                remindedLaterThanItsPlan.id to WallTime.of(today.plusDays(4), 7, 0),
+            )
+        val all = listOf(dueTomorrowAtNine, remindedTomorrowAtEight, plannedTomorrowRemindedAtTen, remindedLaterThanItsPlan)
+        assertEquals(listOf("b", "a", "c", "d"), todayTasks(all, noon, true, remindAt).upcoming.map { it.id.value })
+    }
+
+    @Test
     fun noDateListsNewestFirst() {
         val old = task("old", createdAt = 100)
         val new = task("new", createdAt = 200)

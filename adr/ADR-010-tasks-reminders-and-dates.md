@@ -36,7 +36,7 @@ Status: Proposed (2026-11-13). Written in Phase 7 while the owner was away. Buil
 - **Add from Today (D38):** the Task is planned for today. Without a Topic it also waits in Inbox.
 - **Inbox:** Tasks with `inbox = true`. "Link to Topic" sets `topicId` and clears the flag; "Keep standalone" clears the flag only. Nothing is copied or deleted. Taking a Topic away later does not put the Task back in Inbox.
 - **Trash:** `deletedAt`. The Trash page arrives in Phase 9. Undo of a fresh capture or add writes `discarded = true`, so a Task that may already be on the server never comes back and is never hard-deleted.
-- **Reminders:** a reminder is due from its minute until it is dismissed (`dismissedAt`). One that came due while Thread was closed shows as a banner when Thread opens. Thread cannot notify a closed tab (v1). A reminder whose target is gone does not show.
+- **Reminders:** a reminder is due from its minute until it is dismissed (`dismissedAt`). One that came due while Thread was closed shows as a banner when Thread opens. Thread cannot notify a closed tab (v1). A reminder whose target is gone does not show. Since D54 (ADR-018, part B) new reminders go on a Task or a Note, Topic reminders move onto Tasks, a reminder day counts as a date in Today, and a reminder on a completed Task shows no banner.
 - **Clock:** the screens refresh "now" each minute, when the tab becomes visible again, and when the emulator test hook moves the clock (`threadTest.setClockOffset`).
 
 ## Consequences

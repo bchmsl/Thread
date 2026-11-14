@@ -10,16 +10,8 @@ import thread.domain.note.linkedTopicIds
 import thread.domain.note.newNote
 import thread.domain.note.noteTopicLinkId
 import thread.domain.note.notesForTopic
-import thread.domain.reminder.Reminder
-import thread.domain.reminder.ReminderId
-import thread.domain.reminder.ReminderTarget
-import thread.domain.reminder.TargetKind
-import thread.domain.reminder.remindersForTopic
 import thread.domain.task.Task
 import thread.domain.task.TaskId
-import thread.domain.time.DEFAULT_WORKSPACE_ZONE
-import thread.domain.time.LocalDay
-import thread.domain.time.WallTime
 import thread.domain.topic.TopicId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -169,14 +161,5 @@ class NoteEditsTest {
         assertEquals(listOf(loose), filterNotes(notes, NoteFilter.Standalone, "", topicsOf))
         assertEquals(listOf(loose, linked), filterNotes(notes, NoteFilter.All, " RELEASE ", topicsOf))
         assertEquals(listOf(loose), filterNotes(notes, NoteFilter.All, "checklist", topicsOf))
-    }
-
-    @Test
-    fun aTopicListsTheRemindersOfItsLinkedNotes() {
-        val at = WallTime(LocalDay(2026, 11, 13), 15 * 60)
-        val target = ReminderTarget(TargetKind.Note, noteId.value)
-        val noteReminder = Reminder(ReminderId("r-1"), at, DEFAULT_WORKSPACE_ZONE, "Synthetic", target)
-        assertEquals(listOf(noteReminder), remindersForTopic(topicA, listOf(noteReminder), emptyList(), setOf(noteId.value)))
-        assertEquals(emptyList(), remindersForTopic(topicA, listOf(noteReminder), emptyList(), emptySet()))
     }
 }

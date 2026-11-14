@@ -116,7 +116,7 @@ internal fun TaskSheet(
                 }) { Text(if (task.done) "Reopen task" else "Complete task") }
                 P({ classes("ts-effect") }) {
                     IconView(Icon.Today, 16)
-                    Span { Text(todayEffect(task, now, workspace.prefs.keepCompleted)) }
+                    Span { Text(todayEffect(task, now, workspace.prefs.keepCompleted, workspace.taskReminderTimes[task.id])) }
                 }
                 if (task.inbox) {
                     P({ classes("ts-effect") }) {
@@ -279,7 +279,7 @@ private fun TaskRemindersField(
     Div({ classes("field") }) {
         Span({ classes("field__label", "field__label--sub") }) {
             IconView(Icon.Bell, 15)
-            Text(" Reminder ")
+            Text(" Remind me ")
             Span({ classes("field__aside") }) { Text("an in-app nudge at a time") }
         }
         Ul({ classes("ts-rems") }) {
@@ -322,27 +322,32 @@ private fun Chip(
     }) { Text(label) }
 }
 
-/** Why the Task is or is not in Today (v3 todayEffect), so the person never has to guess. */
+/**
+ * Why the Task is or is not in Today (v3 todayEffect), so the person never has to guess. [remindAt] is the Task's next
+ * reminder that is not dismissed (D54).
+ */
 internal fun todayEffect(
     task: Task,
     now: WallTime,
     keepCompleted: Boolean,
+    remindAt: WallTime? = null,
 ): String {
     if (task.done) {
-        val stays = todayTasks(listOf(task), now, keepCompleted).let { it.today.isNotEmpty() || it.earlier.isNotEmpty() }
+        val reminders = remindAt?.let { mapOf(task.id to it) }.orEmpty()
+        val stays = todayTasks(listOf(task), now, keepCompleted, reminders).let { it.today.isNotEmpty() || it.earlier.isNotEmpty() }
         return if (stays) "Completed. It stays visible in Today until tomorrow, then leaves." else "Completed. It does not show in Today."
     }
-    return when (todayGroupOf(task, now)) {
+    return when (todayGroupOf(task, now, remindAt)) {
         TodayGroup.Overdue -> "Shows in Today under Overdue because the deadline passed."
         TodayGroup.Today ->
-            if (task.plannedDay == now.day) {
-                "Shows in Today under Today because it is planned for today."
-            } else {
-                "Shows in Today under Today because it is due today."
+            when {
+                task.plannedDay == now.day -> "Shows in Today under Today because it is planned for today."
+                task.deadline?.day == now.day -> "Shows in Today under Today because it is due today."
+                else -> "Shows in Today under Today because it has a reminder today."
             }
         TodayGroup.EarlierPlanned -> "Shows in Today under Earlier planned. It is not overdue; nothing moves it automatically."
         TodayGroup.Upcoming -> "Shows in Today under Upcoming. On its first date it moves to Today."
-        TodayGroup.NoDate -> "Shows in Today under No date. Plan a day or set a deadline to give it one."
-        null -> "Not in Today while it waits in Inbox. Plan a day or set a deadline to see it there."
+        TodayGroup.NoDate -> "Shows in Today under No date. Plan a day, set a deadline or add a reminder to give it one."
+        null -> "Not in Today while it waits in Inbox. Plan a day, set a deadline or add a reminder to see it there."
     }
 }
