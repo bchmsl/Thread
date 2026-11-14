@@ -97,7 +97,78 @@ class TaskRulesTest {
         assertEquals(listOf(overdue), groups.overdue)
         assertEquals(setOf(plannedToday, dueLater, dueToday), groups.today.toSet())
         assertEquals(listOf(earlier), groups.earlier)
-        assertEquals(5, groups.openCount)
+        assertEquals(listOf(future), groups.upcoming)
+        assertEquals(listOf(nothing), groups.noDate)
+        assertEquals(5, groups.openCount, "Upcoming and No date are not counted (D53)")
+    }
+
+    @Test
+    fun d53UpcomingAndNoDateHoldTheOpenTasksTheOtherGroupsLeave() {
+        val plannedTomorrow = task("p1", plannedDay = tomorrow)
+        val dueNextWeek = task("d1", deadline = Deadline(today.plusDays(7), 10 * 60))
+        val plannedLaterDueTomorrow = task("pd", plannedDay = today.plusDays(5), deadline = Deadline(tomorrow))
+        val plannedEarlierDueLater = task("ed", plannedDay = yesterday, deadline = Deadline(tomorrow))
+        val inboxPlannedTomorrow = task("ip", topicId = null, inbox = true, plannedDay = tomorrow)
+        val inTopicNoDate = task("n1")
+        val standaloneNoDate = task("n2", topicId = null)
+        val inboxNoDate = task("in", topicId = null, inbox = true)
+        val doneFuture = task("df", done = true, completedOn = yesterday, plannedDay = tomorrow)
+        val doneNoDateToday = task("dn", done = true, completedOn = today)
+        val trashedNoDate = task("tn", deleted = true)
+        val all =
+            listOf(
+                plannedTomorrow,
+                dueNextWeek,
+                plannedLaterDueTomorrow,
+                plannedEarlierDueLater,
+                inboxPlannedTomorrow,
+                inTopicNoDate,
+                standaloneNoDate,
+                inboxNoDate,
+                doneFuture,
+                doneNoDateToday,
+                trashedNoDate,
+            )
+        val groups = todayTasks(all, noon, keepCompleted = true)
+        assertEquals(setOf(plannedTomorrow, dueNextWeek, plannedLaterDueTomorrow, inboxPlannedTomorrow), groups.upcoming.toSet())
+        assertEquals(setOf(inTopicNoDate, standaloneNoDate), groups.noDate.toSet())
+        assertEquals(listOf(plannedEarlierDueLater), groups.earlier, "Earlier planned comes before Upcoming")
+        assertEquals(listOf(doneNoDateToday), groups.today, "a completed Task stays under Today for the day, as before")
+        val shown = groups.overdue + groups.today + groups.earlier + groups.upcoming + groups.noDate
+        assertEquals(shown.toSet().size, shown.size, "no Task twice")
+        assertFalse(inboxNoDate in shown, "a Task in Inbox without dates stays in Inbox only (D38)")
+        assertFalse(doneFuture in shown)
+        assertEquals(1, groups.openCount, "only Earlier planned is open for today here")
+        assertEquals(1, groups.doneCount)
+
+        assertEquals(TodayGroup.Upcoming, todayGroupOf(plannedLaterDueTomorrow, noon))
+        assertEquals(TodayGroup.NoDate, todayGroupOf(standaloneNoDate, noon))
+        assertNull(todayGroupOf(inboxNoDate, noon))
+        assertEquals(tomorrow, firstDayOf(plannedLaterDueTomorrow))
+        assertNull(firstDayOf(inTopicNoDate))
+
+        val nextDay = todayTasks(all, WallTime.of(tomorrow, 0, 0), keepCompleted = true)
+        assertTrue(plannedTomorrow in nextDay.today, "an Upcoming Task moves to Today on its day")
+        assertTrue(plannedLaterDueTomorrow in nextDay.today)
+    }
+
+    @Test
+    fun upcomingSortsByFirstDayThenTimeThenCreation() {
+        val plannedTomorrow = task("a", plannedDay = tomorrow, createdAt = 3)
+        val dueTomorrowAtNine = task("b", deadline = Deadline(tomorrow, 9 * 60), createdAt = 5)
+        val dueTomorrowAtEight = task("c", plannedDay = today.plusDays(3), deadline = Deadline(tomorrow, 8 * 60), createdAt = 6)
+        val plannedTomorrowDueLater = task("d", plannedDay = tomorrow, deadline = Deadline(today.plusDays(2), 7 * 60), createdAt = 1)
+        val inTwoDays = task("e", plannedDay = today.plusDays(2), createdAt = 0)
+        val all = listOf(plannedTomorrow, dueTomorrowAtNine, dueTomorrowAtEight, plannedTomorrowDueLater, inTwoDays)
+        assertEquals(listOf("c", "b", "d", "a", "e"), todayTasks(all, noon, true).upcoming.map { it.id.value })
+    }
+
+    @Test
+    fun noDateListsNewestFirst() {
+        val old = task("old", createdAt = 100)
+        val new = task("new", createdAt = 200)
+        val pendingTime = task("pending", createdAt = Long.MAX_VALUE)
+        assertEquals(listOf(pendingTime, new, old), todayTasks(listOf(old, pendingTime, new), noon, true).noDate)
     }
 
     @Test

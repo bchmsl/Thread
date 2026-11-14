@@ -43,6 +43,12 @@ One bottom status line on every page replaces the sidebar:
 Main area: today's Tasks, due/overdue work, Reminders.
 Separate Review Requested section.
 Groups (D37): Overdue, Today, Earlier planned in the main column; Reminders and Review requested in a side column.
+Upcoming and No date follow Earlier planned (D53). A Task is in the first group that fits, in that order.
+- Upcoming: open Tasks with a planned day or deadline after today, under small day headings ("Tomorrow", "Mon 17 Nov"), earliest first; a timed deadline on that day sorts by its time. Rows keep their "Planned" and "Due" lines.
+- No date: open Tasks with neither date, not waiting in Inbox, newest first, with the Topic tag.
+- Each shows 10 rows, then "Show all (N)" and "Show fewer". Empty, they are not shown.
+- Every group's heading is a button with a chevron (`aria-expanded`, `aria-controls`, the body `hidden` when closed), like a Topic Details section. The open count stays in the heading when closed. Overdue, Today and Earlier planned start open; Upcoming and No date start closed. Each device remembers the choice; it is not synced.
+- The page header count ("N open tasks") counts Overdue, Today and Earlier planned only.
 Topic labels provide context.
 A Task that qualifies for multiple sections should not create confusing duplicates.
 Empty state should support quick capture, not just show an illustration.
@@ -152,7 +158,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Type | Futura for display, system UI for text. Scale 12, 13, 14, 15, 17, 20, 24, 30, 38 px. Futura ships with Apple platforms; other systems use the listed fallbacks (Century Gothic, URW Gothic, Trebuchet MS). |
 | Space and shape | 4 px spacing base. Radius 10 px for controls and rows, 14 px for surfaces, pills for primary actions. Controls 40 px, primary 44 px, rows 48 px minimum, status line 56 px. |
 | Notes | The editor is a notebook page on a faint dot grid. |
-| Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). |
+| Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). |
 | Motion | Short transitions (120 and 220 ms) that drop to zero with reduced motion. |
 
 ## Accessibility and interaction quality

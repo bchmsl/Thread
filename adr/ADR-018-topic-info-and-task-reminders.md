@@ -2,7 +2,7 @@
 
 Status: Proposed (2026-11-14). Built in three parts, each its own commit: A (Additional information, D52), D (Today sections, D53) and B (reminders on Tasks, D54). The owner asked for all three and approved the plan and its defaults with "all approved. I am afk. Continue without my approvals please. Everything is approved from me" (relayed by the orchestrator session). The plan is `topic-details-plan.md` in the session notes. The details below are the worker's choices and are queued for review (owner-review-queue.md, Q86 onwards). Checked with unit tests, emulator rules tests and headless Chrome on the emulators, with SYNTHETIC data only.
 
-This file holds part A. Parts D and B are added when they are built.
+This file holds parts A and D. Part B is added when it is built.
 
 ## A. "Additional information" in place of "Pick up here" (D52)
 
@@ -85,4 +85,56 @@ Next step: <nextStep>
 ### Not verified
 
 - The real Firebase project: the rules are not deployed.
+- Safari and Firefox. Only headless Chrome ran the browser checks.
+
+## D. Today: Upcoming and No date (D53)
+
+The owner's words: "in today view it would be better another collapsible sections: upcoming tasks (which has time, but not today) and tasks which does not have a time at all".
+
+### Context
+
+- Today's main column had three groups (D37): Overdue, Today and Earlier planned. `todayGroupOf` put each Task in the first one that fits, so it showed once. Every other Task did not show in Today.
+- The groups were plain headings and could not close.
+
+### Decision
+
+**Two more groups, checked last.** `todayGroupOf` (`TaskRules.kt`) checks in this order, and the first match wins:
+
+| Group | An open Task that |
+|---|---|
+| Overdue | has a deadline that passed |
+| Today | is planned for today or due today |
+| Earlier planned | was planned before today |
+| **Upcoming** (new) | has a planned day or deadline, all after today |
+| **No date** (new) | has neither, and is not waiting in Inbox |
+
+- A Task waiting in Inbox with no dates has no group: Inbox lists it (D38). One in Inbox with a date is in Upcoming.
+- `firstDayOf(task)` is the earlier of the planned day and the deadline day.
+- Upcoming is sorted by first day, then a deadline with a time on that day by its time, then creation. No date is newest first.
+- Completed Tasks are unchanged: with "Keep completed tasks in Today" on, a Task completed today stays under Today, or Earlier planned when it was planned before today, until tomorrow. Upcoming and No date hold open Tasks only.
+- `TodayTasks.openCount`, the page header's "N open tasks", still counts Overdue, Today and Earlier planned only.
+- After part B, a reminder day counts as a date too.
+
+### UI
+
+- Upcoming lists its Tasks under small day headings (`h3`): "Tomorrow", then "Mon 17 Nov". Each row keeps its "Planned" and "Due" lines, so it says which date it is.
+- Upcoming and No date show 10 rows, then "Show all (N)", which becomes "Show fewer". An empty group is not shown; Today keeps "Nothing planned for today yet."
+- **Every group opens and closes.** The heading is a button with a chevron, `aria-expanded` and `aria-controls`, and the body is `hidden` and not drawn when closed, like a Topic Details section. The open count stays in the heading. Overdue, Today and Earlier planned start open; Upcoming and No date start closed.
+- **Remembered per device, not synced.** `thread.today.open.<group>` in `localStorage` holds `1` or `0`. Nothing stored, a value it does not know, or blocked storage falls back to the default (`readDeviceText`, which already catches storage errors).
+- The Task sheet's Today line names the new groups: "Shows in Today under Upcoming", "under No date", or "Not in Today while it waits in Inbox".
+
+### Consequences
+
+- No data, outbox or rules change. Nothing to deploy.
+- A Task with only a later date, or none, now shows in Today. The Inbox rule (D38) is unchanged.
+- The v3 prototype (D33) has three groups that do not close. It is not edited; D53 records the difference.
+
+### Evidence
+
+- Domain unit tests: `TaskRulesTest.d53UpcomingAndNoDateHoldTheOpenTasksTheOtherGroupsLeave` (the five groups, each Task once, Inbox left out, completed Tasks, the header count, a Task moving to Today on its day), `upcomingSortsByFirstDayThenTimeThenCreation`, `noDateListsNewestFirst`, and `todayGroupsFollowD37` (the new groups).
+- webApp test: `TodayGroupStateTest` (defaults, the stored choice per group, an unknown value).
+- Headless Chrome on the emulator build, a scratch profile and SYNTHETIC data (see the commit message for the list).
+
+### Not verified
+
 - Safari and Firefox. Only headless Chrome ran the browser checks.

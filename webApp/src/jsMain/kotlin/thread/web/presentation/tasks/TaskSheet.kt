@@ -57,7 +57,6 @@ import thread.web.presentation.ModalDialog
 import thread.web.presentation.SelectBox
 import thread.web.presentation.StoredValueInput
 import thread.web.presentation.WorkspaceModel
-import thread.web.presentation.dayText
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.topics.topicPlace
 import thread.web.presentation.whenText
@@ -342,8 +341,8 @@ internal fun todayEffect(
                 "Shows in Today under Today because it is due today."
             }
         TodayGroup.EarlierPlanned -> "Shows in Today under Earlier planned. It is not overdue; nothing moves it automatically."
-        null ->
-            task.plannedDay?.let { "Planned for ${dayText(it, now.day, mid = true)}. It shows in Today on that day." }
-                ?: "Not in Today. Plan a day or set a deadline to see it there."
+        TodayGroup.Upcoming -> "Shows in Today under Upcoming. On its first date it moves to Today."
+        TodayGroup.NoDate -> "Shows in Today under No date. Plan a day or set a deadline to give it one."
+        null -> "Not in Today while it waits in Inbox. Plan a day or set a deadline to see it there."
     }
 }

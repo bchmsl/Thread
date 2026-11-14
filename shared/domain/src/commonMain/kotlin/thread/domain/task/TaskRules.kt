@@ -65,7 +65,7 @@ fun isOverdue(
     now: WallTime,
 ): Boolean = !task.done && task.deadline?.isPassed(now) == true
 
-/** The groups of Today's main column (D37). */
+/** The groups of Today's main column (D37), in the order a Task is checked against them. */
 enum class TodayGroup {
     /** The deadline passed. */
     Overdue,
@@ -75,12 +75,21 @@ enum class TodayGroup {
 
     /** Planned before today and still open. Nothing moves it automatically. */
     EarlierPlanned,
+
+    /** Open, and every date it has is after today (D53). */
+    Upcoming,
+
+    /** Open, with no planned day and no deadline, and not waiting in Inbox (D53). */
+    NoDate,
 }
+
+/** The earliest of [task]'s planned day and deadline day, or null when it has neither. */
+fun firstDayOf(task: Task): LocalDay? = listOfNotNull(task.plannedDay, task.deadline?.day).minOrNull()
 
 /**
  * The one Today group [task] belongs to by its dates, or null when it does not show in Today (v3 `taskGroup`).
  * A Task that qualifies twice, for example planned for today and overdue, is in the first group that matches, so it
- * shows once.
+ * shows once. A Task in Inbox with no dates is left to Inbox (D38), so it has no group.
  */
 fun todayGroupOf(
     task: Task,
@@ -91,7 +100,10 @@ fun todayGroupOf(
         task.deadline?.isPassed(now) == true -> TodayGroup.Overdue
         task.plannedDay == today || task.deadline?.day == today -> TodayGroup.Today
         task.plannedDay != null && task.plannedDay < today -> TodayGroup.EarlierPlanned
-        else -> null
+        // A deadline before today has passed, so any date left is after today.
+        firstDayOf(task) != null -> TodayGroup.Upcoming
+        task.inbox -> null
+        else -> TodayGroup.NoDate
     }
 }
 
@@ -100,21 +112,28 @@ data class TodayTasks(
     val overdue: List<Task>,
     val today: List<Task>,
     val earlier: List<Task>,
+    /** Open Tasks with dates after today, by their first day (D53). */
+    val upcoming: List<Task>,
+    /** Open Tasks without dates, not in Inbox, newest first (D53). */
+    val noDate: List<Task>,
 ) {
+    /** Open Tasks for today: Overdue, Today and Earlier planned. Upcoming and No date are not counted (D53). */
     val openCount: Int get() = (overdue + today + earlier).count { !it.done }
 
     val doneCount: Int get() = (overdue + today + earlier).count { it.done }
 }
 
 /**
- * Today's main column (D37, v3 `todayGroups`).
+ * Today's main column (D37, D53, v3 `todayGroups`).
  *
  * - Open Tasks go to the group of [todayGroupOf].
  * - A Task completed today stays while [keepCompleted] is on (Settings, "Keep completed tasks in Today"), in Earlier
- *   planned when it was planned before today, else in Today. It leaves the next day.
+ *   planned when it was planned before today, else in Today. It leaves the next day. Upcoming and No date hold open
+ *   Tasks only.
  * - A Task in Inbox with no planned day and no deadline does not show, done or not.
  *
- * Overdue is sorted by deadline, Today by open first and then deadline, Earlier planned by planned day.
+ * Overdue is sorted by deadline, Today by open first and then deadline, Earlier planned by planned day. Upcoming is
+ * sorted by first day, then a timed deadline on that day by its time, then creation. No date is newest first.
  */
 fun todayTasks(
     tasks: List<Task>,
@@ -124,6 +143,8 @@ fun todayTasks(
     val overdue = mutableListOf<Task>()
     val today = mutableListOf<Task>()
     val earlier = mutableListOf<Task>()
+    val upcoming = mutableListOf<Task>()
+    val noDate = mutableListOf<Task>()
     liveTasks(tasks).sortedWith(CREATION_ORDER).forEach { task ->
         if (task.inbox && task.plannedDay == null && task.deadline == null) return@forEach
         val group =
@@ -137,6 +158,8 @@ fun todayTasks(
             TodayGroup.Overdue -> overdue += task
             TodayGroup.Today -> today += task
             TodayGroup.EarlierPlanned -> earlier += task
+            TodayGroup.Upcoming -> upcoming += task
+            TodayGroup.NoDate -> noDate += task
             null -> Unit
         }
     }
@@ -144,8 +167,14 @@ fun todayTasks(
         overdue = overdue.sortedWith(compareBy(nullsLast()) { it.deadline }),
         today = today.sortedWith(compareBy<Task> { it.done }.thenBy(nullsLast()) { it.deadline }),
         earlier = earlier.sortedWith(compareBy(nullsLast()) { it.plannedDay }),
+        // The lists are already in creation order, and sortedWith is stable.
+        upcoming = upcoming.sortedWith(compareBy<Task> { firstDayOf(it) }.thenBy(nullsLast()) { timeOnFirstDay(it) }),
+        noDate = noDate.reversed(),
     )
 }
+
+/** The time of [task]'s deadline when it is on its first day and has a time, else null. */
+private fun timeOnFirstDay(task: Task): Int? = task.deadline?.takeIf { it.day == firstDayOf(task) }?.minuteOfDay
 
 /** Tasks waiting in Inbox, newest first (v3 `inboxItems`). Notes in Inbox: `inboxNotes`. */
 fun inboxTasks(tasks: List<Task>): List<Task> = liveTasks(tasks).filter { it.inbox }.sortedWith(CREATION_ORDER.reversed())

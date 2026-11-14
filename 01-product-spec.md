@@ -91,6 +91,12 @@ Always show Topic context when relevant.
 Groups (D37): Overdue, Today, and Earlier planned in the main column.
 Reminders and Review requested sit in a side column.
 
+Two more groups follow Earlier planned (D53):
+- Upcoming: open Tasks whose planned day or deadline is after today, by day.
+- No date: open Tasks with no planned day and no deadline, with or without a Topic. A Task waiting in Inbox without dates stays in Inbox only.
+
+Every group opens and closes from its heading. Upcoming and No date start closed, and each device remembers the choice.
+
 A Task added from Today without a Topic is planned for today and also waits in Inbox until it is filed (D38).
 
 ## Inbox

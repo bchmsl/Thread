@@ -25,6 +25,7 @@ import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Form
 import org.jetbrains.compose.web.dom.H2
+import org.jetbrains.compose.web.dom.H3
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
@@ -39,10 +40,13 @@ import thread.domain.reminder.TargetKind
 import thread.domain.reminder.todayReminders
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
+import thread.domain.task.firstDayOf
 import thread.domain.task.todayTasks
 import thread.domain.time.clockText
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.statusOf
+import thread.web.platform.readDeviceText
+import thread.web.platform.writeDeviceText
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
@@ -53,6 +57,7 @@ import thread.web.presentation.SelectBox
 import thread.web.presentation.TaskCreation
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.dayText
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.ReviewRequestedRail
 import thread.web.presentation.longDate
@@ -66,7 +71,8 @@ import thread.web.presentation.topics.topicPlace
 
 /**
  * Today (v3 today.html): the date and the personal checklist lead, reminders and review requests sit on the rail,
- * Active Topics below. Each Task shows once, in the first group it qualifies for (D37).
+ * Active Topics below. Each Task shows once, in the first group it qualifies for (D37). Upcoming and No date follow
+ * Earlier planned and start closed; every group opens and closes, and this device remembers it (D53).
  */
 @Composable
 internal fun TodayScreen(
@@ -115,9 +121,29 @@ internal fun TodayScreen(
     }
     Div({ classes("today") }) {
         Div({ classes("today__main") }) {
-            TaskGroup("overdue", "Overdue", groups.overdue, "Deadline passed", workspace, onOpenTask)
-            TaskGroup("today", "Today", groups.today, "Planned or due today", workspace, onOpenTask)
-            TaskGroup("earlier", "Earlier planned", groups.earlier, "Planned before today, still open", workspace, onOpenTask)
+            TaskGroup("overdue", "Overdue", groups.overdue, "Deadline passed", openByDefault = true) {
+                TaskList(groups.overdue, workspace, onOpenTask)
+            }
+            TaskGroup("today", "Today", groups.today, "Planned or due today", openByDefault = true) {
+                if (groups.today.isEmpty()) {
+                    P({
+                        classes("muted")
+                        style { padding(12.px, 4.px) }
+                    }) { Text("Nothing planned for today yet.") }
+                } else {
+                    TaskList(groups.today, workspace, onOpenTask)
+                }
+            }
+            TaskGroup("earlier", "Earlier planned", groups.earlier, "Planned before today, still open", openByDefault = true) {
+                TaskList(groups.earlier, workspace, onOpenTask)
+            }
+            // D53: the open Tasks the groups above leave out. They start closed.
+            TaskGroup("upcoming", "Upcoming", groups.upcoming, "Planned or due after today", openByDefault = false) {
+                UpcomingList(groups.upcoming, workspace, onOpenTask)
+            }
+            TaskGroup("nodate", "No date", groups.noDate, "No planned day or deadline", openByDefault = false) {
+                ShortenedList(groups.noDate) { shown -> TaskList(shown, workspace, onOpenTask) }
+            }
         }
         Aside({
             classes("today__rail")
@@ -191,42 +217,123 @@ private fun AddForTodayForm(
     }
 }
 
+/**
+ * One group of Today's main column. Its heading is a button that opens and closes it (D53), like a Topic page
+ * section; the open count stays in the heading when it is closed. An empty group is not shown, except Today.
+ */
 @Composable
 private fun TaskGroup(
     key: String,
     title: String,
     tasks: List<Task>,
     hint: String,
-    workspace: WorkspaceModel,
-    onOpenTask: (Task) -> Unit,
+    openByDefault: Boolean,
+    body: @Composable () -> Unit,
 ) {
     if (tasks.isEmpty() && key != "today") return
-    val toasts = LocalToasts.current
+    var open by remember { mutableStateOf(isGroupOpen(key, openByDefault)) }
     Section({
         classes("tgroup", "tgroup--$key")
+        if (!open) classes("is-closed")
         attr("aria-labelledby", "g-$key")
     }) {
         H2({
             classes("tgroup__head")
             id("g-$key")
         }) {
-            if (key == "overdue") IconView(Icon.Alert, 17)
-            Text("$title ")
-            Span({ classes("n") }) { Text(tasks.count { !it.done }.toString()) }
-            Span({ classes("tgroup__hint") }) { Text(hint) }
-        }
-        if (tasks.isNotEmpty()) {
-            Ul({ classes("tlist") }) {
-                tasks.forEach { task -> key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask) } }
+            Button({
+                type(ButtonType.Button)
+                classes("tgroup__toggle")
+                attr("aria-expanded", open.toString())
+                attr("aria-controls", "gb-$key")
+                onClick {
+                    open = !open
+                    keepGroupOpen(key, open)
+                }
+            }) {
+                Span({ classes("chev") }) { IconView(Icon.ChevDown, 18) }
+                if (key == "overdue") IconView(Icon.Alert, 17)
+                Text("$title ")
+                Span({ classes("n") }) { Text(tasks.count { !it.done }.toString()) }
+                Span({ classes("tgroup__hint") }) { Text(hint) }
             }
-        } else {
-            P({
-                classes("muted")
-                style { padding(12.px, 4.px) }
-            }) { Text("Nothing planned for today yet.") }
+        }
+        Div({
+            classes("tgroup__body")
+            id("gb-$key")
+            if (!open) attr("hidden", "")
+        }) { if (open) body() }
+    }
+}
+
+@Composable
+private fun TaskList(
+    tasks: List<Task>,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+) {
+    val toasts = LocalToasts.current
+    Ul({ classes("tlist") }) {
+        tasks.forEach { task -> key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask) } }
+    }
+}
+
+/** Upcoming (D53): the first [LIST_PREVIEW] Tasks under small day headings ("Tomorrow", "Mon 17 Nov"). */
+@Composable
+private fun UpcomingList(
+    tasks: List<Task>,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+) {
+    val today = LocalNow.current.day
+    ShortenedList(tasks) { shown ->
+        shown.groupBy { firstDayOf(it) }.forEach { (day, onDay) ->
+            key(day.toString()) {
+                if (day != null) H3({ classes("tgroup__day") }) { Text(dayText(day, today)) }
+                TaskList(onDay, workspace, onOpenTask)
+            }
         }
     }
 }
+
+/** The first [LIST_PREVIEW] of [tasks], then a button that shows all of them, and fewer again. */
+@Composable
+private fun ShortenedList(
+    tasks: List<Task>,
+    content: @Composable (List<Task>) -> Unit,
+) {
+    var all by remember { mutableStateOf(false) }
+    content(if (all) tasks else tasks.take(LIST_PREVIEW))
+    if (tasks.size > LIST_PREVIEW) {
+        Button({
+            type(ButtonType.Button)
+            classes("btn", "btn--text", "btn--sm", "tgroup__more")
+            onClick { all = !all }
+        }) { Text(if (all) "Show fewer" else "Show all (${tasks.size})") }
+    }
+}
+
+/** Rows Upcoming and No date show before "Show all" (D53). */
+private const val LIST_PREVIEW = 10
+
+/** Where this device keeps whether a Today group is open: `1` or `0`, per group. Not synced (D53). */
+internal const val GROUP_OPEN_NAME = "thread.today.open"
+
+/** Whether the group is open on this device: what was last chosen here, else [default], also when storage is blocked. */
+internal fun isGroupOpen(
+    key: String,
+    default: Boolean,
+): Boolean =
+    when (readDeviceText("$GROUP_OPEN_NAME.$key")) {
+        "1" -> true
+        "0" -> false
+        else -> default
+    }
+
+internal fun keepGroupOpen(
+    key: String,
+    open: Boolean,
+) = writeDeviceText("$GROUP_OPEN_NAME.$key", if (open) "1" else "0")
 
 @Composable
 private fun RemindersRail(
