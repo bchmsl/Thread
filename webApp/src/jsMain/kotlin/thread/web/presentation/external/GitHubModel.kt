@@ -14,6 +14,7 @@ import thread.domain.external.ExternalView
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
+import thread.domain.external.PullRequestMentionSource
 import thread.domain.external.PullRequestRef
 import thread.domain.external.PullRequestSource
 import thread.domain.external.PullRequestSummary
@@ -36,6 +37,8 @@ class GitHubServices(
     val connections: ConnectionStore,
     val lists: ExternalRecordSource<PullRequestList, PullRequestListPage>,
     val pulls: PullRequestSource,
+    /** Pull requests that name a Topic's linked tickets, for Topic suggestions (D49 S5). */
+    val mentions: PullRequestMentionSource,
     /** Deletes every saved pull request copy on this device. The connection stays. */
     val deleteSavedCopies: suspend () -> Unit,
 ) {

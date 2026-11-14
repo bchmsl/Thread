@@ -9,6 +9,7 @@ import thread.data.http.urlEncode
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.GitHubConnection
+import thread.domain.external.JiraIssueKey
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestRef
 
@@ -33,6 +34,16 @@ internal class GitHubClient(
             }
         val url = "$API/search/issues?q=${urlEncode(query)}&sort=updated&order=desc&per_page=$LIST_PAGE"
         return get(connection, url, "GET /search/issues ($label)", nowMillis)
+    }
+
+    /** One page of pull requests for Topic suggestions (D49 S5): [query] is from [mentionQuery], newest change first. */
+    suspend fun searchMentions(
+        connection: GitHubConnection,
+        query: String,
+        nowMillis: Long,
+    ): ExternalResult<JsonElement> {
+        val url = "$API/search/issues?q=${urlEncode(query)}&sort=updated&order=desc&per_page=$MENTION_PAGE"
+        return get(connection, url, "GET /search/issues (mentions)", nowMillis)
     }
 
     suspend fun pull(
@@ -91,6 +102,42 @@ internal class GitHubClient(
     companion object {
         private const val API = "https://api.github.com"
         const val LIST_PAGE: Int = 50
+        const val MENTION_PAGE: Int = 20
+
+        /** GitHub search takes at most 256 characters; Thread keeps the whole query under it. */
+        const val QUERY_MAX_LENGTH: Int = 256
+
+        private val REPO = Regex("^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
+
+        /**
+         * The search for pull requests in [repo] (`owner/repo`) whose title or description names one of [keys], or null
+         * when [repo] is not a repository name or no key fits. Keys are dropped from the end until the query fits
+         * [QUERY_MAX_LENGTH]; [mentionKeys] says which ones stay. [JiraIssueKey] allows only `A-Z 0-9 _ -`.
+         */
+        fun mentionQuery(
+            repo: String,
+            keys: List<JiraIssueKey>,
+        ): String? {
+            val kept = mentionKeys(repo, keys)
+            return if (kept.isEmpty()) null else query(repo, kept)
+        }
+
+        /** The [keys] that fit [mentionQuery] for [repo]. */
+        fun mentionKeys(
+            repo: String,
+            keys: List<JiraIssueKey>,
+        ): List<JiraIssueKey> {
+            if (!REPO.matches(repo)) return emptyList()
+            var kept = keys.distinct()
+            while (kept.isNotEmpty() && query(repo, kept).length > QUERY_MAX_LENGTH) kept = kept.dropLast(1)
+            return kept
+        }
+
+        private fun query(
+            repo: String,
+            keys: List<JiraIssueKey>,
+        ): String = "is:pr repo:$repo in:title,body (${keys.joinToString(" OR ") { "\"${it.value}\"" }})"
+
         private const val DEFAULT_WAIT_MILLIS = 60_000L
 
         /**

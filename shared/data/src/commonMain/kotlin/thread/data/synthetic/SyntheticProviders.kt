@@ -172,6 +172,7 @@ object SyntheticFixtures {
             return when {
                 "author%3A%40me" in query -> SEARCH_MINE
                 "review-requested%3A%40me" in query -> SEARCH_REVIEW
+                "repo%3A" in query -> mentions(query)
                 else -> null
             }
         }
@@ -185,6 +186,75 @@ object SyntheticFixtures {
         }
         return null
     }
+
+    private val MENTION_REPO = Regex("repo:([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")
+    private val MENTION_KEY = Regex("\"([A-Z][A-Z0-9_]*-[0-9]+)\"")
+
+    /**
+     * A mention search (D49 S5): the [MENTION_ITEMS] in the searched repository whose title or body contains a quoted
+     * key as text, like a loose search would. Thread checks the rows itself, so the `SYN-1010` row must not be kept.
+     */
+    private fun mentions(query: String): String {
+        val q =
+            query
+                .split('&')
+                .firstOrNull { it.startsWith("q=") }
+                ?.let { percentDecode(it.removePrefix("q=")) }
+                .orEmpty()
+        val repo = MENTION_REPO.find(q)?.groupValues?.get(1)
+        val keys = MENTION_KEY.findAll(q).map { it.groupValues[1] }.toList()
+        val items =
+            MENTION_ITEMS.filter { item ->
+                repo != null && item.repo == repo && keys.any { it in item.title || it in item.body.orEmpty() }
+            }
+        val json =
+            items.joinToString(",") { item ->
+                val body = item.body?.let { "\"$it\"" } ?: "null"
+                """{"number":${item.number},"title":"${item.title}","user":{"login":"synthetic-teammate","id":2},""" +
+                    """"draft":false,"state":"${item.state}","updated_at":"${item.updated}",""" +
+                    """"repository_url":"https://api.github.com/repos/${item.repo}","body":$body,""" +
+                    """"pull_request":{"url":"https://api.github.com/repos/${item.repo}/pulls/${item.number}"}}"""
+            }
+        return """{"total_count":${items.size},"incomplete_results":false,"items":[$json]}"""
+    }
+
+    private class SyntheticMention(
+        val repo: String,
+        val number: Int,
+        val title: String,
+        val body: String?,
+        val state: String,
+        val updated: String,
+    )
+
+    /** SYNTHETIC pull requests that name synthetic tickets. #12 and #14 also have a detail below. */
+    private val MENTION_ITEMS: List<SyntheticMention> =
+        listOf(
+            SyntheticMention(
+                "synthetic-org/synthetic-app",
+                12,
+                "SYNTHETIC: Add the offline shell",
+                "SYNTHETIC description. Follows SYN-103 and SYN-105.",
+                "open",
+                "2026-11-12T14:00:00Z",
+            ),
+            SyntheticMention(
+                "synthetic-org/synthetic-app",
+                14,
+                "SYNTHETIC: Ticket view polish (SYN-101)",
+                "Closed synthetic change.",
+                "closed",
+                "2026-11-10T16:00:00Z",
+            ),
+            SyntheticMention(
+                "synthetic-org/synthetic-app",
+                15,
+                "SYNTHETIC: Names SYN-1010, not a linked ticket",
+                null,
+                "open",
+                "2026-11-12T15:00:00Z",
+            ),
+        )
 
     private val FIELDS =
         """
@@ -378,6 +448,19 @@ object SyntheticFixtures {
                     reviews = """[{"user":{"login":"synthetic-reviewer-a"},"state":"CHANGES_REQUESTED"}]""",
                     statuses = """{"state":"pending","total_count":0,"statuses":[]}""",
                     checkRuns = """{"total_count":1,"check_runs":[{"name":"build","status":"completed","conclusion":"failure"}]}""",
+                ),
+            "synthetic-org/synthetic-app#14" to
+                SyntheticPull(
+                    sha = "4".repeat(40),
+                    json =
+                        """
+                        {"number":14,"title":"SYNTHETIC: Ticket view polish (SYN-101)","user":{"login":"synthetic-teammate"},"draft":false,
+                         "state":"closed","head":{"ref":"feature/ticket-polish","sha":"${"4".repeat(40)}"},"base":{"ref":"main"},
+                         "body":"Closed synthetic change.","updated_at":"2026-11-10T16:00:00Z","requested_reviewers":[],"requested_teams":[]}
+                        """.trimIndent(),
+                    reviews = """[{"user":{"login":"synthetic-me"},"state":"APPROVED"}]""",
+                    statuses = """{"state":"success","total_count":1,"statuses":[{"context":"synthetic/lint","state":"success"}]}""",
+                    checkRuns = """{"total_count":1,"check_runs":[{"name":"build","status":"completed","conclusion":"success"}]}""",
                 ),
             "synthetic-org/synthetic-lib#7" to
                 SyntheticPull(

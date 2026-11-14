@@ -141,6 +141,14 @@ internal object JiraQuery {
         val keyOnly: Boolean,
     )
 
+    /** These tickets themselves (D49 S4). [JiraIssueKey] allows only `A-Z 0-9 _ -`, so a key is safe in quotes. */
+    fun keys(keys: List<JiraIssueKey>): String = "key in (${quoted(keys)})"
+
+    /** The tickets whose parent is one of [parents], newest change first (D49 S4). */
+    fun children(parents: List<JiraIssueKey>): String = "parent in (${quoted(parents)}) ORDER BY updated DESC"
+
+    private fun quoted(keys: List<JiraIssueKey>): String = keys.joinToString(", ") { "\"${it.value}\"" }
+
     /**
      * "Key, words or label" (v3): a key looks up that ticket; otherwise the words go to a text search, and a single
      * word is also tried as a label. Lucene special characters and quotes are dropped. Null when nothing is left.

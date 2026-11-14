@@ -73,4 +73,15 @@ class MentionsTest {
             ),
         )
     }
+
+    @Test
+    fun mentionedKeysAreTheGivenKeysTheTextNamesOnWordBoundaries() {
+        val asked = listOf("SYN-101", "SYN-103", "SYN-105").map { assertNotNull(JiraIssueKey.parse(it)) }
+        assertEquals(
+            listOf("SYN-101", "SYN-105"),
+            mentionedKeys("Closes SYN-105 and https://synthetic.atlassian.net/browse/SYN-101", asked).map { it.value },
+        )
+        assertEquals(emptyList(), mentionedKeys("SYN-1010 xSYN-103 syn-105 SYN-101x", asked), "glued or lowercase text is not a mention")
+        assertEquals(emptyList(), mentionedKeys("SYN-104", asked), "a key that was not asked about is not a mention")
+    }
 }

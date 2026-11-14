@@ -1,6 +1,7 @@
 package thread.domain.external
 
 import thread.domain.note.LinkHref
+import thread.domain.topic.TopicId
 
 /** One pull request: `owner/repo#number`. */
 data class PullRequestRef(
@@ -51,6 +52,37 @@ data class PullRequestListPage(
     val totalCount: Int,
     val isIncomplete: Boolean,
 )
+
+/**
+ * A pull request GitHub search found for Topic suggestions (D49 S5). [keys] are the searched Jira keys its title or
+ * description names, as Thread read them itself. [closed] is true for a closed or merged pull request.
+ */
+data class PullRequestMention(
+    val summary: PullRequestSummary,
+    val closed: Boolean,
+    val keys: List<JiraIssueKey>,
+)
+
+/** The pull requests in [repos] (`owner/repo`) that mention [keys]. Kept on this device per Topic; never synced. */
+data class PullRequestMentions(
+    val repos: List<String>,
+    val keys: List<JiraIssueKey>,
+    val pulls: List<PullRequestMention>,
+)
+
+/** GitHub search for [PullRequestMentions], and the last answer saved on this device per Topic. */
+interface PullRequestMentionSource {
+    /** The answer saved for [topicId], or null. */
+    suspend fun readSaved(topicId: TopicId): Saved<PullRequestMentions>?
+
+    /** Asks GitHub which pull requests in [repos] mention [keys], and saves the answer for [topicId]. */
+    suspend fun refresh(
+        topicId: TopicId,
+        repos: List<String>,
+        keys: List<JiraIssueKey>,
+        nowMillis: Long,
+    ): ExternalResult<Refreshed<PullRequestMentions>>
+}
 
 /** Pull requests: the provider's API and the copies saved on this device. */
 interface PullRequestSource : ExternalRecordSource<PullRequestRef, PullRequestDetail> {

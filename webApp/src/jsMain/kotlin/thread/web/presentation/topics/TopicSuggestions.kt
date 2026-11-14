@@ -29,17 +29,29 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
 import thread.domain.external.ExternalProblem
+import thread.domain.external.ExternalResult
 import thread.domain.external.ExternalView
+import thread.domain.external.JiraFamily
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
+import thread.domain.external.PullRequestMentions
 import thread.domain.external.PullRequestRef
+import thread.domain.external.RateLimitGate
+import thread.domain.suggest.FamilyRole
+import thread.domain.suggest.RELATED_FRESH_MILLIS
 import thread.domain.suggest.SUGGESTIONS_SHOWN
 import thread.domain.suggest.SuggestionFacts
 import thread.domain.suggest.SuggestionReason
 import thread.domain.suggest.TopicTextField
+import thread.domain.suggest.familyCandidates
+import thread.domain.suggest.familySearchKeys
+import thread.domain.suggest.isFresh
 import thread.domain.suggest.issueLinkCandidates
 import thread.domain.suggest.keysToCheck
+import thread.domain.suggest.mentionCandidates
+import thread.domain.suggest.mentionSearchKeys
+import thread.domain.suggest.mentionSearchRepos
 import thread.domain.suggest.projectOf
 import thread.domain.suggest.pullRequestMentionCandidates
 import thread.domain.suggest.rankSuggestions
@@ -65,12 +77,13 @@ import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
+import thread.web.presentation.external.orFallback
 import thread.web.presentation.rememberOnline
 
 /*
  * Topic suggestions (D49, adr/ADR-017-topic-suggestions.md): related Jira tickets and pull requests under the linked
- * ones, found by fixed rules on this device. Only ticket keys and pull request ids go to Jira and GitHub, never the
- * Topic's text. Link and "Don't suggest" each come with Undo; "Not suggested here" restores.
+ * ones, found by fixed rules on this device. Only ticket keys, pull request ids and repository names go to Jira and
+ * GitHub, never the Topic's text. Link and "Don't suggest" each come with Undo; "Not suggested here" restores.
  */
 
 /** One suggestion row: the record, what the row shows, and why it is there. */
@@ -134,11 +147,16 @@ internal fun rememberTopicSuggestions(
     val linkedPullRefs = referencesOf(topic.id, ExternalProvider.GitHub, data).mapNotNull(::pullRequestRefOf)
     val linkedPulls = linkedPullRefs.mapNotNull { gitHub.detail(it.id) }
 
-    // Jira: written keys (S1), issue links of linked tickets (S2), keys in linked pull requests (S3).
+    // Jira: written keys (S1), issue links of linked tickets (S2), keys in linked pull requests (S3), and the parents,
+    // children and siblings of linked tickets (S4).
     val jiraLinked =
         referencesOf(topic.id, ExternalProvider.Jira, data)
             .filter(jira::isHere)
             .mapNotNull { JiraIssueKey.parse(it.key) }
+    // Only tickets Jira showed here are searched for (S4, S5): a key Jira does not know would refuse the search.
+    val jiraConfirmed = jiraLinked.filter { jira.summary(it.value) != null }
+    val family = rememberJiraFamily(jira, topic, familySearchKeys(jiraConfirmed))
+    val familyRows = family?.rows.orEmpty().associateBy { it.key.value }
     val jiraDismissedRefs = dismissedReferencesOf(topic.id, ExternalProvider.Jira, data).filter(jira::isHere)
     val linkedIssues = jiraLinked.mapNotNull { jira.saved[it.value]?.value }
     val related = linkedIssues.flatMap { it.related }.associateBy { it.key.value }
@@ -146,22 +164,37 @@ internal fun rememberTopicSuggestions(
         if (site == null) {
             emptyList()
         } else {
-            writtenJiraKeys(texts, site.site) + issueLinkCandidates(linkedIssues) + pullRequestMentionCandidates(linkedPulls, site.site)
+            writtenJiraKeys(texts, site.site) + issueLinkCandidates(linkedIssues) + pullRequestMentionCandidates(linkedPulls, site.site) +
+                familyCandidates(jiraLinked, family?.rows.orEmpty())
         }
-    // A key is confirmed when Jira showed it here: a saved ticket, a list or search row, or an issue link.
+    // A key is confirmed when Jira showed it here: a saved ticket, a list or search row, an issue link or a family row.
     val jiraFacts: (JiraIssueKey) -> SuggestionFacts? = { key ->
-        jira.summary(key.value)?.let { SuggestionFacts(it.status?.category == JiraStatusCategory.Done, it.updatedAtMillis) }
+        (jira.summary(key.value) ?: familyRows[key.value])
+            ?.let { SuggestionFacts(it.status?.category == JiraStatusCategory.Done, it.updatedAtMillis) }
             ?: related[key.value]?.let { SuggestionFacts(it.status?.category == JiraStatusCategory.Done, null) }
     }
     val jiraDismissed = jiraDismissedRefs.mapNotNull { JiraIssueKey.parse(it.key) }.toSet()
     val jiraRanked = rankSuggestions(jiraCandidates, jiraFacts, jiraLinked.toSet(), jiraDismissed)
 
-    // Pull requests: written in the Topic (S1).
+    // Pull requests: written in the Topic (S1), and naming a linked ticket in their title or description (S5).
     val pullDismissedRefs = dismissedReferencesOf(topic.id, ExternalProvider.GitHub, data)
-    val pullCandidates = if (gitHub.connected) writtenPullRequests(texts) else emptyList()
-    val pullFacts: (
-        PullRequestRef,
-    ) -> SuggestionFacts? = { ref -> gitHub.summary(ref.id)?.let { SuggestionFacts(false, it.updatedAtMillis) } }
+    val mentionRepos = mentionSearchRepos(linkedPullRefs, gitHub.known().map { it.ref })
+    val mentions = rememberPullMentions(gitHub, topic, mentionRepos, mentionSearchKeys(jiraConfirmed))
+    val mentionHits = mentions?.pulls.orEmpty().associateBy { it.summary.ref.id }
+    // GitHub names a repository in its own letter case; a pull request linked in another case is still linked.
+    val pullIdsTaken = (linkedPullRefs + pullDismissedRefs.mapNotNull(::pullRequestRefOf)).map { it.id.lowercase() }.toSet()
+    val pullCandidates =
+        if (gitHub.connected) {
+            val mentioned = mentionCandidates(mentions?.pulls.orEmpty(), jiraLinked)
+            writtenPullRequests(texts) + mentioned.filter { it.item.id.lowercase() !in pullIdsTaken }
+        } else {
+            emptyList()
+        }
+    val pullFacts: (PullRequestRef) -> SuggestionFacts? = { ref ->
+        val summary = gitHub.summary(ref.id)
+        val hit = mentionHits[ref.id]
+        if (summary == null && hit == null) null else SuggestionFacts(hit?.closed ?: false, (summary ?: hit?.summary)?.updatedAtMillis)
+    }
     val pullRanked =
         rankSuggestions(pullCandidates, pullFacts, linkedPullRefs.toSet(), pullDismissedRefs.mapNotNull(::pullRequestRefOf).toSet())
 
@@ -187,7 +220,7 @@ internal fun rememberTopicSuggestions(
             jiraRanked.mapNotNull { suggestion ->
                 val key = suggestion.item
                 val reference = jira.reference(key) ?: return@mapNotNull null
-                val summary = jira.summary(key.value)
+                val summary = jira.summary(key.value) ?: familyRows[key.value]
                 val relatedRow = related[key.value]
                 SuggestionRow(
                     reference = reference,
@@ -212,7 +245,7 @@ internal fun rememberTopicSuggestions(
                 SuggestionRow(
                     reference = reference,
                     label = "#${ref.number}",
-                    title = gitHub.summary(ref.id)?.title,
+                    title = (gitHub.summary(ref.id) ?: mentionHits[ref.id]?.summary)?.title,
                     status = null,
                     repo = "${ref.owner}/${ref.repo}",
                     reasons = suggestion.reasons,
@@ -278,6 +311,85 @@ private fun AskInBackground(
     }
 }
 
+/**
+ * The [JiraFamily] of [topic]'s confirmed linked [keys] (D49 S4): the answer saved on this device at once, then a
+ * refresh when it is older than [RELATED_FRESH_MILLIS] or was for other keys. The refresh waits [RELATED_WAIT_MILLIS]
+ * so quick link changes send one search, and is skipped offline, inside Jira's rate limit or after the token was
+ * refused. Only an expired token or a rate limit is shown; anything else keeps the saved answer quietly.
+ */
+@Composable
+private fun rememberJiraFamily(
+    jira: JiraModel,
+    topic: Topic,
+    keys: List<JiraIssueKey>,
+): JiraFamily? {
+    var family by remember(topic.id, jira.version) { mutableStateOf<JiraFamily?>(null) }
+    val online by rememberOnline()
+    LaunchedEffect(topic.id, jira.version, online, keys) {
+        val source = jira.services.family
+        val saved = orFallback(null) { source.readSaved(topic.id) }
+        if (saved != null) family = saved.value
+        val fresh = saved != null && saved.value.keys == keys && isFresh(saved.savedAtMillis, nowMillis())
+        if (keys.isEmpty() || fresh) return@LaunchedEffect
+        delay(RELATED_WAIT_MILLIS)
+        if (!online || !isOnline() || !jira.connected || jira.problem == ExternalProblem.Unauthorized) return@LaunchedEffect
+        if (jira.services.rateLimit.blockedUntil(nowMillis()) != null) return@LaunchedEffect
+        when (val result = orFallback(null) { source.refresh(topic.id, keys, nowMillis()) }) {
+            is ExternalResult.Ok -> family = result.value.saved.value
+            is ExternalResult.Problem -> noteRelatedProblem(result.problem, jira::note, jira.services.rateLimit)
+            null -> Unit
+        }
+    }
+    return family
+}
+
+/**
+ * The pull requests in [repos] that name [topic]'s confirmed linked [keys] (D49 S5), saved and refreshed like
+ * [rememberJiraFamily], inside GitHub's search rate limit.
+ */
+@Composable
+private fun rememberPullMentions(
+    gitHub: GitHubModel,
+    topic: Topic,
+    repos: List<String>,
+    keys: List<JiraIssueKey>,
+): PullRequestMentions? {
+    var mentions by remember(topic.id, gitHub.version) { mutableStateOf<PullRequestMentions?>(null) }
+    val online by rememberOnline()
+    LaunchedEffect(topic.id, gitHub.version, online, repos, keys) {
+        val source = gitHub.services.mentions
+        val saved = orFallback(null) { source.readSaved(topic.id) }
+        if (saved != null) mentions = saved.value
+        val fresh = saved != null && saved.value.repos == repos && saved.value.keys == keys && isFresh(saved.savedAtMillis, nowMillis())
+        if (repos.isEmpty() || keys.isEmpty() || fresh) return@LaunchedEffect
+        delay(RELATED_WAIT_MILLIS)
+        if (!online || !isOnline() || !gitHub.connected || gitHub.problem == ExternalProblem.Unauthorized) return@LaunchedEffect
+        if (gitHub.services.searchRateLimit.blockedUntil(nowMillis()) != null) return@LaunchedEffect
+        when (val result = orFallback(null) { source.refresh(topic.id, repos, keys, nowMillis()) }) {
+            is ExternalResult.Ok -> mentions = result.value.saved.value
+            is ExternalResult.Problem -> noteRelatedProblem(result.problem, gitHub::note, gitHub.services.searchRateLimit)
+            null -> Unit
+        }
+    }
+    return mentions
+}
+
+/** An expired token is noted for the whole app; a rate limit holds the next request; the rest stays quiet. */
+private fun noteRelatedProblem(
+    problem: ExternalProblem,
+    note: (ExternalProblem) -> Unit,
+    gate: RateLimitGate,
+) {
+    when (problem) {
+        ExternalProblem.Unauthorized -> note(problem)
+        is ExternalProblem.RateLimited -> gate.block(problem.retryAtMillis)
+        else -> Unit
+    }
+}
+
+/** Link changes within this wait send one S4 or S5 search, not one per change. */
+private const val RELATED_WAIT_MILLIS = 800L
+
 /** Why a row is suggested, in words. */
 internal fun reasonText(reason: SuggestionReason): String =
     when (reason) {
@@ -292,6 +404,13 @@ internal fun reasonText(reason: SuggestionReason): String =
                 }
         is SuggestionReason.MentionedByPullRequest -> "Mentioned in pull request #${reason.pull.number}"
         is SuggestionReason.IssueLink -> "${reason.linkedKey.value} ${reason.relation} this"
+        is SuggestionReason.Family ->
+            when (reason.role) {
+                FamilyRole.Parent -> "Parent of ${reason.linkedKey.value}"
+                FamilyRole.Child -> "Child of ${reason.linkedKey.value}"
+            }
+        is SuggestionReason.SameParent -> "Same parent as ${reason.linkedKey.value}"
+        is SuggestionReason.MentionsLinkedTicket -> "Mentions ${reason.linkedKey.value}"
     }
 
 /**

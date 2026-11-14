@@ -249,6 +249,7 @@ Details: ADR-017 (Proposed). Checked with the emulator tests and headless Chrome
 - **Deploy the rules before the build ships.** Until then the server refuses Unlink, Don't suggest and Restore. They stay in the sync panel (Phase 12); nothing is lost. Link is unaffected.
 - Trash: a Topic in Trash hides its links, so its dismissals leave with it and come back on Restore (D42).
 - Device only, never uploaded: the tickets and PRs that suggestion checks load are saved in `thread-external-cache` like opened ones; keys Jira did not show are remembered for a day in browser storage (`thread.jira.notTickets`).
+- Phase 2, device only: S4 family rows in the external cache's meta store under `family:<topicId>` (marked with the Jira site) and S5 PR rows in its lists store under `mentions:<topicId>` (no PR descriptions). Each is fresh for 10 minutes and cleared with the connection, like the lists. No Firestore field and no rules change.
 
 ## Topic Additional information (D52, proposed, 2026-11-14)
 

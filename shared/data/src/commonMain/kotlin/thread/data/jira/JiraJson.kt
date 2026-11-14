@@ -18,6 +18,7 @@ import thread.data.external.pick
 import thread.data.external.putIfNotNull
 import thread.data.external.str
 import thread.domain.external.JiraComment
+import thread.domain.external.JiraFamily
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueList
@@ -43,6 +44,9 @@ internal object JiraJson {
 
     /** The fields of a list or search row (v3 `jiraRow`). */
     const val SUMMARY_FIELDS: String = "summary,issuetype,status,updated"
+
+    /** The row fields and the parent, for the Topic suggestion search (D49 S4). Only the parent's key is kept. */
+    const val FAMILY_FIELDS: String = "$SUMMARY_FIELDS,parent"
 
     fun sprintFieldId(fields: JsonElement): String? =
         fields
@@ -139,6 +143,7 @@ internal object JiraJson {
                     putIfNotNull("issuetype", fields.obj("issuetype")?.pick("name"))
                     putIfNotNull("status", fields.obj("status")?.let(::status))
                     copy(fields, "updated")
+                    putIfNotNull("parent", fields.obj("parent")?.pick("key"))
                 },
             )
         }
@@ -154,6 +159,7 @@ internal object JiraJson {
             title = fields.str("summary") ?: return null,
             status = fields.obj("status")?.let(::readStatus),
             updatedAtMillis = ExternalTime.parseMillis(fields.str("updated")),
+            parentKey = fields.obj("parent")?.str("key")?.let(JiraIssueKey::parse),
         )
     }
 
@@ -163,6 +169,25 @@ internal object JiraJson {
             issues = data.objects("issues").mapNotNull(::summary),
             complete = data.bool("complete") ?: true,
         )
+
+    /** A saved family (D49 S4): `{keys: [linked keys asked about], issues: [cut-down issues with their parent]}`. */
+    fun familyBundle(
+        keys: List<JiraIssueKey>,
+        issues: List<JsonObject>,
+    ): JsonObject =
+        buildJsonObject {
+            put("keys", JsonArray(keys.map { JsonPrimitive(it.value) }))
+            put("issues", JsonArray(issues))
+        }
+
+    fun family(data: JsonObject): JiraFamily =
+        JiraFamily(
+            keys = data.arr("keys").orEmpty().mapNotNull(::issueKey),
+            rows = data.objects("issues").mapNotNull(::summary),
+        )
+
+    private fun issueKey(element: JsonElement): JiraIssueKey? =
+        (element as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(JiraIssueKey::parse)
 
     private fun status(status: JsonObject): JsonObject =
         buildJsonObject {

@@ -2,6 +2,7 @@ package thread.web.presentation.topics
 
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.PullRequestRef
+import thread.domain.suggest.FamilyRole
 import thread.domain.suggest.SuggestionReason
 import thread.domain.suggest.TopicTextField
 import kotlin.test.Test
@@ -19,5 +20,9 @@ class SuggestionReasonTextTest {
         assertEquals("Mentioned in pull request #12", reasonText(SuggestionReason.MentionedByPullRequest(pull)))
         val linked = assertNotNull(JiraIssueKey.parse("SYN-101"))
         assertEquals("SYN-101 is blocked by this", reasonText(SuggestionReason.IssueLink(linked, "is blocked by")))
+        assertEquals("Parent of SYN-101", reasonText(SuggestionReason.Family(linked, FamilyRole.Parent)))
+        assertEquals("Child of SYN-101", reasonText(SuggestionReason.Family(linked, FamilyRole.Child)))
+        assertEquals("Same parent as SYN-101", reasonText(SuggestionReason.SameParent(linked)))
+        assertEquals("Mentions SYN-101", reasonText(SuggestionReason.MentionsLinkedTicket(linked)))
     }
 }

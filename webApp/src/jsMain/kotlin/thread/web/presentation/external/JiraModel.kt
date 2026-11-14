@@ -15,6 +15,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalRecordSource
 import thread.domain.external.ExternalView
 import thread.domain.external.JiraCloudId
+import thread.domain.external.JiraFamilySource
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueList
@@ -50,6 +51,8 @@ class JiraServices(
     val search: JiraSearch,
     /** Whether the site has sprints, for "Current sprint only" (D50). */
     val sprints: JiraSprints,
+    /** Parents, children and siblings of a Topic's linked tickets, for Topic suggestions (D49 S4). */
+    val family: JiraFamilySource,
     /** Deletes every saved Jira copy on this device. The connection stays. */
     val deleteSavedCopies: suspend () -> Unit,
 ) {

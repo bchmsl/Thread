@@ -3,6 +3,7 @@ package thread.data.github
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import thread.data.external.ExternalTime
 import thread.data.external.arr
@@ -17,13 +18,17 @@ import thread.data.external.pick
 import thread.data.external.putIfNotNull
 import thread.data.external.str
 import thread.domain.external.CheckOutcome
+import thread.domain.external.JiraIssueKey
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestListPage
+import thread.domain.external.PullRequestMention
+import thread.domain.external.PullRequestMentions
 import thread.domain.external.PullRequestRef
 import thread.domain.external.PullRequestStates
 import thread.domain.external.PullRequestSummary
 import thread.domain.external.ReviewerState
 import thread.domain.external.SubmittedReview
+import thread.domain.external.mentionedKeys
 import thread.domain.note.LinkHref
 
 /**
@@ -78,6 +83,62 @@ internal object GitHubJson {
             webUrl = webUrl(ref),
         )
     }
+
+    /**
+     * The pull requests in a mention search answer that Thread checks itself (D49 S5): a pull request, in [repo], whose
+     * title or description names one of [keys]. Each keeps only its row fields, its state and those keys; the
+     * description is read here and not kept. An answer that is not a search page has none.
+     */
+    fun mentionItems(
+        search: JsonElement,
+        repo: String,
+        keys: List<JiraIssueKey>,
+    ): List<JsonObject> =
+        search.asObject()?.objects("items").orEmpty().mapNotNull { item ->
+            if (item.obj("pull_request") == null) return@mapNotNull null
+            if (!item.str("repository_url").equals("https://api.github.com/repos/$repo", ignoreCase = true)) return@mapNotNull null
+            val named = mentionedKeys("${item.str("title").orEmpty()}\n${item.str("body").orEmpty()}", keys)
+            if (named.isEmpty()) return@mapNotNull null
+            buildJsonObject {
+                copy(item, "number")
+                copy(item, "title")
+                putIfNotNull("user", item.obj("user")?.pick("login"))
+                copy(item, "draft")
+                copy(item, "updated_at")
+                copy(item, "repository_url")
+                copy(item, "state")
+                put("keys", JsonArray(named.map { JsonPrimitive(it.value) }))
+            }
+        }
+
+    /** A saved mention answer: `{repos, keys, items}`, the items from [mentionItems]. */
+    fun mentionBundle(
+        repos: List<String>,
+        keys: List<JiraIssueKey>,
+        items: List<JsonObject>,
+    ): JsonObject =
+        buildJsonObject {
+            put("repos", JsonArray(repos.map { JsonPrimitive(it) }))
+            put("keys", JsonArray(keys.map { JsonPrimitive(it.value) }))
+            put("items", JsonArray(items.distinctBy { it.str("repository_url") to it.int("number") }))
+        }
+
+    fun mentions(bundle: JsonObject): PullRequestMentions =
+        PullRequestMentions(
+            repos = strings(bundle, "repos"),
+            keys = strings(bundle, "keys").mapNotNull(JiraIssueKey::parse),
+            pulls =
+                bundle.objects("items").mapNotNull { item ->
+                    val summary = summary(item) ?: return@mapNotNull null
+                    val keys = strings(item, "keys").mapNotNull(JiraIssueKey::parse)
+                    if (keys.isEmpty()) null else PullRequestMention(summary, closed = item.str("state") == "closed", keys = keys)
+                },
+        )
+
+    private fun strings(
+        from: JsonObject,
+        key: String,
+    ): List<String> = from.arr(key).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.content }
 
     /** The head commit, checked to be a full SHA, because it goes into the next request paths. */
     fun headSha(pull: JsonElement): String? =

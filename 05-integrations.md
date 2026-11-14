@@ -83,7 +83,11 @@ Handle pagination, permission loss, 401/403, 429/backoff, and partial data expli
 - Nothing is asked offline, when not connected, inside a rate limit or after a 401. A 403 on a suggestion check never sets the section's error banner.
 - Answers are saved on the device like an opened ticket or PR, so the next open sends nothing for them. A key that Jira answers with 404 or 403 is remembered for a day (Q85).
 - An item shows only after Jira or GitHub confirmed it. Text like `UTF-8` is never suggested.
-- Phase 2, not built: JQL `parent in (...)` for parents, children and siblings, and a GitHub search for PRs that mention a linked key. Both need live checks first (ADR-017).
+- Phase 2 (built, ADR-017). Only confirmed linked Jira keys and repository names are sent; answers are saved on the device per Topic and fresh for 10 minutes.
+  - S4 Jira: up to 3 GET `search/jql` per refresh, one page of 50, fields `summary,issuetype,status,updated,parent`: `key in (linked)`, `key in (parents)`, then `parent in (linked + parents) ORDER BY updated DESC`. At most 10 keys and 3 refreshes a minute.
+  - S5 GitHub: one GET `/search/issues` per repository, at most 2: `is:pr repo:o/r in:title,body ("K1" OR ...)`, 20 per page, at most 5 keys, under 256 characters. 3 refreshes a minute, next to the lists' 10 searches. Thread checks each item itself: a PR, in that repository, naming a key.
+  - A refused search (Jira 400, 403, 404; GitHub 422, 403, 404) is no rows and is saved. A 401 or rate limit is noted as usual; the rest is quiet.
+  - [inference, not checked live]: `fields.parent.key` in search rows; `parent in` finds children and sub-tasks; an unknown key in `key in` or `parent in` answers 400; GitHub's `OR` and parentheses with `in:title,body`; search items carry `body`, `state` and `pull_request`; 422 for a repository the token cannot search.
 
 ## GitHub v1
 

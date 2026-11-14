@@ -2,8 +2,10 @@ package thread.domain.suggest
 
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraSite
 import thread.domain.external.PullRequestDetail
+import thread.domain.external.PullRequestMention
 import thread.domain.external.PullRequestRef
 import thread.domain.external.jiraKeysIn
 import thread.domain.external.pullRequestRefsIn
@@ -82,11 +84,54 @@ sealed interface SuggestionReason {
     ) : SuggestionReason {
         override val points: Int get() = ISSUE_LINK_POINTS
     }
+
+    /** S4: it is the parent ([FamilyRole.Parent]) or a child ([FamilyRole.Child]) of [linkedKey], linked to the Topic. */
+    data class Family(
+        val linkedKey: JiraIssueKey,
+        val role: FamilyRole,
+    ) : SuggestionReason {
+        override val points: Int get() = FAMILY_POINTS
+    }
+
+    /** S4: it has the same parent as [linkedKey], linked to the Topic. */
+    data class SameParent(
+        val linkedKey: JiraIssueKey,
+    ) : SuggestionReason {
+        override val points: Int get() = SIBLING_POINTS
+    }
+
+    /** S5: a pull request whose title or description names [linkedKey], linked to the Topic. */
+    data class MentionsLinkedTicket(
+        val linkedKey: JiraIssueKey,
+    ) : SuggestionReason {
+        override val points: Int get() = PULL_REQUEST_POINTS
+    }
+}
+
+/** What a suggested ticket is to the linked one in [SuggestionReason.Family]. */
+enum class FamilyRole {
+    Parent,
+    Child,
 }
 
 const val WRITTEN_POINTS = 100
 const val PULL_REQUEST_POINTS = 80
 const val ISSUE_LINK_POINTS = 60
+const val FAMILY_POINTS = 60
+const val SIBLING_POINTS = 30
+
+/** Tickets with the same parent as a linked one that suggestions consider, the most recently updated first. */
+const val SIBLINGS_MAX = 5
+
+/** Linked tickets the S4 search asks about, and parents it asks about next. */
+const val FAMILY_KEYS_MAX = 10
+
+/** Linked tickets and repositories the S5 search asks about: 5 keys need 4 ORs, under GitHub's 5. */
+const val MENTION_KEYS_MAX = 5
+const val MENTION_REPOS_MAX = 2
+
+/** How long an S4 or S5 answer saved for a Topic is used before Jira or GitHub is asked again. */
+const val RELATED_FRESH_MILLIS = 10 * 60 * 1_000L
 
 /** Done tickets go below open work by this much (owner-review-queue Q80). */
 const val DONE_PENALTY = 20
@@ -142,6 +187,108 @@ fun pullRequestMentionCandidates(
         jiraKeysIn("${pull.title}\n${pull.headBranch}\n${pull.body}", site)
             .map { SuggestionCandidate(it, SuggestionReason.MentionedByPullRequest(pull.ref)) }
     }
+
+/**
+ * S4: the parents, children and siblings of the Topic's [linked] tickets in [rows] (a [thread.domain.external.JiraFamily]).
+ * Each relation is read from a row's parent as Jira gave it, so a row without one adds nothing. Siblings are capped at
+ * [siblingLimit], in the rows' order (Jira's: the most recently updated first).
+ */
+fun familyCandidates(
+    linked: Collection<JiraIssueKey>,
+    rows: List<JiraIssueSummary>,
+    siblingLimit: Int = SIBLINGS_MAX,
+): List<SuggestionCandidate<JiraIssueKey>> {
+    val linkedSet = linked.toSet()
+    // The parent of each linked ticket, and the first linked ticket under each parent.
+    val parentOf =
+        rows
+            .filter { it.key in linkedSet }
+            .mapNotNull { row -> row.parentKey?.let { row.key to it } }
+            .toMap()
+    val underParent = parentOf.entries.groupBy({ it.value }, { it.key }).mapValues { it.value.first() }
+    val parents =
+        parentOf
+            .filterValues { it !in linkedSet }
+            .map { (child, parent) -> SuggestionCandidate(parent, SuggestionReason.Family(child, FamilyRole.Parent)) }
+    val others = rows.filter { it.key !in linkedSet }.distinctBy { it.key }
+    val children =
+        others.mapNotNull { row ->
+            row.parentKey?.takeIf { it in linkedSet }?.let { SuggestionCandidate(row.key, SuggestionReason.Family(it, FamilyRole.Child)) }
+        }
+    val siblings =
+        others
+            .mapNotNull { row ->
+                val parent = row.parentKey?.takeIf { it !in linkedSet } ?: return@mapNotNull null
+                underParent[parent]?.let { SuggestionCandidate(row.key, SuggestionReason.SameParent(it)) }
+            }.take(siblingLimit)
+    return parents + children + siblings
+}
+
+/** The parents to ask about after the first S4 search: of the rows of [keys], not one of [keys], at most [limit]. */
+fun familyParents(
+    keys: Collection<JiraIssueKey>,
+    rows: List<JiraIssueSummary>,
+    limit: Int = FAMILY_KEYS_MAX,
+): List<JiraIssueKey> {
+    val keySet = keys.toSet()
+    return rows
+        .filter { it.key in keySet }
+        .mapNotNull { it.parentKey }
+        .filter { it !in keySet }
+        .distinct()
+        .take(limit)
+}
+
+/** The linked tickets S4 asks about: the ones Jira confirmed, in a stable order, at most [FAMILY_KEYS_MAX]. */
+fun familySearchKeys(confirmedLinked: Collection<JiraIssueKey>): List<JiraIssueKey> =
+    confirmedLinked
+        .distinct()
+        .sortedBy { it.value }
+        .take(FAMILY_KEYS_MAX)
+
+/** S5: one candidate per pull request and key it names that is still among the Topic's [linked] tickets. */
+fun mentionCandidates(
+    pulls: List<PullRequestMention>,
+    linked: Collection<JiraIssueKey>,
+): List<SuggestionCandidate<PullRequestRef>> {
+    val linkedSet = linked.toSet()
+    return pulls.flatMap { pull ->
+        pull.keys.filter { it in linkedSet }.map { SuggestionCandidate(pull.summary.ref, SuggestionReason.MentionsLinkedTicket(it)) }
+    }
+}
+
+/** The linked tickets S5 searches for: the ones Jira confirmed, in a stable order, at most [MENTION_KEYS_MAX]. */
+fun mentionSearchKeys(confirmedLinked: Collection<JiraIssueKey>): List<JiraIssueKey> =
+    confirmedLinked
+        .distinct()
+        .sortedBy { it.value }
+        .take(MENTION_KEYS_MAX)
+
+/**
+ * The repositories (`owner/repo`) S5 searches: those of the Topic's [linked] pull requests, the most used first; with
+ * none linked, those of the pull requests [known] on this device. At most [limit].
+ */
+fun mentionSearchRepos(
+    linked: List<PullRequestRef>,
+    known: List<PullRequestRef>,
+    limit: Int = MENTION_REPOS_MAX,
+): List<String> {
+    val from = linked.ifEmpty { known }
+    return from
+        .map { "${it.owner}/${it.repo}" }
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedByDescending { it.value }
+        .map { it.key }
+        .take(limit)
+}
+
+/** Whether an S4 or S5 answer saved at [savedAtMillis] is still used at [nowMillis]. A save in the future is not. */
+fun isFresh(
+    savedAtMillis: Long,
+    nowMillis: Long,
+): Boolean = nowMillis - savedAtMillis in 0 until RELATED_FRESH_MILLIS
 
 /**
  * The best [limit] suggestions among [candidates]. Items in [linked] or [dismissed] are left out, and so are items

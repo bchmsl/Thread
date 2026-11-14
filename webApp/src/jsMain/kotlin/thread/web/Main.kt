@@ -11,8 +11,10 @@ import thread.data.firebase.FirestoreVaultRemote
 import thread.data.firebase.FirestoreWorkspaceStore
 import thread.data.github.GitHubPullRequestDetails
 import thread.data.github.GitHubPullRequestLists
+import thread.data.github.GitHubPullRequestMentions
 import thread.data.http.FetchHttpTransport
 import thread.data.http.HttpTransport
+import thread.data.jira.JiraFamilyRepository
 import thread.data.jira.JiraIssueRepository
 import thread.data.jira.JiraListRepository
 import thread.data.local.IndexedDbDraftStore
@@ -196,6 +198,7 @@ private fun jiraServices(
         lists = lists,
         search = lists,
         sprints = lists,
+        family = JiraFamilyRepository(connections, transport, meta),
         deleteSavedCopies = {
             issues.clear()
             meta.clear()
@@ -218,6 +221,7 @@ private fun gitHubServices(
         connections = connections,
         lists = GitHubPullRequestLists(connections, transport, lists),
         pulls = GitHubPullRequestDetails(connections, transport, pulls),
+        mentions = GitHubPullRequestMentions(connections, transport, lists),
         deleteSavedCopies = {
             lists.clear()
             pulls.clear()

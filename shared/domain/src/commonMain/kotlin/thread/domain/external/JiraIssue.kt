@@ -1,6 +1,7 @@
 package thread.domain.external
 
 import thread.domain.note.LinkHref
+import thread.domain.topic.TopicId
 import kotlin.jvm.JvmInline
 
 /** A Jira issue key such as `ABC-123`. Create it with [parse]. */
@@ -81,14 +82,41 @@ interface JiraIssueSource : ExternalRecordSource<JiraIssueKey, JiraIssue> {
     suspend fun allSaved(): List<Saved<JiraIssue>>
 }
 
-/** One row of a Jira list or search result (v3 `jiraRow`). */
+/**
+ * One row of a Jira list or search result (v3 `jiraRow`). [parentKey] is the ticket's parent; only the Topic
+ * suggestion search asks Jira for it (D49 S4), so other rows have none.
+ */
 data class JiraIssueSummary(
     val key: JiraIssueKey,
     val type: String?,
     val title: String,
     val status: JiraStatus?,
     val updatedAtMillis: Long?,
+    val parentKey: JiraIssueKey? = null,
 )
+
+/**
+ * The tickets around a Topic's linked [keys] (D49 S4, adr/ADR-017-topic-suggestions.md): rows of the [keys]
+ * themselves, of their children, of their parents and of their parents' other children, each with its parent, as
+ * Jira showed them. Kept on this device per Topic; never synced.
+ */
+data class JiraFamily(
+    val keys: List<JiraIssueKey>,
+    val rows: List<JiraIssueSummary>,
+)
+
+/** The [JiraFamily] of a Topic's linked tickets: Jira's search, and the last answer saved on this device per Topic. */
+interface JiraFamilySource {
+    /** The answer saved for [topicId], or null. */
+    suspend fun readSaved(topicId: TopicId): Saved<JiraFamily>?
+
+    /** Asks Jira about [keys] and saves the answer for [topicId] as fetched at [nowMillis]. */
+    suspend fun refresh(
+        topicId: TopicId,
+        keys: List<JiraIssueKey>,
+        nowMillis: Long,
+    ): ExternalResult<Refreshed<JiraFamily>>
+}
 
 /** Tickets in Jira's order. [complete] is false when Jira had more than Thread fetched. */
 data class JiraIssueList(

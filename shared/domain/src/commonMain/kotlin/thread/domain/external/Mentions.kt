@@ -42,6 +42,22 @@ fun jiraKeysIn(
 }
 
 /**
+ * Which of [keys] [text] names, in [keys]' order: uppercase, on word boundaries, also inside links (D49 S5). GitHub's
+ * search answer is checked with this, so a pull request that does not name a key is never suggested for it.
+ */
+fun mentionedKeys(
+    text: String,
+    keys: List<JiraIssueKey>,
+): List<JiraIssueKey> {
+    val found =
+        JIRA_KEY
+            .findAll(text)
+            .map { it.groupValues[2] }
+            .toSet()
+    return keys.distinct().filter { it.value in found }
+}
+
+/**
  * The pull requests in [text], in order of first appearance, without repeats: `https://github.com/o/r/pull/n` links and
  * `o/r#n`. A link to anything else on GitHub (an issue, a commit, a branch) is not a pull request.
  */

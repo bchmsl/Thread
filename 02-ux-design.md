@@ -84,6 +84,7 @@ On narrow screens, show details as a routed screen with a clear return path.
 Suggestions (D49, ADR-017). Not in the v3 prototype; placement queued as Q77.
 - A "Suggested" group under the linked rows of the Jira and Pull requests sections. Hidden when not connected or when there is nothing to suggest.
 - Rows reuse the external row with a dashed icon frame and a muted title. The snippet line gives the best two reasons ("Mentioned in Additional information", "Mentioned in pull request #12", "SYN-101 is blocked by this"). "Also in" tags show other Topics that link the item.
+- Phase 2 reasons: "Parent of SYN-103", "Child of SYN-101", "Same parent as SYN-103" (Jira) and "Mentions SYN-101" (pull requests). A closed or merged PR found this way ranks below open ones. No new controls.
 - Each row has a small **Link** text button and a **Don't suggest** icon button ("Don't suggest SYN-104 in this Topic"). Both show a toast with Undo.
 - 3 rows, then "Show N more", up to 10. "Not suggested here (N)" opens a dialog with **Restore** per row (title from the device, else "Not on this device") and **Done**.
 - Focus: after Link or Don't suggest, the next suggestion, else the section heading. In the dialog, the next Restore, else Done; closing returns to "Not suggested here".
