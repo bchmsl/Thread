@@ -2,7 +2,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { -webkit-text-size-adjust: 100%; }
+/* No page zoom (D48). pan-x pan-y keeps scrolling in both directions (and in .board) but drops pinch and double-tap
+   zoom. Text selection, the editor and drag and drop do not depend on it. ZoomGuard.kt covers what CSS cannot. */
+html { -webkit-text-size-adjust: 100%; touch-action: pan-x pan-y; }
 body {
   margin: 0;
   background: var(--bg-app);

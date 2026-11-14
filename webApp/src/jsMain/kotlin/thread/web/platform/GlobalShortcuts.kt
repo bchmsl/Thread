@@ -36,7 +36,7 @@ private fun isSearchShortcut(event: KeyboardEvent): Boolean {
 }
 
 /** keyCode browsers report for keys that an IME is processing. */
-private const val IME_PROCESS_KEY_CODE = 229
+internal const val IME_PROCESS_KEY_CODE = 229
 
 /**
  * Listens for C, which focuses quick capture (v3 shell.js), and calls [onCapture]. Ignored while the person types in a

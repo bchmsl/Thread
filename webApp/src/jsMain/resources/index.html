@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <!-- No page zoom (D48): with touch-action in app.css and ZoomGuard.kt. maximum-scale=1 also stops iOS zooming in on a focused field. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
     <!-- Strict Content Security Policy (Phase 12, ADR-015). No inline or evaluated script. Hosts:
          Firebase Auth and Firestore (googleapis.com), Google sign-in popup (apis.google.com script,

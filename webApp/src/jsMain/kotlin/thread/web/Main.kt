@@ -30,6 +30,7 @@ import thread.domain.account.AccountId
 import thread.domain.external.ConnectionStore
 import thread.domain.external.ConnectionSync
 import thread.domain.note.LocalDraftStore
+import thread.web.platform.installZoomGuard
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
 import thread.web.platform.readSessionFlag
@@ -47,6 +48,7 @@ import thread.web.presentation.notes.NoteServices
  */
 fun main() {
     registerOfflineShell()
+    installZoomGuard()
     val backend = FirebaseBackend(project = firebaseProject())
     val account = FirebaseAccountSession(backend)
     val testFlags = TestFlags()

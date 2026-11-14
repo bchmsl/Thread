@@ -148,6 +148,7 @@ Use semantic HTML, keyboard access, visible focus, sufficient contrast, and mean
 Status meaning must not depend on color alone.
 Support reduced motion.
 Cmd+K must coexist with editor shortcuts. ⌘K opens global search in the editor too; adding a link uses the toolbar button (D40).
+No page zoom (D48). The page blocks every zoom it can: the viewport meta (`maximum-scale=1, user-scalable=no`, which also stops iOS zooming in on a focused field), `touch-action: pan-x pan-y` (no pinch or double-tap zoom, scrolling stays), Ctrl or ⌘ with + = - _ 0, Ctrl or ⌘ with the wheel or a trackpad pinch, and Safari's pinch gestures. Page code cannot block the browser's own menu zoom, the operating system's accessibility zoom, or a setting that forces zoom on (iOS Safari's "ignore zoom restrictions"). This is a deliberate trade-off against text resizing (WCAG 1.4.4), chosen by the owner.
 Retain sensible browser navigation and deep links.
 
 ## Next visual deliverables
