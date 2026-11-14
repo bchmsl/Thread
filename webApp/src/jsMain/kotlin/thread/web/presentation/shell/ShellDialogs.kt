@@ -181,6 +181,8 @@ internal class SearchOption(
     val label: String,
     val sub: String,
     val lead: @Composable () -> Unit,
+    /** Extra classes for [sub], such as a Jira status lozenge. */
+    val subClasses: List<String> = emptyList(),
     val onPick: () -> Unit,
 )
 
@@ -285,7 +287,7 @@ internal fun SearchPalette(
                                 }) {
                                     Span({ classes("pal__lead") }) { option.lead() }
                                     Span({ classes("pal__label") }) { Text(option.label) }
-                                    Span({ classes("pal__sub") }) { Text(option.sub) }
+                                    Span({ classes("pal__sub", *option.subClasses.toTypedArray()) }) { Text(option.sub) }
                                 }
                             }
                         }

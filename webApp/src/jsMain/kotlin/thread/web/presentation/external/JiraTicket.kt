@@ -149,7 +149,7 @@ private fun JiraArticle(
             P({ classes("xd__kicker") }) {
                 Span({ classes("xd__key") }) { Text(issue.key.value) }
                 issue.type?.let { Span { Text(it) } }
-                issue.status?.let { Span({ classes("jst") }) { Text(it.name) } }
+                issue.status?.let { JiraStatusLozenge(it) }
                 if (onDevice) {
                     Span({ classes("dl-badge") }) {
                         IconView(Icon.Device, 13)

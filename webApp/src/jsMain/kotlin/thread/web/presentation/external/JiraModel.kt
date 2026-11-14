@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.browser.document
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import thread.domain.external.ConnectionStore
 import thread.domain.external.ExternalLoader
@@ -22,6 +23,7 @@ import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraList
 import thread.domain.external.JiraSearch
 import thread.domain.external.JiraSite
+import thread.domain.external.JiraSprints
 import thread.domain.external.RateLimitGate
 import thread.domain.external.Saved
 import thread.domain.workspace.ExternalProvider
@@ -29,6 +31,8 @@ import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.jiraReference
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
+import thread.web.platform.readDeviceFlag
+import thread.web.platform.writeDeviceFlag
 
 /**
  * What the app reads Jira through (adr/ADR-013-jira-in-the-workspace.md). Main builds one set: the real provider, or
@@ -42,6 +46,8 @@ class JiraServices(
     val issues: JiraIssueSource,
     val lists: ExternalRecordSource<JiraList, JiraIssueList>,
     val search: JiraSearch,
+    /** Whether the site has sprints, for "Current sprint only" (D50). */
+    val sprints: JiraSprints,
     /** Deletes every saved Jira copy on this device. The connection stays. */
     val deleteSavedCopies: suspend () -> Unit,
 ) {
@@ -62,12 +68,28 @@ internal class JiraSiteInfo(
  */
 internal class JiraModel(
     val services: JiraServices,
+    scope: CoroutineScope,
 ) {
     val name: String get() = services.name
     val isSynthetic: Boolean get() = services.isSynthetic
 
     val issueLoader = ExternalLoader(services.issues, ::isOnline, ::nowMillis, services.rateLimit)
-    val listLoader = ExternalLoader(services.lists, ::isOnline, ::nowMillis, services.rateLimit)
+    private val listLoader = ExternalLoader(services.lists, ::isOnline, ::nowMillis, services.rateLimit)
+
+    /** The assigned lists, shared by the Jira page and the background refresh (D51). */
+    val lists = ExternalListFeed(listLoader, scope, ::nowMillis) { _, view -> observeList(view) }
+
+    /** "Current sprint only" on the Jira page. Kept on this device, like the Jira connection and its copies (D50). */
+    var currentSprintOnly: Boolean by mutableStateOf(readDeviceFlag(CURRENT_SPRINT_FLAG))
+        private set
+
+    /** Whether the connected site has sprints; null until known. The checkbox hides when it has none. */
+    var sprints: Boolean? by mutableStateOf(null)
+        private set
+
+    /** The list "Assigned to me" shows: the current sprint only when that is on and the site has sprints. */
+    val assignedList: JiraList
+        get() = if (currentSprintOnly && sprints != false) JiraList.AssignedCurrentSprint else JiraList.Assigned
 
     /** False until this device was read once. */
     var checked: Boolean by mutableStateOf(false)
@@ -104,6 +126,7 @@ internal class JiraModel(
             } else {
                 orFallback(emptyList()) { services.issues.allSaved() }.associateBy { it.value.key.value }
             }
+        if (connection == null) sprints = null
         val assigned = if (connection == null) null else orFallback(null) { services.lists.readSaved(JiraList.Assigned) }
         rows =
             assigned
@@ -117,8 +140,22 @@ internal class JiraModel(
     /** After a connect, disconnect or token change: every open view loads again. */
     suspend fun connectionChanged() {
         problem = null
+        lists.clear()
+        sprints = null
         reload()
         version++
+    }
+
+    fun setCurrentSprintOnly(on: Boolean) {
+        currentSprintOnly = on
+        writeDeviceFlag(CURRENT_SPRINT_FLAG, on)
+    }
+
+    /** Learns whether the site has sprints: from this device, and from Jira at most once a day when it can ask. */
+    suspend fun checkSprints() {
+        if (!connected) return
+        val mayAsk = isOnline() && services.rateLimit.blockedUntil(nowMillis()) == null && problem != ExternalProblem.Unauthorized
+        orFallback(null) { services.sprints.hasSprints(nowMillis(), mayAsk) }?.let { sprints = it }
     }
 
     /** Records what loading a ticket showed: a new or deleted saved copy, and access problems. */
@@ -181,6 +218,9 @@ internal class JiraModel(
     fun isHere(reference: ExternalReference): Boolean =
         reference.provider == ExternalProvider.Jira && reference.instance == site?.cloudId?.value
 }
+
+/** The device setting behind "Current sprint only" (D50). */
+private const val CURRENT_SPRINT_FLAG = "thread.jira.currentSprintOnly"
 
 /** Copies refresh when opened and then every five minutes while the page is visible and online (ADR-013). */
 internal const val JIRA_REFRESH_MILLIS = 5 * 60 * 1_000L

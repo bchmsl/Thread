@@ -43,6 +43,7 @@ import thread.web.platform.isOnline
 import thread.web.platform.mediaMatches
 import thread.web.platform.nowMillis
 import thread.web.platform.observeMedia
+import thread.web.presentation.CheckBox
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
@@ -122,9 +123,12 @@ internal fun JiraScreen(
     val scope = rememberCoroutineScope()
 
     var listRefresh by remember { mutableStateOf(0) }
-    val listAuto = rememberAutoRefresh(JiraList.Assigned) { jira.problem == ExternalProblem.Unauthorized }
-    val listView = rememberExternalView(jira.listLoader, JiraList.Assigned, listOf(listRefresh, listAuto, jira.version))
-    LaunchedEffect(listView) { listView?.let(jira::observeList) }
+    // "Current sprint only" picks the list; each one is loaded and saved apart (D50).
+    val listKey = jira.assignedList
+    val listAuto = rememberAutoRefresh(listKey) { jira.problem == ExternalProblem.Unauthorized }
+    LaunchedEffect(jira.version) { jira.checkSprints() }
+    rememberListLoads(jira.lists, listKey, listRefresh, listAuto, jira.version)
+    val listView = jira.lists.view(listKey)
     val assigned = listView?.savedOrNull?.value
 
     fun runSearch(text: String) {
@@ -339,6 +343,9 @@ private fun AssignedPanel(
     onRefresh: () -> Unit,
 ) {
     val list = view?.savedOrNull?.value
+    val sprintOnly = jira.assignedList == JiraList.AssignedCurrentSprint
+    // Shown when the site has sprints; also while that is unknown and the filter is on, so it can be turned off.
+    if (jira.sprints == true || (jira.currentSprintOnly && jira.sprints == null)) SprintFilter(jira)
     when {
         view == null || view == ExternalView.Loading -> P({ classes("muted") }) { Text("Loading your tickets…") }
         view is ExternalView.Missing ->
@@ -359,7 +366,13 @@ private fun AssignedPanel(
             }
         list != null -> {
             CacheBar(view, "Refresh the list", onRefresh)
-            if (list.issues.isEmpty()) {
+            if (list.issues.isEmpty() && sprintOnly) {
+                EmptyState(
+                    Icon.Jira,
+                    "Nothing assigned to you in the current sprint",
+                    "Open tickets assigned to you in an active sprint show here.",
+                )
+            } else if (list.issues.isEmpty()) {
                 EmptyState(Icon.Jira, "Nothing assigned to you", "Open tickets assigned to you show here.")
             } else {
                 Ul({ classes("md__scroll") }) {
@@ -369,6 +382,17 @@ private fun AssignedPanel(
                     P({ classes("muted", "xd__note") }) { Text("Showing the latest ${list.issues.size}. Search finds the others.") }
                 }
             }
+        }
+    }
+}
+
+/** "Current sprint only" (D50): kept on this device, like the Jira connection. */
+@Composable
+private fun SprintFilter(jira: JiraModel) {
+    Div({ classes("jl-filter") }) {
+        Label {
+            CheckBox(jira.currentSprintOnly, label = null, id = "jl-sprint") { jira.setCurrentSprintOnly(it) }
+            Text(" Current sprint only")
         }
     }
 }
@@ -469,7 +493,7 @@ private fun JiraRow(
             Span({ classes("xi__top") }) {
                 Span({ classes("xi__key") }) { Text(issue.key.value) }
                 issue.type?.let { Span { Text(it) } }
-                issue.status?.let { Span({ classes("jst") }) { Text(it.name) } }
+                issue.status?.let { JiraStatusLozenge(it) }
             }
             Span({ classes("xi__title") }) { Text(issue.title) }
             Span({ classes("xi__meta") }) {

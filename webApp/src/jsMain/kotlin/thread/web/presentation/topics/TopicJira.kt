@@ -22,6 +22,7 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.JiraStatus
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
 import thread.web.presentation.Icon
@@ -32,6 +33,7 @@ import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.CONNECTIONS_PLACE
 import thread.web.presentation.external.JiraModel
+import thread.web.presentation.external.JiraStatusLozenge
 import thread.web.presentation.external.JiraTicket
 import thread.web.presentation.external.ViewBanner
 import thread.web.presentation.external.XD_TITLE_ID
@@ -103,7 +105,7 @@ internal fun TopicJiraSection(
                                 attr("data-key", reference.key)
                                 if (isOpen) attr("aria-current", "true")
                                 onClick { if (onOpen(issueKey)) it.preventDefault() }
-                            }) { RowText(reference.key, summary?.status?.name, summary?.title, here = true) }
+                            }) { RowText(reference.key, summary?.status, summary?.title, here = true) }
                         } else {
                             Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false) }
                         }
@@ -142,13 +144,13 @@ internal fun TopicJiraSection(
 @Composable
 private fun RowText(
     key: String,
-    status: String?,
+    status: JiraStatus?,
     title: String?,
     here: Boolean,
 ) {
     Span({ classes("xrow__key") }) {
         B { Text(key) }
-        if (status != null) Span({ classes("jst") }) { Text(status) }
+        if (status != null) JiraStatusLozenge(status)
     }
     when {
         title != null -> Span({ classes("xrow__title") }) { Text(title) }

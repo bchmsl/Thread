@@ -29,6 +29,8 @@ import thread.domain.external.ExternalDocument
 import thread.domain.external.ExternalLoader
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
+import thread.domain.external.JiraStatus
+import thread.domain.external.JiraStatusCategory
 import thread.domain.external.ReviewState
 import thread.domain.external.Saved
 import thread.domain.note.LinkHref
@@ -409,4 +411,25 @@ internal object Times {
     ): Boolean = a.getFullYear() == b.getFullYear() && a.getMonth() == b.getMonth() && a.getDate() == b.getDate()
 
     private fun pad(value: Int): String = value.toString().padStart(2, '0')
+}
+
+/**
+ * The classes of a Jira status lozenge, colored by Jira's status category the way Jira Cloud shows it (D50): To Do
+ * gray, In Progress blue, Done green. A status Jira gives no known category keeps the plain outline.
+ */
+internal fun jiraStatusClasses(category: JiraStatusCategory): List<String> =
+    listOf(
+        "jst",
+        when (category) {
+            JiraStatusCategory.ToDo -> "jst--todo"
+            JiraStatusCategory.InProgress -> "jst--progress"
+            JiraStatusCategory.Done -> "jst--done"
+            JiraStatusCategory.Unknown -> "jst--unknown"
+        },
+    )
+
+/** A Jira status as a colored lozenge. The status name stays the text, so the color never carries meaning alone. */
+@Composable
+internal fun JiraStatusLozenge(status: JiraStatus) {
+    Span({ classes(*jiraStatusClasses(status.category).toTypedArray()) }) { Text(status.name) }
 }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.browser.document
 import kotlinx.coroutines.CancellationException
@@ -43,6 +44,8 @@ import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.copyText
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.external.BackgroundRefreshProbe
+import thread.web.presentation.external.BackgroundRefresher
 import thread.web.presentation.external.ConnectionSyncModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.GitHubServices
@@ -54,6 +57,7 @@ import thread.web.presentation.external.PrItemScreen
 import thread.web.presentation.external.PrScreen
 import thread.web.presentation.external.jiraPlace
 import thread.web.presentation.external.jiraSearchPlace
+import thread.web.presentation.external.jiraStatusClasses
 import thread.web.presentation.external.prPlace
 import thread.web.presentation.notes.NOTE_PARAM
 import thread.web.presentation.notes.NoteServices
@@ -106,6 +110,8 @@ class AppServices(
      * the SYNTHETIC fixtures (adr/ADR-016-encrypted-connection-sync.md).
      */
     val connectionSync: ((AccountId) -> ConnectionSync)?,
+    /** Emulator checks only: lets the background refresh run with the SYNTHETIC fixtures and records its runs. */
+    val backgroundProbe: BackgroundRefreshProbe? = null,
 )
 
 @Composable
@@ -144,8 +150,10 @@ private fun Workspace(
     val syncCenter = remember { SyncCenter() }
     val capture = remember { CaptureState(CaptureType.Task) }
     val workspace = remember { WorkspaceModel(services.workspaceStore(signedIn.accountId), services.newId) }
-    val jira = remember { JiraModel(services.jira) }
-    val gitHub = remember { GitHubModel(services.gitHub) }
+    // Lists load in the workspace's scope, so leaving a page does not cancel a refresh; signing out stops them all.
+    val workspaceScope = rememberCoroutineScope()
+    val jira = remember { JiraModel(services.jira, workspaceScope) }
+    val gitHub = remember { GitHubModel(services.gitHub, workspaceScope) }
     val connectionSync =
         remember {
             ConnectionSyncModel(services.connectionSync?.invoke(signedIn.accountId)) {
@@ -215,6 +223,8 @@ private fun Workspace(
     // On sign-in and each time the network comes or goes: save a change waiting here, or take another device's.
     LaunchedEffect(connectionSync, online) { connectionSync.check() }
     SweepPurgedNotes(workspace, services.notes, signedIn.accountId, online)
+    // Jira's assigned list and both pull request lists stay current while Thread is open (D51).
+    BackgroundRefresher(jira, gitHub, services.backgroundProbe)
     val workspaceReport = workspace.syncReport(online)
     SideEffect { syncCenter.report("workspace", workspaceReport) }
     // Capture starts as the type in Preferences when the app opens (v3); later picks are remembered there.
@@ -480,7 +490,12 @@ private fun searchGroups(
                 emptyList()
             } else {
                 searchJiraCopies(query, jira.saved.values.map { it.value.summary() }).orEmpty().map { issue ->
-                    SearchOption("${issue.key.value} ${issue.title}", issue.status?.name.orEmpty(), { IconView(Icon.Jira, 18) }) {
+                    SearchOption(
+                        "${issue.key.value} ${issue.title}",
+                        issue.status?.name.orEmpty(),
+                        { IconView(Icon.Jira, 18) },
+                        issue.status?.let { jiraStatusClasses(it.category) }.orEmpty(),
+                    ) {
                         go(jiraPlace(issue.key))
                     }
                 }

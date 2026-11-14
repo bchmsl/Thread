@@ -1,14 +1,7 @@
 package thread.data.jira
 
-import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import thread.data.external.KeyValueStore
 import thread.data.external.SavedRecord
-import thread.data.external.asObject
-import thread.data.external.long
-import thread.data.external.str
 import thread.data.external.succeeded
 import thread.data.http.BAD_RESPONSE
 import thread.data.http.HttpTransport
@@ -16,7 +9,6 @@ import thread.domain.external.ConnectionStore
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.JiraCloudId
-import thread.domain.external.JiraConnection
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueSource
@@ -38,6 +30,7 @@ class JiraIssueRepository(
     private val meta: KeyValueStore,
 ) : JiraIssueSource {
     private val client = JiraClient(transport)
+    private val sprintField = JiraSprintField(client, meta)
 
     override suspend fun isConnected(): Boolean = connections.jira() != null
 
@@ -61,7 +54,7 @@ class JiraIssueRepository(
     ): ExternalResult<Refreshed<JiraIssue>> {
         val connection = connections.jira() ?: return ExternalResult.Problem(ExternalProblem.NotConnected)
         val sprintFieldId =
-            when (val result = sprintFieldId(connection, nowMillis)) {
+            when (val result = sprintField.id(connection, nowMillis)) {
                 is ExternalResult.Ok -> result.value
                 is ExternalResult.Problem -> return result
             }
@@ -103,49 +96,5 @@ class JiraIssueRepository(
     ): Saved<JiraIssue>? {
         val (savedAt, bundle) = SavedRecord.decode(raw, site.host) ?: return null
         return JiraJson.issue(bundle, site)?.let { Saved(it, savedAt) }
-    }
-
-    /**
-     * The Sprint field id, from [meta] when it is less than a day old. A failed `/field` request only hides the
-     * sprint, except when it shows that no request can work now (no answer, expired token, rate limit).
-     */
-    private suspend fun sprintFieldId(
-        connection: JiraConnection,
-        nowMillis: Long,
-    ): ExternalResult<String?> {
-        val metaKey = "sprintField:${connection.cloudId.value}"
-        val cached =
-            try {
-                meta.get(metaKey)?.let { Json.parseToJsonElement(it).asObject() }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                null
-            }
-        val cachedAt = cached?.long("savedAtMillis")
-        if (cached != null && cachedAt != null && nowMillis - cachedAt in 0 until FIELD_CACHE_MILLIS) {
-            return ExternalResult.Ok(cached.str("id"))
-        }
-        return when (val result = client.fields(connection, nowMillis)) {
-            is ExternalResult.Ok -> {
-                val id = JiraJson.sprintFieldId(result.value)
-                val record =
-                    buildJsonObject {
-                        put("id", id)
-                        put("savedAtMillis", nowMillis)
-                    }
-                succeeded { meta.put(metaKey, record.toString()) }
-                ExternalResult.Ok(id)
-            }
-            is ExternalResult.Problem ->
-                when (result.problem) {
-                    ExternalProblem.Unreachable, ExternalProblem.Unauthorized, is ExternalProblem.RateLimited -> result
-                    else -> ExternalResult.Ok(null)
-                }
-        }
-    }
-
-    private companion object {
-        const val FIELD_CACHE_MILLIS = 24 * 60 * 60 * 1_000L
     }
 }

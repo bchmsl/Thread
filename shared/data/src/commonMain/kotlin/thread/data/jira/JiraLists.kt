@@ -17,6 +17,7 @@ import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueList
 import thread.domain.external.JiraList
 import thread.domain.external.JiraSearch
+import thread.domain.external.JiraSprints
 import thread.domain.external.Refreshed
 import thread.domain.external.Saved
 
@@ -24,14 +25,19 @@ import thread.domain.external.Saved
  * The Jira page lists (adr/ADR-013-jira-in-the-workspace.md): "Assigned to me", saved on this device, and Search,
  * which is never saved. Both use the enhanced JQL search. A saved list holds only the row fields (key, type, title,
  * status, updated) and lives in [meta] next to the Sprint field id. Nothing here is written to Firestore.
+ *
+ * The assigned list has every issue type: the JQL names none, and no row is dropped for its type (D50). With "Current
+ * sprint only" it is a second list, saved apart, of the tickets in an active sprint.
  */
 class JiraListRepository(
     private val connections: ConnectionStore,
     transport: HttpTransport,
     private val meta: KeyValueStore,
 ) : ExternalRecordSource<JiraList, JiraIssueList>,
-    JiraSearch {
+    JiraSearch,
+    JiraSprints {
     private val client = JiraClient(transport)
+    private val sprintField = JiraSprintField(client, meta)
 
     override suspend fun isConnected(): Boolean = connections.jira() != null
 
@@ -51,6 +57,7 @@ class JiraListRepository(
         val jql =
             when (key) {
                 JiraList.Assigned -> JiraQuery.ASSIGNED
+                JiraList.AssignedCurrentSprint -> JiraQuery.ASSIGNED_CURRENT_SPRINT
             }
         val issues = mutableListOf<JsonObject>()
         var token: String? = null
@@ -100,17 +107,30 @@ class JiraListRepository(
         }
     }
 
+    override suspend fun hasSprints(
+        nowMillis: Long,
+        mayAsk: Boolean,
+    ): Boolean? {
+        val connection = connections.jira() ?: return null
+        return sprintField.exists(connection, nowMillis, mayAsk)
+    }
+
     private fun metaKey(key: JiraList): String = "list:${key.name.lowercase()}"
 
-    private companion object {
-        const val LIST_PAGES = 2
+    internal companion object {
+        /** At most 500 rows (10 pages of 50). Most people have far fewer, so one request is usual. */
+        const val LIST_PAGES = 10
     }
 }
 
 /** The JQL Thread sends. Typed text never reaches JQL unescaped. */
 internal object JiraQuery {
-    /** v3 "Assigned to me": open tickets, newest change first. */
+    /** v3 "Assigned to me": open tickets of every type, newest change first. */
     const val ASSIGNED: String = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
+
+    /** "Current sprint only" (D50): `openSprints()` is the sprints that started and are not completed yet. */
+    const val ASSIGNED_CURRENT_SPRINT: String =
+        "assignee = currentUser() AND statusCategory != Done AND sprint in openSprints() ORDER BY updated DESC"
 
     private val SPECIAL = Regex("[+\\-&|!(){}\\[\\]^~*?:\\\\/\"']")
     private val SPACES = Regex("\\s+")

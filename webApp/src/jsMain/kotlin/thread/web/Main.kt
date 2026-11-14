@@ -52,7 +52,8 @@ fun main() {
     val backend = FirebaseBackend(project = firebaseProject())
     val account = FirebaseAccountSession(backend)
     val testFlags = TestFlags()
-    if (backend.usesEmulators) installTestHooks(backend, account, testFlags)
+    val backgroundProbe = if (backend.usesEmulators) backgroundRefreshProbe() else null
+    if (backend.usesEmulators) installTestHooks(backend, account, testFlags, backgroundProbe)
     // SYNTHETIC providers only on the emulators, and only when a check turned them on for this tab.
     val synthetic = backend.usesEmulators && readSessionFlag(SYNTHETIC_PROVIDERS_FLAG)
     val connections = connectionStore(synthetic)
@@ -69,6 +70,7 @@ fun main() {
             jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),
             gitHub = gitHubServices(synthetic, connections, cache, transport(synthetic) { testFlags.gitHubScenario }),
             connectionSync = connectionSync(synthetic, backend, connections),
+            backgroundProbe = backgroundProbe,
         )
     renderComposable(rootElementId = "root") {
         App(services)
@@ -176,6 +178,7 @@ private fun jiraServices(
         issues = JiraIssueRepository(connections, transport, issues, meta),
         lists = lists,
         search = lists,
+        sprints = lists,
         deleteSavedCopies = {
             issues.clear()
             meta.clear()

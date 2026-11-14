@@ -96,10 +96,25 @@ data class JiraIssueList(
     val complete: Boolean,
 )
 
-/** The Jira lists Thread keeps a copy of on this device. */
+/** The Jira lists Thread keeps a copy of on this device. Each one is saved apart (D50). */
 enum class JiraList {
-    /** Open tickets assigned to the connected account, latest change first. */
+    /** Open tickets of every issue type assigned to the connected account, latest change first. */
     Assigned,
+
+    /** The same, only those in an active sprint ("Current sprint only", D50). */
+    AssignedCurrentSprint,
+}
+
+/** Whether the connected Jira site has sprints, so "Current sprint only" can work there (D50). */
+interface JiraSprints {
+    /**
+     * True when the site has Jira Software's Sprint field. Uses the answer saved on this device while it is less than
+     * a day old; otherwise asks Jira when [mayAsk], and else falls back to an older saved answer. Null when unknown.
+     */
+    suspend fun hasSprints(
+        nowMillis: Long,
+        mayAsk: Boolean,
+    ): Boolean?
 }
 
 /** Explicit search of everything in Jira the token can read (v3 Jira "Search"). Nothing is saved on this device. */

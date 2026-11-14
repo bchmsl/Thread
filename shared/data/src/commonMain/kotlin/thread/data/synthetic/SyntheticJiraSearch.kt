@@ -5,7 +5,10 @@ package thread.data.synthetic
  * up. The search here reads only the JQL that Thread itself sends; it is not a JQL parser.
  */
 
-/** One SYNTHETIC ticket as the list and search answers show it. [mine] means assigned to the synthetic account. */
+/**
+ * One SYNTHETIC ticket as the list and search answers show it. [mine] means assigned to the synthetic account;
+ * [inOpenSprint] means it is in a started, not completed sprint (`sprint in openSprints()`).
+ */
 internal class SyntheticTicket(
     val key: String,
     val type: String,
@@ -16,6 +19,7 @@ internal class SyntheticTicket(
     val mine: Boolean,
     val updated: String,
     val text: String = "",
+    val inOpenSprint: Boolean = false,
 )
 
 internal object SyntheticJiraSearch {
@@ -30,6 +34,7 @@ internal object SyntheticJiraSearch {
                 listOf("synthetic", "m1-probe"),
                 mine = true,
                 updated = "2026-11-12T16:42:10.123+0400",
+                inOpenSprint = true,
             ),
             SyntheticTicket(
                 "SYN-102",
@@ -62,6 +67,7 @@ internal object SyntheticJiraSearch {
                 mine = true,
                 updated = "2026-11-11T17:20:00.000+0400",
                 text = "Show when the next refresh can run. Never retry in a loop.",
+                inOpenSprint = true,
             ),
             SyntheticTicket(
                 "SYN-105",
@@ -107,8 +113,45 @@ internal object SyntheticJiraSearch {
                 updated = "2026-11-07T11:00:00.000+0400",
                 text = "Review the payment screen texts with the writer.",
             ),
+            // Every issue type shows in "Assigned to me" (D50): a sub-task, an epic and a site's own custom type.
+            SyntheticTicket(
+                "SYN-109",
+                "Sub-task",
+                "SYNTHETIC: Check the empty state wording",
+                "In Progress",
+                "indeterminate",
+                listOf("synthetic"),
+                mine = true,
+                updated = "2026-11-12T11:00:00.000+0400",
+                text = "A sub-task of a synthetic story.",
+                inOpenSprint = true,
+            ),
+            SyntheticTicket(
+                "SYN-110",
+                "Epic",
+                "SYNTHETIC: Workspace polish epic",
+                "To Do",
+                "new",
+                listOf("synthetic"),
+                mine = true,
+                updated = "2026-11-06T10:00:00.000+0400",
+                text = "Groups the polish stories.",
+            ),
+            SyntheticTicket(
+                "SYN-111",
+                "Synthetic Incident",
+                "SYNTHETIC: Custom issue type row",
+                "Triage",
+                "new",
+                listOf("synthetic"),
+                mine = true,
+                updated = "2026-11-11T09:00:00.000+0400",
+                text = "An issue type this site made itself.",
+                inOpenSprint = true,
+            ),
         )
 
+    private const val OPEN_SPRINTS = "sprint in openSprints()"
     private val KEY = Regex("key = \"([A-Z][A-Z0-9_]*-[0-9]+)\"")
     private val TEXT = Regex("text ~ \"([^\"]*)\"")
     private val LABEL = Regex("labels = \"([^\"]*)\"")
@@ -121,7 +164,8 @@ internal object SyntheticJiraSearch {
         val start = params["nextPageToken"]?.removePrefix("synthetic-page-")?.toIntOrNull() ?: 0
         val found =
             when {
-                jql.startsWith("assignee = currentUser()") -> tickets.filter { it.mine && it.category != "done" }
+                jql.startsWith("assignee = currentUser()") ->
+                    tickets.filter { it.mine && it.category != "done" && (OPEN_SPRINTS !in jql || it.inOpenSprint) }
                 else -> {
                     val key = KEY.find(jql)?.groupValues?.get(1)
                     if (key != null) {

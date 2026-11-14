@@ -55,6 +55,27 @@ No persistent Firestore mirror of descriptions/comments.
 Every device maintains its own downloaded cache.
 Handle pagination, permission loss, 401/403, 429/backoff, and partial data explicitly.
 
+### Assigned to me (D50)
+
+- JQL: `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`, through `GET /rest/api/3/search/jql` with `nextPageToken`, 50 per page.
+- No issue-type filter. Every type shows, including custom types and items with no type.
+- Up to 10 pages (500 rows). When Jira has more, the list says "Showing the latest N" and search finds the rest.
+- "Current sprint only" adds `AND sprint in openSprints()`. It shows only when the site has a Sprint field: `GET /rest/api/3/field`, custom schema `com.pyxis.greenhopper.jira:gh-sprint`, asked at most once a day and saved on the device.
+- The checkbox is kept on this device (browser storage), like the Jira connection. Syncing it through the account would need a Firestore rules change.
+- Each list (all, current sprint) is saved apart on the device, so either one shows its own saved copy offline.
+- Only items where the owner is the assignee show. Items where the owner is in another user field (for example a custom "Developer" field) need a different JQL; not in v1.
+- Status lozenges use the status category (`new`, `indeterminate`, `done`), never the status name, so custom workflows color correctly. An unknown category keeps the neutral style.
+
+### Background refresh (D51)
+
+- Lists: Jira "Assigned to me" (the mode the checkbox picks), My PRs and Review requested.
+- Only while Thread is open in a tab. No service worker or server job.
+- On start; every 5 minutes while signed in, connected, online and visible; at once on becoming visible or coming back online when the list is older than 5 minutes.
+- Never signed out, offline, hidden, with the SYNTHETIC fixtures, inside a rate limit (Jira 429, GitHub search budget), or after a 401 until the connection is set up again.
+- 403, 404, no answer and other errors count as failures. Each failure in a row doubles the wait, up to 30 minutes. Offline and rate limits are not failures: they send nothing.
+- Pages and the background share one list each. A page that opens a list asks again only when the last request is over a minute old; Refresh always asks.
+- Jira's Sprint field check (above) runs before the Jira list, at most once a day.
+
 ## GitHub v1
 
 Views:
@@ -68,7 +89,7 @@ Token permissions, repository selection, organization approval, and SSO can limi
 Token possession does not imply access to all information.
 Current-user identity must be discovered, not hardcoded.
 Whether team-based review requests count alongside direct requests is open.
-Drafts, closed PR inclusion, default filters, and refresh cadence remain open.
+Drafts, closed PR inclusion and default filters remain open. The list refresh cadence is D51 (see Jira, "Background refresh").
 
 Proposed data policy: API authority + device-local detailed cache; cloud stores minimal references and Topic associations.
 Do not store diffs or repository contents just to display PR metadata.

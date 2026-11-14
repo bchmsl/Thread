@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
 import thread.domain.external.ConnectionStore
 import thread.domain.external.ExternalLoader
 import thread.domain.external.ExternalProblem
@@ -52,11 +53,15 @@ class GitHubServices(
  */
 internal class GitHubModel(
     val services: GitHubServices,
+    scope: CoroutineScope,
 ) {
     val name: String get() = services.name
     val isSynthetic: Boolean get() = services.isSynthetic
 
-    val listLoader = ExternalLoader(services.lists, ::isOnline, ::nowMillis, services.searchRateLimit)
+    private val listLoader = ExternalLoader(services.lists, ::isOnline, ::nowMillis, services.searchRateLimit)
+
+    /** "My pull requests" and "Review requested", shared by their pages, Today and the background refresh (D51). */
+    val lists = ExternalListFeed(listLoader, scope, ::nowMillis, ::observeList)
     val pullLoader = ExternalLoader(services.pulls, ::isOnline, ::nowMillis, services.coreRateLimit)
 
     /** False until this device was read once. */
@@ -109,6 +114,7 @@ internal class GitHubModel(
     /** After a connect, disconnect or token change: every open view loads again. */
     suspend fun connectionChanged() {
         problem = null
+        lists.clear()
         reload()
         version++
     }
@@ -186,7 +192,10 @@ internal fun rememberPullRequest(
     return view
 }
 
-/** Loads [list] and keeps [gitHub] up to date with what it showed. [refresh] reloads it. */
+/**
+ * Shows [list] from the shared feed: opening it loads it unless it asked less than a minute ago, and a change of
+ * [refresh] (the Refresh button) always loads it. The background refresh keeps it current meanwhile (D51).
+ */
 @Composable
 internal fun rememberPullRequestList(
     gitHub: GitHubModel,
@@ -194,7 +203,6 @@ internal fun rememberPullRequestList(
     refresh: Int,
 ): ExternalView<PullRequestListPage>? {
     val auto = rememberAutoRefresh(list) { gitHub.problem == ExternalProblem.Unauthorized }
-    val view = rememberExternalView(gitHub.listLoader, list, listOf(refresh, auto, gitHub.version))
-    LaunchedEffect(view) { if (view != null) gitHub.observeList(list, view) }
-    return view
+    rememberListLoads(gitHub.lists, list, refresh, auto, gitHub.version)
+    return gitHub.lists.view(list)
 }

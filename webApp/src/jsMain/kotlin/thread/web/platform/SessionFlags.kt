@@ -21,6 +21,28 @@ fun writeSessionFlag(
     }
 }
 
+/**
+ * A yes/no display setting of this device (localStorage), for settings that belong with something kept per device,
+ * such as the Jira connection. Reads false when the browser blocks storage.
+ */
+fun readDeviceFlag(name: String): Boolean =
+    try {
+        window.localStorage.getItem(name) == "1"
+    } catch (e: Throwable) {
+        false
+    }
+
+fun writeDeviceFlag(
+    name: String,
+    on: Boolean,
+) {
+    try {
+        if (on) window.localStorage.setItem(name, "1") else window.localStorage.removeItem(name)
+    } catch (e: Throwable) {
+        // The setting only lasts for this page then.
+    }
+}
+
 /** Milliseconds since the epoch, from the browser clock. */
 fun nowMillis(): Long =
     kotlin.js.Date

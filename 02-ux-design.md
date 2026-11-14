@@ -87,6 +87,8 @@ Title, key/number, status, assignee/author, metadata, rich description, comments
 Show last refreshed time and whether the content is cached.
 Loading more comments should not block already available content.
 Include Open in Jira/GitHub. It opens the original page in a new tab (D46).
+Jira status shows as a small lozenge colored by status category, like Jira (D50): To Do gray, In Progress blue, Done green. The text is Jira's status name as written, not uppercased. Each color pair meets WCAG AA on the dark theme. Used on Jira list and search rows, the ticket header, a Topic's Jira section, ⌘K results and suggestion rows.
+The Jira "Assigned to me" tab has a "Current sprint only" checkbox above the list (D50). Off by default, remembered on this device, hidden when the site has no sprints. The label is the 40 px tap target. With it on and nothing in the sprint, the empty state says "Nothing assigned to you in the current sprint".
 Unsupported rich content should degrade to an understandable placeholder/link, not disappear silently.
 
 ### Quick capture

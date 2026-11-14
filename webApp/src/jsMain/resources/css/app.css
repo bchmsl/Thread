@@ -917,6 +917,14 @@ main:has(.board) { max-width: 1520px; }
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border-strong);
   font-size: 12px; font-weight: 650; color: var(--text-2); white-space: nowrap;
 }
+/* Jira status lozenges by status category, as Jira Cloud colors them (D50), tuned for the dark theme. Text contrast
+   on each fill is at least 7:1. A status with no known category keeps the outline above. */
+.jst--todo, .jst--progress, .jst--done { border-color: transparent; }
+.jst--todo { background: #2c3446; color: #d3d9e6; }
+.jst--progress { background: #1d3a66; color: #b3d4ff; }
+.jst--done { background: #1c3d2f; color: #94e3b5; }
+.jl-filter { display: flex; align-items: center; padding: 2px 4px 6px; }
+.jl-filter label { display: inline-flex; gap: 10px; align-items: center; min-height: 40px; font-size: var(--fs-14); color: var(--text-2); cursor: pointer; }
 .pill-open {
   display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px 0 7px; border-radius: var(--r-pill);
   background: var(--pr-open); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap;

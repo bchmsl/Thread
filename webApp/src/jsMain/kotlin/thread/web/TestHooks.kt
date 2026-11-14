@@ -6,11 +6,33 @@ import kotlinx.coroutines.promise
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.synthetic.SyntheticScenario
+import thread.domain.external.BackgroundRefresh
 import thread.web.platform.WallClock
 import thread.web.platform.writeSessionFlag
+import thread.web.presentation.external.BackgroundRefreshProbe
 
 /** The tab flag that makes the app use the SYNTHETIC Jira and GitHub providers (emulators only). */
 internal const val SYNTHETIC_PROVIDERS_FLAG = "thread.syntheticProviders"
+
+/** The tab setting that lets the background refresh run with the SYNTHETIC providers: its interval in ms (D51). */
+private const val BACKGROUND_PROBE_KEY = "thread.backgroundRefreshProbe"
+
+/**
+ * The background refresh probe for this tab (emulators only). It runs with the SYNTHETIC fixtures only after a check
+ * turned it on with `threadTest.setBackgroundRefresh`; otherwise it only records runs.
+ */
+internal fun backgroundRefreshProbe(): BackgroundRefreshProbe {
+    val interval =
+        try {
+            window.sessionStorage.getItem(BACKGROUND_PROBE_KEY)?.toLongOrNull()
+        } catch (e: Throwable) {
+            null
+        }
+    return BackgroundRefreshProbe(
+        withFixtures = interval != null,
+        intervalMillis = interval?.coerceAtLeast(1_000L) ?: BackgroundRefresh.INTERVAL_MILLIS,
+    )
+}
 
 /** Failure switches for automated checks. Only the emulator test hooks change them. */
 internal class TestFlags {
@@ -38,6 +60,7 @@ internal fun installTestHooks(
     backend: FirebaseBackend,
     account: FirebaseAccountSession,
     flags: TestFlags,
+    backgroundProbe: BackgroundRefreshProbe?,
 ) {
     val hooks: dynamic = js("({})")
     hooks.signIn = { subject: String ->
@@ -68,5 +91,20 @@ internal fun installTestHooks(
         if (scenario != null) flags.gitHubScenario = scenario
         scenario != null
     }
+    // Lets the background refresh run with the SYNTHETIC fixtures every [intervalMillis] (0 turns it off), and reloads.
+    hooks.setBackgroundRefresh = { intervalMillis: Double ->
+        try {
+            if (intervalMillis > 0) {
+                window.sessionStorage.setItem(BACKGROUND_PROBE_KEY, intervalMillis.toLong().toString())
+            } else {
+                window.sessionStorage.removeItem(BACKGROUND_PROBE_KEY)
+            }
+        } catch (e: Throwable) {
+            // Without storage the probe stays off.
+        }
+        window.location.reload()
+    }
+    // The background refreshes started in this page load, as `provider:list:reason`.
+    hooks.backgroundRuns = { backgroundProbe?.runs?.toTypedArray() ?: emptyArray() }
     window.asDynamic().threadTest = hooks
 }

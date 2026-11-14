@@ -49,7 +49,15 @@ class JiraListRepositoryTest {
 
             val list = repository.refresh(JiraList.Assigned, NOW).list()
 
-            assertEquals(listOf("SYN-101", "SYN-103", "SYN-104", "SYN-105"), list.issues.map { it.key.value })
+            assertEquals(
+                listOf("SYN-101", "SYN-109", "SYN-103", "SYN-104", "SYN-111", "SYN-105", "SYN-110"),
+                list.issues.map { it.key.value },
+            )
+            assertEquals(
+                listOf("Story", "Sub-task", "Task", "Bug", "Synthetic Incident", "Story", "Epic"),
+                list.issues.map { it.type },
+                "every issue type is listed",
+            )
             assertTrue(list.complete)
             val first = list.issues.first()
             assertEquals("Story", first.type)
@@ -73,7 +81,7 @@ class JiraListRepositoryTest {
         }
 
     @Test
-    fun theListFollowsAtMostTwoPagesAndSaysWhenItIsIncomplete() =
+    fun theListFollowsAtMostTenPagesAndSaysWhenItIsIncomplete() =
         runTest {
             val row = { n: Int ->
                 """{"key":"SYN-$n","fields":{"summary":"SYNTHETIC $n","issuetype":{"name":"Task"},"status":{"name":"To Do","statusCategory":{"key":"new"}}}}"""
@@ -85,10 +93,87 @@ class JiraListRepositoryTest {
                 }
             val list = repository(transport).refresh(JiraList.Assigned, NOW).list()
 
-            assertEquals(listOf("SYN-1", "SYN-2"), list.issues.map { it.key.value })
+            assertEquals((1..10).map { "SYN-$it" }, list.issues.map { it.key.value })
             assertFalse(list.complete)
-            assertEquals(2, transport.requests.size)
+            assertEquals(JiraListRepository.LIST_PAGES, transport.requests.size)
             assertTrue(transport.requests[1].url.endsWith("&nextPageToken=1"))
+        }
+
+    @Test
+    fun noRowIsDroppedForItsIssueType() =
+        runTest {
+            val types = listOf("Bug", "Task", "Story", "Sub-task", "Subtask", "Epic", "SYNTHETIC custom type", "Задача")
+            val rows =
+                types.mapIndexed { i, type ->
+                    """{"key":"SYN-${i + 1}","fields":{"summary":"SYNTHETIC ${i + 1}","issuetype":{"name":"$type","subtask":""" +
+                        """${type.startsWith("Sub")}},"status":{"name":"Open","statusCategory":{"key":"new"}}}}"""
+                } + """{"key":"SYN-99","fields":{"summary":"SYNTHETIC without a type","status":{"name":"Open"}}}"""
+            val transport = CapturingTransport { answer(200, """{"issues":[${rows.joinToString(",")}],"isLast":true}""") }
+
+            val list = repository(transport).refresh(JiraList.Assigned, NOW).list()
+
+            assertEquals(types + listOf(null), list.issues.map { it.type })
+            assertEquals(JiraStatus("Open", JiraStatusCategory.Unknown), list.issues.last().status)
+            val url = transport.requests.single().url
+            val jql = url.substring(url.indexOf("jql="), url.indexOf("&fields"))
+            assertFalse("issuetype" in jql, "the JQL names no issue type")
+            assertEquals(list, repository(transport).readSaved(JiraList.Assigned)?.value, "the saved copy keeps every type")
+        }
+
+    @Test
+    fun currentSprintOnlyIsItsOwnListSavedApart() =
+        runTest {
+            val transport = syntheticTransport()
+            val repository = repository(transport)
+
+            val all = repository.refresh(JiraList.Assigned, NOW).list()
+            val sprint = repository.refresh(JiraList.AssignedCurrentSprint, NOW + 1).list()
+
+            assertEquals(listOf("SYN-101", "SYN-109", "SYN-104", "SYN-111"), sprint.issues.map { it.key.value })
+            assertTrue(
+                transport.requests.last().url.contains(
+                    "jql=assignee%20%3D%20currentUser%28%29%20AND%20statusCategory%20%21%3D%20Done%20AND%20sprint%20in" +
+                        "%20openSprints%28%29%20ORDER%20BY%20updated%20DESC&",
+                ),
+            )
+            assertEquals(all, repository.readSaved(JiraList.Assigned)?.value)
+            assertEquals(sprint, repository.readSaved(JiraList.AssignedCurrentSprint)?.value)
+            assertNotNull(meta.get("list:assignedcurrentsprint"))
+
+            repository.forgetSaved(JiraList.AssignedCurrentSprint)
+            assertNull(repository.readSaved(JiraList.AssignedCurrentSprint))
+            assertEquals(all, repository.readSaved(JiraList.Assigned)?.value, "forgetting one list keeps the other")
+        }
+
+    @Test
+    fun hasSprintsAsksFieldOnceADayAndSendsNothingWhenItMayNotAsk() =
+        runTest {
+            val transport = syntheticTransport()
+            val repository = repository(transport)
+
+            assertNull(repository.hasSprints(NOW, mayAsk = false), "nothing saved and no request allowed")
+            assertTrue(transport.requests.isEmpty())
+
+            assertEquals(true, repository.hasSprints(NOW, mayAsk = true))
+            assertEquals(listOf("GET /rest/api/3/field"), transport.requests.map { it.endpoint })
+            assertEquals(true, repository.hasSprints(NOW + 60_000, mayAsk = true), "saved for a day")
+            assertEquals(1, transport.requests.size)
+
+            val dayLater = NOW + 24 * 60 * 60 * 1_000L
+            assertEquals(true, repository.hasSprints(dayLater, mayAsk = false), "an older answer while it may not ask")
+            assertEquals(1, transport.requests.size)
+
+            transport.respond = { answer(401) }
+            assertEquals(true, repository.hasSprints(dayLater, mayAsk = true), "a failed request keeps the older answer")
+        }
+
+    @Test
+    fun aSiteWithoutTheSprintFieldHasNoSprints() =
+        runTest {
+            val transport = CapturingTransport { answer(200, """[{"id":"summary","name":"Summary","schema":{"type":"string"}}]""") }
+            assertEquals(false, repository(transport).hasSprints(NOW, mayAsk = true))
+            connections.clearJira()
+            assertNull(JiraListRepository(connections, transport, meta).hasSprints(NOW, mayAsk = true), "not connected")
         }
 
     @Test
