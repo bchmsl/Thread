@@ -49,7 +49,16 @@ private fun WorkspaceModel.subjectOf(write: WorkspaceWrite): Pair<String, Place?
         is WorkspaceWrite.PutExternalLink -> {
             val topic = storedTopic(write.link.topicId.value)
             val key = write.link.referenceId.substringAfterLast('~')
-            "the link between $key and ${topic?.name?.let { "“$it”" } ?: "a Topic"}" to topic?.let(::topicPlace)
+            val name = topic?.name?.let { "“$it”" } ?: "a Topic"
+            val what =
+                if (write.link.linked ||
+                    write.link.dismissed == null
+                ) {
+                    "the link between $key and $name"
+                } else {
+                    "whether $key is suggested in $name"
+                }
+            what to topic?.let(::topicPlace)
         }
         is WorkspaceWrite.DeleteForever -> "“${write.title}”" to View.Trash.place
     }
@@ -102,8 +111,15 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
         is WorkspaceWrite.PutExternalRef -> listOf("Linked record: ${write.reference.key}, ${write.reference.url.value}")
         is WorkspaceWrite.PutExternalLink -> {
             val topic = storedTopic(write.link.topicId.value)?.name ?: "a Topic"
-            val how = if (write.link.linked) "linked to" else "unlinked from"
-            listOf("${write.link.referenceId.substringAfterLast('~')} $how $topic")
+            val key = write.link.referenceId.substringAfterLast('~')
+            val line =
+                when {
+                    write.link.linked -> "$key linked to $topic"
+                    write.link.dismissed == true -> "$key not linked to $topic and not suggested there"
+                    write.link.dismissed == false -> "$key suggested in $topic again"
+                    else -> "$key unlinked from $topic"
+                }
+            listOf(line)
         }
         is WorkspaceWrite.DeleteForever -> listOf("Delete forever: ${write.title}")
     }

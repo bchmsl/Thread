@@ -80,7 +80,11 @@ private fun writtenFields(write: WorkspaceWrite): Map<String, Any?> =
         is WorkspaceWrite.PutNote -> changed(write.note.filing(), write.before?.takeUnless { write.isNew }?.filing())
         is WorkspaceWrite.PutNoteLink -> mapOf(LINKED to write.link.linked)
         is WorkspaceWrite.PutExternalRef -> mapOf(URL to write.reference.url)
-        is WorkspaceWrite.PutExternalLink -> mapOf(LINKED to write.link.linked)
+        is WorkspaceWrite.PutExternalLink ->
+            buildMap {
+                put(LINKED, write.link.linked)
+                write.link.dismissed?.let { put(DISMISSED, it) }
+            }
         is WorkspaceWrite.DeleteForever -> emptyMap()
     }
 
@@ -98,7 +102,8 @@ private fun storedFields(
         is WorkspaceWrite.PutNote -> data.notes.firstOrNull { it.id == write.note.id }?.filing()
         is WorkspaceWrite.PutNoteLink -> data.noteLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked) }
         is WorkspaceWrite.PutExternalRef -> data.externalRefs.firstOrNull { it.id == write.reference.id }?.let { mapOf(URL to it.url) }
-        is WorkspaceWrite.PutExternalLink -> data.externalLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked) }
+        is WorkspaceWrite.PutExternalLink ->
+            data.externalLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked, DISMISSED to it.dismissed) }
         is WorkspaceWrite.DeleteForever ->
             when (write.kind) {
                 TrashKind.Topic -> data.topics.firstOrNull { it.id.value == write.id }?.fields()
@@ -157,4 +162,5 @@ private fun Reminder.fields(): Map<String, Any?> =
 private fun NoteSummary.filing(): Map<String, Any?> = mapOf("inbox" to inbox, "discarded" to discarded)
 
 private const val LINKED = "linked"
+private const val DISMISSED = "dismissed"
 private const val URL = "url"

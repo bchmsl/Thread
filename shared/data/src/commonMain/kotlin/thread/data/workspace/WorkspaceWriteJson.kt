@@ -299,6 +299,7 @@ internal object WorkspaceWriteJson {
             put("topicId", link.topicId.value)
             put("referenceId", link.referenceId)
             put("linked", link.linked)
+            link.dismissed?.let { put("dismissed", it) }
         }
 
     private fun externalLink(json: JsonObject): TopicExternalLink? =
@@ -306,6 +307,7 @@ internal object WorkspaceWriteJson {
             topicId = TopicId(json.str("topicId") ?: return null),
             referenceId = json.str("referenceId") ?: return null,
             linked = json.bool("linked") ?: return null,
+            dismissed = json.bool("dismissed"),
         )
 
     /** A nullable day or deadline: [Field] of null when absent, null when present but unreadable. */

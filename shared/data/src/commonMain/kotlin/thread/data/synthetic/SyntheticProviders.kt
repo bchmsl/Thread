@@ -348,7 +348,7 @@ object SyntheticFixtures {
                         """
                         {"number":12,"title":"SYNTHETIC: Add the offline shell","user":{"login":"synthetic-me"},"draft":false,
                          "head":{"ref":"feature/offline-shell","sha":"${"1".repeat(40)}"},"base":{"ref":"main"},
-                         "body":"SYNTHETIC description.\n\nPlain text only; <b>no HTML</b> and **no Markdown** rendering.",
+                         "body":"SYNTHETIC description.\n\nPlain text only; <b>no HTML</b> and **no Markdown** rendering.\n\nFollows SYN-103 and SYN-105.",
                          "updated_at":"2026-11-12T14:00:00Z",
                          "requested_reviewers":[{"login":"synthetic-reviewer-b"}],"requested_teams":[{"name":"synthetic-team","slug":"synthetic-team"}]}
                         """.trimIndent(),

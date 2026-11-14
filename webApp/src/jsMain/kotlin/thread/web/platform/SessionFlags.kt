@@ -43,6 +43,26 @@ fun writeDeviceFlag(
     }
 }
 
+/** A short text kept on this device (localStorage). Reads null when it is not there or the browser blocks storage. */
+fun readDeviceText(name: String): String? =
+    try {
+        window.localStorage.getItem(name)
+    } catch (e: Throwable) {
+        null
+    }
+
+/** Keeps [value] under [name] on this device, or removes it for null. */
+fun writeDeviceText(
+    name: String,
+    value: String?,
+) {
+    try {
+        if (value != null) window.localStorage.setItem(name, value) else window.localStorage.removeItem(name)
+    } catch (e: Throwable) {
+        // It only lasts for this page then.
+    }
+}
+
 /** Milliseconds since the epoch, from the browser clock. */
 fun nowMillis(): Long =
     kotlin.js.Date

@@ -13,6 +13,7 @@ import thread.domain.trash.trashEntries
 import thread.domain.trash.visibleWorkspace
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -29,14 +30,20 @@ class ExternalLinksTest {
 
     private fun changed(result: EditResult): WorkspaceEdit = assertIs<EditResult.Changed>(result).edit
 
-    /** Applies [writes] the way the store would: one document per id, the last write wins. */
+    /**
+     * Applies [writes] the way the store would: one document per id, the last write wins. Link writes merge, so a write
+     * without `dismissed` keeps the stored value.
+     */
     private fun WorkspaceData.apply(writes: List<WorkspaceWrite>): WorkspaceData =
         writes.fold(this) { data, write ->
             when (write) {
                 is WorkspaceWrite.PutExternalRef ->
                     data.copy(externalRefs = data.externalRefs.filterNot { it.id == write.reference.id } + write.reference)
-                is WorkspaceWrite.PutExternalLink ->
-                    data.copy(externalLinks = data.externalLinks.filterNot { it.id == write.link.id } + write.link)
+                is WorkspaceWrite.PutExternalLink -> {
+                    val stored = data.externalLinks.firstOrNull { it.id == write.link.id }
+                    val merged = write.link.copy(dismissed = write.link.dismissed ?: stored?.dismissed)
+                    data.copy(externalLinks = data.externalLinks.filterNot { it.id == write.link.id } + merged)
+                }
                 is WorkspaceWrite.PutTopic -> data.copy(topics = data.topics.filterNot { it.id == write.topic.id } + write.topic)
                 else -> error("Unexpected write $write")
             }
@@ -73,9 +80,11 @@ class ExternalLinksTest {
         val linked = empty.apply(changed(setExternalLinks(ticket, listOf(alpha.id, beta.id), empty)).writes)
         val unlink = changed(unlinkExternal(ticket, alpha.id, linked))
         assertEquals(
-            listOf<WorkspaceWrite>(WorkspaceWrite.PutExternalLink(TopicExternalLink(alpha.id, ticket.id, linked = false))),
+            listOf<WorkspaceWrite>(
+                WorkspaceWrite.PutExternalLink(TopicExternalLink(alpha.id, ticket.id, linked = false, dismissed = true)),
+            ),
             unlink.writes,
-            "unlinking writes linked: false and nothing else",
+            "unlinking writes linked: false and dismissed: true, and nothing else",
         )
         val after = linked.apply(unlink.writes)
         assertEquals(listOf(ticket), after.externalRefs, "the reference stays")
@@ -147,5 +156,111 @@ class ExternalLinksTest {
         assertEquals(listOf(pull), unlinked.externalRefs, "unlinking never deletes the reference")
         assertEquals(listOf(beta.id), linkedTopicIdsOf(pull.id, unlinked.externalLinks))
         assertTrue(unlinked.externalLinks.any { it.topicId == alpha.id && !it.linked })
+    }
+
+    @Test
+    fun dismissingWritesTheReferenceAndADismissedLinkAndUndoRestoresIt() {
+        val edit = changed(dismissSuggestion(ticket, alpha.id, empty))
+        assertEquals(
+            listOf(
+                WorkspaceWrite.PutExternalRef(ticket),
+                WorkspaceWrite.PutExternalLink(TopicExternalLink(alpha.id, ticket.id, linked = false, dismissed = true)),
+            ),
+            edit.writes,
+        )
+        val after = empty.apply(edit.writes)
+        assertEquals(listOf(ticket), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, after))
+        assertEquals(emptyList(), dismissedReferencesOf(beta.id, ExternalProvider.Jira, after), "only in that Topic")
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.GitHub, after))
+        assertEquals(emptyList(), referencesOf(alpha.id, ExternalProvider.Jira, after), "a dismissal is not a link")
+        assertEquals(EditResult.Unchanged, dismissSuggestion(ticket, alpha.id, after), "already dismissed")
+
+        val undone = after.apply(edit.undo)
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, undone))
+        assertEquals(listOf(ticket), undone.externalRefs, "the reference stays, as after Link and Undo")
+    }
+
+    @Test
+    fun aLinkedRecordCannotBeDismissedAndLinkedWins() {
+        val linked = empty.apply(changed(linkExternal(ticket, alpha.id, empty)).writes)
+        assertEquals(EditResult.Unchanged, dismissSuggestion(ticket, alpha.id, linked))
+
+        // Another device linked it while this one had it dismissed: both flags are true, and it counts as linked.
+        val both = linked.copy(externalLinks = listOf(TopicExternalLink(alpha.id, ticket.id, linked = true, dismissed = true)))
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, both))
+        assertEquals(listOf(ticket), referencesOf(alpha.id, ExternalProvider.Jira, both))
+        assertFalse(both.externalLinks.single().isDismissed)
+    }
+
+    @Test
+    fun restoringSuggestsItAgainAndUndoDismissesItAgain() {
+        val dismissed = empty.apply(changed(dismissSuggestion(ticket, alpha.id, empty)).writes)
+        val restore = changed(restoreSuggestion(ticket.id, alpha.id, dismissed))
+        assertEquals(
+            listOf<WorkspaceWrite>(
+                WorkspaceWrite.PutExternalLink(TopicExternalLink(alpha.id, ticket.id, linked = false, dismissed = false)),
+            ),
+            restore.writes,
+        )
+        val after = dismissed.apply(restore.writes)
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, after))
+        assertEquals(EditResult.Unchanged, restoreSuggestion(ticket.id, alpha.id, after), "nothing to restore")
+        assertEquals(EditResult.Unchanged, restoreSuggestion(ticket.id, beta.id, after), "no document")
+        assertEquals(listOf(ticket), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, after.apply(restore.undo)))
+    }
+
+    @Test
+    fun unlinkingDismissesInThatTopicOnlyAndUndoLinksAgain() {
+        val linked = empty.apply(changed(setExternalLinks(ticket, listOf(alpha.id, beta.id), empty)).writes)
+        val unlink = changed(unlinkExternal(ticket, alpha.id, linked))
+        val after = linked.apply(unlink.writes)
+        assertEquals(listOf(ticket), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, after))
+        assertEquals(emptyList(), dismissedReferencesOf(beta.id, ExternalProvider.Jira, after), "the other Topic keeps its link")
+        assertEquals(listOf(ticket), referencesOf(beta.id, ExternalProvider.Jira, after))
+
+        val undone = after.apply(unlink.undo)
+        assertEquals(listOf(ticket), referencesOf(alpha.id, ExternalProvider.Jira, undone))
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, undone))
+        assertEquals(
+            TopicExternalLink(alpha.id, ticket.id, linked = true, dismissed = false),
+            undone.externalLinks.first {
+                it.topicId ==
+                    alpha.id
+            },
+        )
+    }
+
+    @Test
+    fun linkingADismissedRecordLinksItAndUndoDismissesItAgain() {
+        val dismissed = empty.apply(changed(dismissSuggestion(ticket, alpha.id, empty)).writes)
+        val link = changed(linkExternal(ticket, alpha.id, dismissed))
+        assertEquals(
+            listOf<WorkspaceWrite>(WorkspaceWrite.PutExternalLink(TopicExternalLink(alpha.id, ticket.id, linked = true))),
+            link.writes,
+            "a link write leaves dismissed as stored, so it has the shape older rules accept",
+        )
+        val after = dismissed.apply(link.writes)
+        assertEquals(listOf(ticket), referencesOf(alpha.id, ExternalProvider.Jira, after))
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, after), "linked wins")
+        assertEquals(listOf(ticket), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, after.apply(link.undo)))
+    }
+
+    @Test
+    fun pickingTopicsKeepsTheDismissalsOfOtherTopics() {
+        val dismissedInBeta = empty.apply(changed(dismissSuggestion(ticket, beta.id, empty)).writes)
+        val edit = changed(setExternalLinks(ticket, listOf(alpha.id), dismissedInBeta))
+        assertTrue(edit.writes.none { it is WorkspaceWrite.PutExternalLink && it.link.topicId == beta.id }, "beta is not written")
+        val after = dismissedInBeta.apply(edit.writes)
+        assertEquals(listOf(ticket), dismissedReferencesOf(beta.id, ExternalProvider.Jira, after))
+        assertEquals(listOf(alpha.id), linkedTopicIdsOf(ticket.id, after.externalLinks))
+    }
+
+    @Test
+    fun aTopicInTrashHidesItsDismissalsAndRestoreBringsThemBack() {
+        val dismissed = empty.apply(changed(dismissSuggestion(ticket, alpha.id, empty)).writes)
+        val trashed = dismissed.copy(topics = listOf(alpha.copy(deleted = true, deletedAtMillis = 10), beta))
+        assertEquals(emptyList(), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, visibleWorkspace(trashed)))
+        val restored = trashed.copy(topics = listOf(alpha, beta))
+        assertEquals(listOf(ticket), dismissedReferencesOf(alpha.id, ExternalProvider.Jira, visibleWorkspace(restored)))
     }
 }

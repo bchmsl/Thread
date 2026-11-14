@@ -88,6 +88,7 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutNoteLink(NoteTopicLink(topic.id, note.id, linked = false)),
             WorkspaceWrite.PutExternalRef(reference),
             WorkspaceWrite.PutExternalLink(TopicExternalLink(topic.id, reference.id)),
+            WorkspaceWrite.PutExternalLink(TopicExternalLink(topic.id, reference.id, linked = false, dismissed = true)),
             WorkspaceWrite.DeleteForever(TrashKind.Reminder, reminder.id.value, "Synthetic reminder"),
         )
 

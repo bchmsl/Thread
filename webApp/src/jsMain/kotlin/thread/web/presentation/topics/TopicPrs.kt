@@ -24,6 +24,7 @@ import org.w3c.dom.HTMLElement
 import thread.domain.external.PullRequestRef
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.gitHubReference
 import thread.domain.workspace.pullRequestRefOf
 import thread.web.presentation.Icon
@@ -55,6 +56,7 @@ internal fun TopicPrSection(
     open: Boolean,
     onToggle: () -> Unit,
     openId: String?,
+    suggestions: TopicSuggestions,
     onOpen: (PullRequestRef) -> Boolean,
 ) {
     val toasts = LocalToasts.current
@@ -89,58 +91,20 @@ internal fun TopicPrSection(
     ) {
         if (references.isEmpty()) {
             P({ classes("sect__empty") }) { Text("Nothing linked. Link a pull request here or from its page.") }
-            return@TopicSection
+        } else {
+            LinkedPulls(workspace, gitHub, topic, references, openId, onOpen)
         }
-        Ul({ classes("tlist") }) {
-            references.forEach { reference ->
-                val ref = pullRequestRefOf(reference)
-                val summary = ref?.let { gitHub.summary(it.id) }
-                val detail = ref?.let { gitHub.detail(it.id) }
-                val isOpen = ref != null && openId == ref.id
-                val label = "#${reference.key}"
-                key(reference.id) {
-                    Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
-                        Span({ classes("xrow__icon") }) { IconView(Icon.Pr, 18) }
-                        if (ref != null) {
-                            A(prItemPlace(ref, topic.id.value).hash, {
-                                classes("xrow__main")
-                                attr("data-id", ref.id)
-                                if (isOpen) attr("aria-current", "true")
-                                onClick { if (onOpen(ref)) it.preventDefault() }
-                            }) {
-                                Span({ classes("xrow__key") }) {
-                                    B { Text(label) }
-                                    if (detail != null) {
-                                        CiIndicator(detail.ci)
-                                        ReviewIndicator(detail.review)
-                                    }
-                                }
-                                if (summary != null) {
-                                    Span({ classes("xrow__title") }) { Text(summary.title) }
-                                } else {
-                                    Span({ classes("xrow__snip") }) {
-                                        Text("${reference.instance} ")
-                                        Span({ classes("dl-badge") }) {
-                                            IconView(Icon.Cloud, 13)
-                                            Text("Not on this device yet")
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            Div({ classes("xrow__main") }) {
-                                Span({ classes("xrow__key") }) { B { Text(label) } }
-                                Span({ classes("xrow__snip") }) { Text(reference.instance) }
-                            }
-                        }
-                        IconButton(Icon.Unlink, "Unlink $label from this Topic", small = true) {
-                            val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
-                            toasts.show("Unlinked from ${topic.name}. The pull request is unchanged.", undo = { workspace.undo(edit) })
-                        }
-                    }
-                }
-            }
-        }
+        SuggestedGroup(
+            sectionKey = "prs",
+            icon = Icon.Pr,
+            kind = "pull requests",
+            workspace = workspace,
+            topic = topic,
+            rows = suggestions.pulls,
+            dismissed = suggestions.pullsDismissed,
+            href = { row -> row.pull?.let { prItemPlace(it, topic.id.value).hash } ?: "#" },
+            onOpen = { row -> row.pull?.let(onOpen) ?: false },
+        )
     }
     if (linking) {
         val linked = references.map { it.id }.toSet()
@@ -162,6 +126,72 @@ internal fun TopicPrSection(
             },
             onCancel = { linking = false },
         )
+    }
+}
+
+/** The linked rows. Unlinking also keeps the pull request from being suggested in the Topic again (D49, Q79). */
+@Composable
+private fun LinkedPulls(
+    workspace: WorkspaceModel,
+    gitHub: GitHubModel,
+    topic: Topic,
+    references: List<ExternalReference>,
+    openId: String?,
+    onOpen: (PullRequestRef) -> Boolean,
+) {
+    val toasts = LocalToasts.current
+    Ul({ classes("tlist") }) {
+        references.forEach { reference ->
+            val ref = pullRequestRefOf(reference)
+            val summary = ref?.let { gitHub.summary(it.id) }
+            val detail = ref?.let { gitHub.detail(it.id) }
+            val isOpen = ref != null && openId == ref.id
+            val label = "#${reference.key}"
+            key(reference.id) {
+                Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
+                    Span({ classes("xrow__icon") }) { IconView(Icon.Pr, 18) }
+                    if (ref != null) {
+                        A(prItemPlace(ref, topic.id.value).hash, {
+                            classes("xrow__main")
+                            attr("data-id", ref.id)
+                            if (isOpen) attr("aria-current", "true")
+                            onClick { if (onOpen(ref)) it.preventDefault() }
+                        }) {
+                            Span({ classes("xrow__key") }) {
+                                B { Text(label) }
+                                if (detail != null) {
+                                    CiIndicator(detail.ci)
+                                    ReviewIndicator(detail.review)
+                                }
+                            }
+                            if (summary != null) {
+                                Span({ classes("xrow__title") }) { Text(summary.title) }
+                            } else {
+                                Span({ classes("xrow__snip") }) {
+                                    Text("${reference.instance} ")
+                                    Span({ classes("dl-badge") }) {
+                                        IconView(Icon.Cloud, 13)
+                                        Text("Not on this device yet")
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Div({ classes("xrow__main") }) {
+                            Span({ classes("xrow__key") }) { B { Text(label) } }
+                            Span({ classes("xrow__snip") }) { Text(reference.instance) }
+                        }
+                    }
+                    IconButton(Icon.Unlink, "Unlink $label from this Topic", small = true) {
+                        val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
+                        toasts.show(
+                            "Unlinked from ${topic.name} and not suggested there. The pull request is unchanged.",
+                            undo = { workspace.undo(edit) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

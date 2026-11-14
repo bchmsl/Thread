@@ -154,4 +154,19 @@ class RefusedChangesTest {
         assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(noteLinks = listOf(link))))
         assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(noteLinks = listOf(link.copy(linked = true)))).size)
     }
+
+    @Test
+    fun aDismissalIsShownOnlyWhenTheStoredLinkIsDismissed() {
+        val link = TopicExternalLink(topic.id, "jira~synthetic-cloud~SYN-101", linked = false, dismissed = true)
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutExternalLink(link)))
+        val oldShape = data().copy(externalLinks = listOf(link.copy(dismissed = null)))
+        val dismissed = data().copy(externalLinks = listOf(link))
+
+        assertEquals(listOf("c1"), unconfirmedChanges(leftovers, emptyList(), oldShape).map { it.id }, "the rules refused the field")
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), dismissed))
+
+        // A link write without the field checks only linked.
+        val linkOnly = listOf(change("c2", WorkspaceWrite.PutExternalLink(link.copy(linked = true, dismissed = null))))
+        assertEquals(emptyList(), unconfirmedChanges(linkOnly, emptyList(), data().copy(externalLinks = listOf(link.copy(linked = true)))))
+    }
 }

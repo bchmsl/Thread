@@ -82,4 +82,36 @@ class FirestoreExternalLinksRulesEmulatorTest {
             assertSucceeds(setDoc(ref, link("linked" to false), merge())).await()
             assertFails(deleteDoc(ref)).await()
         }
+
+    @Test
+    fun aLinkMayCarryADismissedFlagAndNothingElse() =
+        rulesTest { env, owner, other ->
+            val db = env.authenticatedContext(owner).firestore()
+            val ref = doc(db, "users", owner, "topicExternalLinks", "t-synthetic_$refId")
+
+            // The shape without the field, as older builds write it, stays valid.
+            assertSucceeds(setDoc(ref, link())).await()
+            // Unlink or Dismiss: not linked, not suggested.
+            assertSucceeds(setDoc(ref, link("linked" to false, "dismissed" to true), merge())).await()
+            // Link over a dismissed document: both true, linked wins in the app.
+            assertSucceeds(setDoc(ref, link("linked" to true), merge())).await()
+            // Restore.
+            assertSucceeds(setDoc(ref, link("linked" to false, "dismissed" to false), merge())).await()
+
+            assertFails(setDoc(ref, link("dismissed" to "yes"), merge())).await()
+            assertFails(setDoc(ref, link("dismissed" to 1), merge())).await()
+            assertFails(setDoc(ref, link("dismissed" to null), merge())).await()
+            assertFails(setDoc(ref, link("dismissed" to true, "reason" to "Synthetic reason"), merge())).await()
+            assertFails(
+                setDoc(doc(db, "users", owner, "topicExternalLinks", "t-other_$refId"), link("linked" to false, "dismissed" to true)),
+            ).await()
+            assertFails(
+                setDoc(
+                    doc(env.authenticatedContext(other).firestore(), "users", owner, "topicExternalLinks", "t-synthetic_$refId"),
+                    link("linked" to false, "dismissed" to true),
+                    merge(),
+                ),
+            ).await()
+            assertFails(deleteDoc(ref)).await()
+        }
 }

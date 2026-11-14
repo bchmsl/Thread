@@ -238,3 +238,14 @@ Verification scenarios, as checked on the production build (browser checks of Ph
 | Revoked external access | Phase 10 A1 and Phase 12 A0 to A5 (no automatic refresh after a 401, Refresh asks once, Jira and GitHub) |
 | Local quota failure | Phase 8 E6: a failed local save says Needs attention, never Saved |
 | Server refuses a change (rules), reload | Phase 12 Q14 R1 to R14 (kept after a reload, Copy, Discard and Undo, Retry) and B1 to B10 (answer lost in a reload), and the emulator tests |
+
+## Topic suggestions (D49, proposed, 2026-11-14)
+
+Details: ADR-017 (Proposed). Checked with the emulator tests and headless Chrome on the emulators, with SYNTHETIC data only.
+
+- `topicExternalLinks/{topicId}_{refId}` gets one optional field: `{topicId, refId, linked, dismissed?, updatedAt, schemaVersion: 1}`. An item is dismissed in a Topic only when `dismissed` is true and `linked` is false: linked wins. Documents without the field read as not dismissed. `schemaVersion` stays 1.
+- Writes are merges. Dismiss: the `externalRefs` document (ids and URL only) and `linked: false, dismissed: true`. Restore: `linked: false, dismissed: false`. Link writes only `linked: true` and leaves `dismissed` as stored (Q84). Unlink, and removing an item in the Link picker: `linked: false, dismissed: true` (Q79). Every one has Undo.
+- Rules (`validExternalLink`): `hasOnly` adds `dismissed`, and `dismissed`, when present, must be a bool. `linked` and `dismissed` may both be true, so an older build's Link is accepted.
+- **Deploy the rules before the build ships.** Until then the server refuses Unlink, Don't suggest and Restore. They stay in the sync panel (Phase 12); nothing is lost. Link is unaffected.
+- Trash: a Topic in Trash hides its links, so its dismissals leave with it and come back on Restore (D42).
+- Device only, never uploaded: the tickets and PRs that suggestion checks load are saved in `thread-external-cache` like opened ones; keys Jira did not show are remembered for a day in browser storage (`thread.jira.notTickets`).

@@ -75,8 +75,10 @@ class WorkspaceReadException(
  * - Topics also carry `deletedAt` while in Trash (adr/ADR-012-trash-and-search.md).
  * - `users/{uid}/externalRefs/{provider~instance~key}`: `{provider, instance, key, url, updatedAt, schemaVersion: 1}`.
  *   Ids and the canonical URL only, never a title or other content (adr/ADR-013-jira-in-the-workspace.md).
- * - `users/{uid}/topicExternalLinks/{topicId}_{refId}`: `{topicId, refId, linked, updatedAt, schemaVersion: 1}`.
- *   Unlinking writes `linked: false`; nothing is deleted and the external record is never changed.
+ * - `users/{uid}/topicExternalLinks/{topicId}_{refId}`: `{topicId, refId, linked, dismissed?, updatedAt,
+ *   schemaVersion: 1}`. Unlinking writes `linked: false`; nothing is deleted and the external record is never
+ *   changed. `dismissed` is optional and written only when set: true means "not suggested in this Topic"
+ *   (adr/ADR-017-topic-suggestions.md). A document without it reads as not dismissed.
  * - Delete forever replaces a Topic, Task, Reminder or Note document with the tombstone `{purgedAt, schemaVersion: 1}`.
  *   The rules refuse every later write to it, so a stale edit from another device cannot bring it back. Tombstones
  *   are left out of [WorkspaceData]; purged Notes are listed in [WorkspaceData.purgedNotes] so their versions can be
@@ -426,6 +428,8 @@ class FirestoreWorkspaceStore internal constructor(
         data.topicId = link.topicId.value
         data.refId = link.referenceId
         data.linked = link.linked
+        // Left out when not set, so the merge keeps the stored value.
+        link.dismissed?.let { data.dismissed = it }
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -666,7 +670,7 @@ private fun decodeExternalLink(snapshot: DocumentSnapshot): TopicExternalLink? {
     val topicId = stringOrNull(data.topicId)?.takeIf { it.isNotBlank() } ?: return null
     val refId = stringOrNull(data.refId)?.takeIf { it.isNotBlank() } ?: return null
     val linked = booleanOrNull(data.linked) ?: return null
-    return TopicExternalLink(TopicId(topicId), refId, linked).takeIf { it.id == snapshot.id }
+    return TopicExternalLink(TopicId(topicId), refId, linked, booleanOrNull(data.dismissed)).takeIf { it.id == snapshot.id }
 }
 
 /** Missing or unknown values fall back to the defaults, field by field. */

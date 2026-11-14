@@ -25,6 +25,7 @@ import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraStatus
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.ExternalReference
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
@@ -54,6 +55,7 @@ internal fun TopicJiraSection(
     open: Boolean,
     onToggle: () -> Unit,
     openKey: String?,
+    suggestions: TopicSuggestions,
     onOpen: (JiraIssueKey) -> Boolean,
 ) {
     val toasts = LocalToasts.current
@@ -88,35 +90,20 @@ internal fun TopicJiraSection(
     ) {
         if (references.isEmpty()) {
             P({ classes("sect__empty") }) { Text("Nothing linked. Link a ticket here or from its page.") }
-            return@TopicSection
+        } else {
+            LinkedTickets(workspace, jira, topic, references, openKey, onOpen)
         }
-        Ul({ classes("tlist") }) {
-            references.forEach { reference ->
-                val issueKey = JiraIssueKey.parse(reference.key)
-                val here = jira.isHere(reference) && issueKey != null
-                val summary = if (here) jira.summary(reference.key) else null
-                val isOpen = here && openKey == reference.key
-                key(reference.id) {
-                    Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
-                        Span({ classes("xrow__icon") }) { IconView(Icon.Jira, 18) }
-                        if (here && issueKey != null) {
-                            A(jiraItemPlace(issueKey, topic.id.value).hash, {
-                                classes("xrow__main")
-                                attr("data-key", reference.key)
-                                if (isOpen) attr("aria-current", "true")
-                                onClick { if (onOpen(issueKey)) it.preventDefault() }
-                            }) { RowText(reference.key, summary?.status, summary?.title, here = true) }
-                        } else {
-                            Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false) }
-                        }
-                        IconButton(Icon.Unlink, "Unlink ${reference.key} from this Topic", small = true) {
-                            val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
-                            toasts.show("Unlinked from ${topic.name}. The ticket is unchanged.", undo = { workspace.undo(edit) })
-                        }
-                    }
-                }
-            }
-        }
+        SuggestedGroup(
+            sectionKey = "jira",
+            icon = Icon.Jira,
+            kind = "tickets",
+            workspace = workspace,
+            topic = topic,
+            rows = suggestions.jira,
+            dismissed = suggestions.jiraDismissed,
+            href = { row -> row.jiraKey?.let { jiraItemPlace(it, topic.id.value).hash } ?: "#" },
+            onOpen = { row -> row.jiraKey?.let(onOpen) ?: false },
+        )
     }
     if (linking) {
         val linked = references.map { it.key }.toSet()
@@ -138,6 +125,49 @@ internal fun TopicJiraSection(
             },
             onCancel = { linking = false },
         )
+    }
+}
+
+/** The linked rows. Unlinking also keeps the ticket from being suggested in the Topic again (D49, Q79). */
+@Composable
+private fun LinkedTickets(
+    workspace: WorkspaceModel,
+    jira: JiraModel,
+    topic: Topic,
+    references: List<ExternalReference>,
+    openKey: String?,
+    onOpen: (JiraIssueKey) -> Boolean,
+) {
+    val toasts = LocalToasts.current
+    Ul({ classes("tlist") }) {
+        references.forEach { reference ->
+            val issueKey = JiraIssueKey.parse(reference.key)
+            val here = jira.isHere(reference) && issueKey != null
+            val summary = if (here) jira.summary(reference.key) else null
+            val isOpen = here && openKey == reference.key
+            key(reference.id) {
+                Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
+                    Span({ classes("xrow__icon") }) { IconView(Icon.Jira, 18) }
+                    if (here && issueKey != null) {
+                        A(jiraItemPlace(issueKey, topic.id.value).hash, {
+                            classes("xrow__main")
+                            attr("data-key", reference.key)
+                            if (isOpen) attr("aria-current", "true")
+                            onClick { if (onOpen(issueKey)) it.preventDefault() }
+                        }) { RowText(reference.key, summary?.status, summary?.title, here = true) }
+                    } else {
+                        Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false) }
+                    }
+                    IconButton(Icon.Unlink, "Unlink ${reference.key} from this Topic", small = true) {
+                        val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
+                        toasts.show(
+                            "Unlinked from ${topic.name} and not suggested there. The ticket is unchanged.",
+                            undo = { workspace.undo(edit) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

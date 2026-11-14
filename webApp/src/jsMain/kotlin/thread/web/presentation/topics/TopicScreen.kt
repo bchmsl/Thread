@@ -226,6 +226,8 @@ internal fun TopicScreen(
             workspace.topic(topic.id.value)?.let { workspace.apply(editPickUp(it, nextStep = text)) }
         }
     }
+    // Suggestions are computed here, not in the sections, so the background checks go on while a side panel is open.
+    val suggestions = rememberTopicSuggestions(workspace, jira, gitHub, topic)
     Div({ classes("td-grid") }) {
         Div({ classes("td-main") }) {
             TopicTasksSection(workspace, topic, tasksOpen, { tasksOpen = !tasksOpen }, onOpenTask)
@@ -266,12 +268,12 @@ internal fun TopicScreen(
                     )
                 else -> {
                     val openKey = (shown as? LinkedPanel.Ticket)?.key?.value
-                    TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey) { key ->
+                    TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey, suggestions) { key ->
                         if (wide) panel = LinkedPanel.Ticket(key)
                         wide
                     }
                     val openId = (shown as? LinkedPanel.Pull)?.ref?.id
-                    TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId) { ref ->
+                    TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId, suggestions) { ref ->
                         if (wide) panel = LinkedPanel.Pull(ref)
                         wide
                     }

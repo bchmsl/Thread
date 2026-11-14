@@ -736,6 +736,15 @@ main:has(.board) { max-width: 1520px; }
 .xrow__title { font-weight: 550; font-size: var(--fs-15); color: var(--text); line-height: 1.35; }
 .xrow__main:hover .xrow__title { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--fog-500); }
 .xrow.is-open { background: var(--ink-850); }
+/* Topic suggestions (D49): muted rows under the linked ones; Link and "Don't suggest" stay on the right. */
+.sugg__head { margin: 12px 4px 0; }
+.xrow--suggested .xrow__icon { border: 1px dashed var(--border-strong); border-radius: 6px; padding: 3px 3px 0; line-height: 0; }
+.xrow--suggested .xrow__title { font-weight: 500; color: var(--text-2); }
+.sugg__why { white-space: normal; }
+.sugg__acts { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+.sugg__foot { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 2px 0 4px; }
+.sugg__dismissed { margin: 4px 0 8px; max-height: 50vh; overflow: auto; }
+.sugg__dismissed .xrow { align-items: center; }
 .side-panel {
   background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-surface); padding: 16px 20px 24px;
   position: sticky; top: 16px; max-height: calc(100vh - var(--line-h) - 40px); overflow: auto;

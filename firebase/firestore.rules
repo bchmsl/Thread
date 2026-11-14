@@ -86,16 +86,19 @@ service cloud.firestore {
     }
 
     // users/{uid}/topicExternalLinks/{topicId}_{refId}: one Topic's link to one external record. Unlinking writes
-    // linked: false; the record, the Topic and the external system stay as they are.
+    // linked: false; the record, the Topic and the external system stay as they are. The optional dismissed is true
+    // when the record is not suggested in that Topic (adr/ADR-017-topic-suggestions.md). Documents without it stay
+    // valid, and linked and dismissed may both be true: linked wins.
     function validExternalLink(link, linkId) {
-      return link.keys().hasOnly(['topicId', 'refId', 'linked', 'updatedAt', 'schemaVersion'])
+      return link.keys().hasOnly(['topicId', 'refId', 'linked', 'dismissed', 'updatedAt', 'schemaVersion'])
         && link.keys().hasAll(['topicId', 'refId', 'linked', 'updatedAt', 'schemaVersion'])
         && link.schemaVersion == 1
         && link.updatedAt == request.time
         && link.topicId is string && link.topicId.size() > 0
         && link.refId is string && link.refId.size() > 0
         && linkId == link.topicId + '_' + link.refId
-        && link.linked is bool;
+        && link.linked is bool
+        && (!('dismissed' in link) || link.dismissed is bool);
     }
 
     function validCopiedFrom(source) {

@@ -70,14 +70,24 @@ fun gitHubReference(ref: PullRequestRef): ExternalReference? =
 fun pullRequestRefOf(reference: ExternalReference): PullRequestRef? =
     if (reference.provider == ExternalProvider.GitHub) PullRequestRef.parse("${reference.instance}#${reference.key}") else null
 
-/** One Topic's link to one external record. Unlinking writes [linked] false; the document stays. */
+/**
+ * One Topic's link to one external record. Unlinking writes [linked] false; the document stays.
+ *
+ * [dismissed] is true when the record must not be suggested in this Topic (D49). Writes merge, so null in a write
+ * leaves the stored value as it is, and a link write that does not touch it keeps working with the older rules. Read
+ * back, null means the document has no such field, which counts as false.
+ */
 data class TopicExternalLink(
     val topicId: TopicId,
     val referenceId: String,
     val linked: Boolean = true,
+    val dismissed: Boolean? = null,
 ) {
     /** Topic ids never contain `_`, so the pair is unique. */
     val id: String get() = "${topicId.value}_$referenceId"
+
+    /** Dismissed counts only while the record is not linked: linked wins (D49). */
+    val isDismissed: Boolean get() = dismissed == true && !linked
 }
 
 /** The Topics [referenceId] is linked to, in link order. Links to Topics that are gone are left out by the caller. */
@@ -100,9 +110,25 @@ fun referencesOf(
         .distinctBy { it.id }
 }
 
+/** The Topic records of [provider] that must not be suggested in [topicId] (D49), in link order. */
+fun dismissedReferencesOf(
+    topicId: TopicId,
+    provider: ExternalProvider,
+    data: WorkspaceData,
+): List<ExternalReference> {
+    val byId = data.externalRefs.associateBy { it.id }
+    return data.externalLinks
+        .filter { it.isDismissed && it.topicId == topicId }
+        .mapNotNull { byId[it.referenceId] }
+        .filter { it.provider == provider }
+        .distinctBy { it.id }
+}
+
 /**
  * Makes [topicIds] the Topics of [reference] (v3 "Link to Topic", many to many). The reference is written once, the
- * first time any Topic links it. Topics no longer picked are unlinked. Undo puts every link back as it was.
+ * first time any Topic links it. Topics no longer picked are unlinked, and the record is not suggested in them again
+ * (D49, owner-review-queue Q79). A new link leaves [TopicExternalLink.dismissed] as stored: linked wins. Undo puts every
+ * link back as it was.
  */
 fun setExternalLinks(
     reference: ExternalReference,
@@ -121,9 +147,11 @@ fun setExternalLinks(
         writes += WorkspaceWrite.PutExternalLink(TopicExternalLink(it, reference.id, true))
         undo += WorkspaceWrite.PutExternalLink(TopicExternalLink(it, reference.id, false))
     }
-    removed.forEach {
-        writes += WorkspaceWrite.PutExternalLink(TopicExternalLink(it, reference.id, false))
-        undo += WorkspaceWrite.PutExternalLink(TopicExternalLink(it, reference.id, true))
+    removed.forEach { topicId ->
+        val before = data.externalLinks.firstOrNull { it.topicId == topicId && it.referenceId == reference.id }
+        writes += WorkspaceWrite.PutExternalLink(TopicExternalLink(topicId, reference.id, linked = false, dismissed = true))
+        undo +=
+            WorkspaceWrite.PutExternalLink(TopicExternalLink(topicId, reference.id, linked = true, dismissed = before?.dismissed ?: false))
     }
     return EditResult.Changed(WorkspaceEdit(writes, undo))
 }
@@ -135,12 +163,49 @@ fun linkExternal(
     data: WorkspaceData,
 ): EditResult = setExternalLinks(reference, linkedTopicIdsOf(reference.id, data.externalLinks) + topicId, data)
 
-/** Unlinks [reference] from [topicId]. The record and its other links are not touched. */
+/**
+ * Unlinks [reference] from [topicId]. The record and its other links are not touched. The record is not suggested in
+ * [topicId] again until it is restored (D49).
+ */
 fun unlinkExternal(
     reference: ExternalReference,
     topicId: TopicId,
     data: WorkspaceData,
 ): EditResult = setExternalLinks(reference, linkedTopicIdsOf(reference.id, data.externalLinks) - topicId, data)
+
+/**
+ * Stops suggesting [reference] in [topicId] (D49, "Don't suggest"). The reference is written as Link writes it, ids
+ * and URL only. Unchanged when the record is linked to the Topic, or already dismissed there. Undo restores it.
+ */
+fun dismissSuggestion(
+    reference: ExternalReference,
+    topicId: TopicId,
+    data: WorkspaceData,
+): EditResult {
+    val before = data.externalLinks.firstOrNull { it.topicId == topicId && it.referenceId == reference.id }
+    if (before != null && (before.linked || before.isDismissed)) return EditResult.Unchanged
+    val writes = mutableListOf<WorkspaceWrite>()
+    if (data.externalRefs.none { it == reference }) writes += WorkspaceWrite.PutExternalRef(reference)
+    writes += WorkspaceWrite.PutExternalLink(TopicExternalLink(topicId, reference.id, linked = false, dismissed = true))
+    val undo = listOf(WorkspaceWrite.PutExternalLink(TopicExternalLink(topicId, reference.id, linked = false, dismissed = false)))
+    return EditResult.Changed(WorkspaceEdit(writes, undo))
+}
+
+/** Suggests the record [referenceId] in [topicId] again ("Not suggested here", Restore). Undo dismisses it again. */
+fun restoreSuggestion(
+    referenceId: String,
+    topicId: TopicId,
+    data: WorkspaceData,
+): EditResult {
+    val before = data.externalLinks.firstOrNull { it.topicId == topicId && it.referenceId == referenceId }
+    if (before == null || !before.isDismissed) return EditResult.Unchanged
+    return EditResult.Changed(
+        WorkspaceEdit(
+            writes = listOf(WorkspaceWrite.PutExternalLink(TopicExternalLink(topicId, referenceId, linked = false, dismissed = false))),
+            undo = listOf(WorkspaceWrite.PutExternalLink(TopicExternalLink(topicId, referenceId, linked = false, dismissed = true))),
+        ),
+    )
+}
 
 /**
  * The writes of v3 "Create Topic from ticket": [topic] as a new Topic, linked to [reference]. The caller makes the

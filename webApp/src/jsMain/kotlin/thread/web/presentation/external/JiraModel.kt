@@ -32,7 +32,9 @@ import thread.domain.workspace.jiraReference
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
 import thread.web.platform.readDeviceFlag
+import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceFlag
+import thread.web.platform.writeDeviceText
 
 /**
  * What the app reads Jira through (adr/ADR-013-jira-in-the-workspace.md). Main builds one set: the real provider, or
@@ -116,6 +118,15 @@ internal class JiraModel(
     var version: Int by mutableStateOf(0)
         private set
 
+    private val notTicketsName = if (services.isSynthetic) "$NOT_TICKETS_NAME.synthetic" else NOT_TICKETS_NAME
+
+    /**
+     * Keys that look like tickets but that Jira did not show (not found or not allowed), with when it said so. Topic
+     * suggestions ask about such a key at most once a day (D49): text like `UTF-8` looks like a key. Kept on this
+     * device and cleared when the connection changes.
+     */
+    private var notTickets: Map<String, Long> by mutableStateOf(readNotTickets(notTicketsName))
+
     /** Reads the connection and the saved copies from this device. Storage errors read as nothing saved. */
     suspend fun reload() {
         val connection = orFallback(null) { services.connections.jira() }
@@ -142,6 +153,8 @@ internal class JiraModel(
         problem = null
         lists.clear()
         sprints = null
+        notTickets = emptyMap()
+        writeDeviceText(notTicketsName, null)
         reload()
         version++
     }
@@ -175,6 +188,21 @@ internal class JiraModel(
             is ExternalView.SavedCopy -> note(view.problem)
             else -> Unit
         }
+    }
+
+    /** Whether Jira said less than a day ago that [key] is not a ticket it shows. */
+    fun isNotATicket(
+        key: JiraIssueKey,
+        nowMillis: Long,
+    ): Boolean = notTickets[key.value]?.let { nowMillis - it < NOT_A_TICKET_MILLIS } == true
+
+    /** Remembers for a day that Jira does not show [key]. */
+    fun markNotATicket(
+        key: JiraIssueKey,
+        nowMillis: Long,
+    ) {
+        notTickets = notTickets.filterValues { nowMillis - it < NOT_A_TICKET_MILLIS } + (key.value to nowMillis)
+        writeDeviceText(notTicketsName, notTickets.entries.joinToString(",") { "${it.key}:${it.value}" })
     }
 
     /** Records what loading a list showed. */
@@ -221,6 +249,22 @@ internal class JiraModel(
 
 /** The device setting behind "Current sprint only" (D50). */
 private const val CURRENT_SPRINT_FLAG = "thread.jira.currentSprintOnly"
+
+/** Where [JiraModel.isNotATicket] keeps its keys on this device: `KEY:millis` pairs, comma separated. */
+private const val NOT_TICKETS_NAME = "thread.jira.notTickets"
+
+private const val NOT_A_TICKET_MILLIS = 24 * 60 * 60 * 1_000L
+
+/** The stored pairs; anything unreadable is left out. Keys are checked with [JiraIssueKey.parse]. */
+private fun readNotTickets(name: String): Map<String, Long> =
+    readDeviceText(name)
+        ?.split(',')
+        ?.mapNotNull { pair ->
+            val key = JiraIssueKey.parse(pair.substringBefore(':'))?.value ?: return@mapNotNull null
+            val at = pair.substringAfter(':', "").toLongOrNull() ?: return@mapNotNull null
+            key to at
+        }?.toMap()
+        .orEmpty()
 
 /** Copies refresh when opened and then every five minutes while the page is visible and online (ADR-013). */
 internal const val JIRA_REFRESH_MILLIS = 5 * 60 * 1_000L

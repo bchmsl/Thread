@@ -76,6 +76,15 @@ Handle pagination, permission loss, 401/403, 429/backoff, and partial data expli
 - Pages and the background share one list each. A page that opens a list asks again only when the last request is over a minute old; Refresh always asks.
 - Jira's Sprint field check (above) runs before the Jira list, at most once a day.
 
+### Topic suggestions (D49)
+
+- Jira and GitHub calls are GET only, through the existing loaders. Only ticket keys and PR ids are sent; the Topic's text never is.
+- Per Topic open, at most 15 Jira GETs (linked tickets without a saved copy, up to 10, then 5 unconfirmed keys: known projects first, at most 3 new projects) and 5 GitHub GETs (linked PRs without a saved copy, then unconfirmed written PRs). Each item at most once per open.
+- Nothing is asked offline, when not connected, inside a rate limit or after a 401. A 403 on a suggestion check never sets the section's error banner.
+- Answers are saved on the device like an opened ticket or PR, so the next open sends nothing for them. A key that Jira answers with 404 or 403 is remembered for a day (Q85).
+- An item shows only after Jira or GitHub confirmed it. Text like `UTF-8` is never suggested.
+- Phase 2, not built: JQL `parent in (...)` for parents, children and siblings, and a GitHub search for PRs that mention a linked key. Both need live checks first (ADR-017).
+
 ## GitHub v1
 
 Views:

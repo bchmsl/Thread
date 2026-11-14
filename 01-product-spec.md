@@ -133,6 +133,7 @@ One page with collapsible sections, not a primary tab layout:
 - Notes.
 - Related Jira tickets, PRs, and Reminders.
 - External item details open in a side panel on wide screens and a separate detail view on narrow screens.
+- Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic, its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click.
 
 ## Integrations in v1
 
