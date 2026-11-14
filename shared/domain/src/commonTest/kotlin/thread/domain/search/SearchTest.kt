@@ -25,6 +25,8 @@ class SearchTest {
             Topic(TopicId("t-1"), "Synthetic payments", TopicColor.Mint, status),
             Topic(TopicId("t-2"), "Synthetic other", TopicColor.Sky, status, nextStep = "Ask about PAYMENTS limits"),
             Topic(TopicId("t-3"), "Synthetic third", TopicColor.Peach, status, goal = "Nothing related"),
+            Topic(TopicId("t-4"), "Synthetic fourth", TopicColor.Lavender, status, info = "Links for the payment flow"),
+            Topic(TopicId("t-5"), "Synthetic fifth", TopicColor.Butter, status, nextStep = "Old payment text", info = "Rewritten"),
         )
     private val tasks =
         listOf(
@@ -46,7 +48,11 @@ class SearchTest {
     @Test
     fun matchesIgnoreCaseAndCoverTopicFieldsTaskTitlesAndNotePreviews() {
         val found = searchWorkspace("  Payment ", topics, tasks, notes)!!
-        assertEquals(listOf("t-1", "t-2"), found.topics.map { it.id.value })
+        assertEquals(
+            listOf("t-1", "t-2", "t-4"),
+            found.topics.map { it.id.value },
+            "Additional information counts, old text it replaced does not",
+        )
         assertEquals(listOf("k-1"), found.tasks.map { it.id.value }, "completed tasks count, Trash does not")
         assertEquals(listOf("n-1"), found.notes.map { it.id.value }, "a triaged standalone Note stays searchable (example 6)")
     }

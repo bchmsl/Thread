@@ -3,6 +3,7 @@ package thread.domain.topic
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 // Every Topic and status here is SYNTHETIC test data.
 class TopicRulesTest {
@@ -112,5 +113,18 @@ class TopicRulesTest {
         val topics = listOf(topic("a", active), topic("b", active), topic("c", done))
         assertEquals(2, useCount(active.id, topics))
         assertEquals(0, useCount(paused.id, topics))
+    }
+
+    @Test
+    fun additionalInformationFallsBackToTheOldPickUpText() {
+        val t = topic("a", active)
+        assertEquals("", topicInfo(t))
+        assertEquals("Where I left off: Halfway", topicInfo(t.copy(leftOff = "Halfway")))
+        assertEquals("Next step: Call QA", topicInfo(t.copy(nextStep = "Call QA")))
+        assertEquals("Where I left off: Halfway\n\nNext step: Call QA", topicInfo(t.copy(leftOff = "Halfway", nextStep = "Call QA")))
+        assertEquals("", topicInfo(t.copy(leftOff = "Halfway", info = "")), "a saved empty text does not fall back")
+        assertEquals("Mine", topicInfo(t.copy(nextStep = "Call QA", info = "Mine")))
+        val longest = t.copy(leftOff = "x".repeat(TOPIC_TEXT_MAX_LENGTH), nextStep = "y".repeat(TOPIC_TEXT_MAX_LENGTH))
+        assertTrue(topicInfo(longest).length <= TOPIC_INFO_MAX_LENGTH, "both old fields at their limit still fit")
     }
 }

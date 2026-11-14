@@ -10,6 +10,7 @@ import thread.domain.external.pullRequestRefsIn
 import thread.domain.note.NoteSummary
 import thread.domain.task.Task
 import thread.domain.topic.Topic
+import thread.domain.topic.topicInfo
 
 /*
  * Topic suggestions (D49, adr/ADR-017-topic-suggestions.md): Jira tickets and pull requests related to a Topic, found
@@ -22,8 +23,9 @@ import thread.domain.topic.Topic
 enum class TopicTextField {
     Name,
     Goal,
-    LeftOff,
-    NextStep,
+
+    /** "Additional information" ([topicInfo]), which shows the old "Pick up here" text until it is edited (D52). */
+    Info,
     Task,
     Note,
 }
@@ -34,8 +36,8 @@ data class TopicText(
 )
 
 /**
- * The texts of [topic] that suggestions read: its name, goal, where it left off, next step, the titles of its Tasks
- * and the titles and previews of its Notes (owner-review-queue Q82: never full Note bodies). [tasks] and [notes] are
+ * The texts of [topic] that suggestions read: its name, goal, Additional information, the titles of its Tasks and
+ * the titles and previews of its Notes (owner-review-queue Q82: never full Note bodies). [tasks] and [notes] are
  * the Topic's; Tasks of other Topics and Tasks or Notes in Trash are left out. Later rules add their texts here.
  */
 fun topicTextSources(
@@ -46,8 +48,7 @@ fun topicTextSources(
     buildList {
         add(TopicText(TopicTextField.Name, topic.name))
         add(TopicText(TopicTextField.Goal, topic.goal))
-        add(TopicText(TopicTextField.LeftOff, topic.leftOff))
-        add(TopicText(TopicTextField.NextStep, topic.nextStep))
+        add(TopicText(TopicTextField.Info, topicInfo(topic)))
         tasks
             .filter { it.topicId == topic.id && !it.deleted && !it.discarded }
             .forEach { add(TopicText(TopicTextField.Task, it.title)) }

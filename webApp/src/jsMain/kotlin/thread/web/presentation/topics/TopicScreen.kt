@@ -48,15 +48,17 @@ import thread.domain.note.NoteId
 import thread.domain.reminder.ReminderTarget
 import thread.domain.task.Task
 import thread.domain.topic.StatusId
+import thread.domain.topic.TOPIC_INFO_MAX_LENGTH
 import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
 import thread.domain.topic.TOPIC_TEXT_MAX_LENGTH
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
 import thread.domain.topic.statusOf
+import thread.domain.topic.topicInfo
 import thread.domain.trash.TrashEntry
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
-import thread.domain.workspace.editPickUp
+import thread.domain.workspace.editInfo
 import thread.domain.workspace.editTopic
 import thread.domain.workspace.moveTopic
 import thread.web.presentation.EmptyState
@@ -75,8 +77,8 @@ import thread.web.presentation.tasks.focusById
 import thread.web.presentation.trash.trashPlace
 
 /**
- * Topic details (v3 topic.html): identity and status on top, "Pick up here", then Tasks and Notes, with Jira, pull
- * requests and Reminders beside them. A linked ticket or pull request opens in a side panel at 1000px and wider.
+ * Topic details (v3 topic.html): identity and status on top, "Additional information" (D52), then Tasks and Notes,
+ * with Jira, pull requests and Reminders beside them. A linked ticket or pull request opens in a side panel at 1000px and wider.
  * A Topic in Trash keeps its page: it says what went with it and offers Restore.
  */
 @Composable
@@ -218,12 +220,10 @@ internal fun TopicScreen(
         H2({
             classes("pickup__h")
             id("pu-h")
-        }) { Text("Pick up here") }
-        PickUpField("Where I left off", topic.leftOff, "What were you in the middle of?") { text ->
-            workspace.topic(topic.id.value)?.let { workspace.apply(editPickUp(it, leftOff = text)) }
-        }
-        PickUpField("Next step", topic.nextStep, "The first thing to do when you come back") { text ->
-            workspace.topic(topic.id.value)?.let { workspace.apply(editPickUp(it, nextStep = text)) }
+        }) { Text("Additional information") }
+        // D52: one box. A Topic saved before it shows its "Where I left off" and "Next step" text here until edited.
+        InfoField("pu-h", topicInfo(topic), "Context, links, decisions: anything worth keeping with this Topic") { text ->
+            workspace.topic(topic.id.value)?.let { workspace.apply(editInfo(it, text)) }
         }
     }
     // Suggestions are computed here, not in the sections, so the background checks go on while a side panel is open.
@@ -361,13 +361,14 @@ private const val TOPIC_NAME_ID = "td-name"
 private const val GONE_HEADING_ID = "gone-h"
 
 /**
- * A "Pick up here" text box. It saves when it loses focus (v3), and also a second after typing stops and when the
- * page leaves it, so a reload or a closed tab never loses what was typed. While it has focus, a change from another
- * device does not replace the text being typed.
+ * The "Additional information" text box (D52), labelled by the section heading [labelledBy]. It saves when it loses
+ * focus (v3), and also a second after typing stops and when the page leaves it, so a reload or a closed tab never loses
+ * what was typed. Text equal to [value] is not saved, so a blur without typing writes nothing. While it has focus, a
+ * change from another device does not replace the text being typed.
  */
 @Composable
-private fun PickUpField(
-    label: String,
+private fun InfoField(
+    labelledBy: String,
     value: String,
     placeholder: String,
     onSave: (String) -> Unit,
@@ -382,13 +383,13 @@ private fun PickUpField(
         pending = null
         if (text.trim() != latestValue) latestSave(text)
     }
-    Label(attrs = { classes("field") }) {
-        Span({ classes("field__label") }) { Text(label) }
+    Div({ classes("field") }) {
         TextArea(attrs = {
             classes("input")
-            rows(3)
+            attr("aria-labelledby", labelledBy)
+            rows(4)
             placeholder(placeholder)
-            maxLength(TOPIC_TEXT_MAX_LENGTH)
+            maxLength(TOPIC_INFO_MAX_LENGTH)
             ref { textArea ->
                 textArea.value = latestValue
                 element = textArea

@@ -60,8 +60,7 @@ class TopicSuggestionsTest {
         assertEquals(
             listOf(
                 TopicTextField.Name,
-                TopicTextField.LeftOff,
-                TopicTextField.NextStep,
+                TopicTextField.Info,
                 TopicTextField.Task,
                 TopicTextField.Task,
                 TopicTextField.Note,
@@ -132,7 +131,7 @@ class TopicSuggestionsTest {
             listOf(
                 SuggestionCandidate(a, SuggestionReason.IssueLink(key("SYN-101"), "blocks")),
                 SuggestionCandidate(b, SuggestionReason.Written(TopicTextField.Name)),
-                SuggestionCandidate(b, SuggestionReason.Written(TopicTextField.NextStep)),
+                SuggestionCandidate(b, SuggestionReason.Written(TopicTextField.Info)),
                 SuggestionCandidate(a, SuggestionReason.MentionedByPullRequest(pull("synthetic-org/synthetic-app#12"))),
                 SuggestionCandidate(a, SuggestionReason.Written(TopicTextField.Goal)),
             )

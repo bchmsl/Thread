@@ -145,9 +145,11 @@ service cloud.firestore {
 
     // users/{uid}/topics/{topicId}: one Topic. createdAt is set by the first write and never changes. deletedAt marks a
     // Topic in Trash; its Tasks, Reminders and Note links are not written, so Restore brings them back as they are.
+    // info is the Additional information (D52, ADR-018): absent or null until it is saved (Undo writes null), at most
+    // 20,100 characters so the two older fields at 10,000 each fit with their labels.
     function validTopic(topic) {
-      return topic.keys().hasOnly(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'deletedAt',
-          'schemaVersion'])
+      return topic.keys().hasOnly(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'info', 'createdAt', 'updatedAt',
+          'deletedAt', 'schemaVersion'])
         && topic.keys().hasAll(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'createdAt', 'updatedAt', 'schemaVersion'])
         && topic.schemaVersion == 1
         && topic.updatedAt == request.time
@@ -155,6 +157,7 @@ service cloud.firestore {
         && topic.color in ['lavender', 'mint', 'sky', 'peach', 'butter']
         && topic.statusId is string && topic.statusId.size() > 0
         && validText(topic.goal) && validText(topic.leftOff) && validText(topic.nextStep)
+        && (topic.get('info', null) == null || (topic.info is string && topic.info.size() <= 20100))
         && topic.createdAt is timestamp
         && nullOrTimestamp(topic, 'deletedAt');
     }

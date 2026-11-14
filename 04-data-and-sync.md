@@ -7,7 +7,7 @@ Names are illustrative, not existing classes.
 
 | Entity | Main fields / role |
 | --- | --- |
-| Topic | id, ownerId, title, goal, statusId, continuationNote, nextStep, timestamps |
+| Topic | id, ownerId, title, goal, statusId, continuationNote, nextStep, info (Additional information, D52), timestamps |
 | TopicStatus | id, ownerId, name, category, sortOrder |
 | PersonalTask | id, ownerId, topicId nullable, title, completedAt nullable, plannedDate nullable, dueAt/date nullable, timestamps |
 | Note | id, ownerId, title, versioned rich-text content, revision, timestamps |
@@ -195,7 +195,7 @@ Status: **provisional**. Written in Phase 9 while the owner was away. Details: A
 - A Topic deleted forever takes the Tasks and Reminders that went to Trash with it. A Task or Note takes the Reminders still on it. Notes and external records are never touched.
 - The versions of a Note deleted forever are deleted by the app once per app start while online. Its local draft goes on this device at once; other devices keep theirs for now.
 - Nothing purges automatically. The retention period is still open.
-- Global search covers Topics (name, next step, goal), Tasks (title) and Notes (title and preview) on this device, at most 6 per group, nothing in Trash. No Jira payload is uploaded for search.
+- Global search covers Topics (name, goal, Additional information; next step before D52), Tasks (title) and Notes (title and preview) on this device, at most 6 per group, nothing in Trash. No Jira payload is uploaded for search.
 
 ## Phase 10 outcome (proposed, 2026-11-13)
 
@@ -249,3 +249,15 @@ Details: ADR-017 (Proposed). Checked with the emulator tests and headless Chrome
 - **Deploy the rules before the build ships.** Until then the server refuses Unlink, Don't suggest and Restore. They stay in the sync panel (Phase 12); nothing is lost. Link is unaffected.
 - Trash: a Topic in Trash hides its links, so its dismissals leave with it and come back on Restore (D42).
 - Device only, never uploaded: the tickets and PRs that suggestion checks load are saved in `thread-external-cache` like opened ones; keys Jira did not show are remembered for a day in browser storage (`thread.jira.notTickets`).
+
+## Topic Additional information (D52, proposed, 2026-11-14)
+
+Details: ADR-018 part A (Proposed). Checked with the emulator tests and headless Chrome on the emulators, with SYNTHETIC data only.
+
+- `topics/{topicId}` gets one optional field, `info`: absent or null means never saved, `""` means saved empty. Up to 20,100 characters. `schemaVersion` stays 1.
+- Until `info` is saved, the app shows `leftOff` and `nextStep` combined ("Where I left off: ...", "Next step: ..."). Nothing is migrated; the first edit writes `info` only. This build never changes `leftOff` and `nextStep`; a new Topic writes them as `""` because the rules require them.
+- Writes are field diffs, as before. Undo of the first edit writes `info: null`.
+- Rules (`validTopic`): `hasOnly` adds `info`; `info`, when present and not null, is a string of at most 20,100 characters. `hasAll` is unchanged.
+- **Deploy the rules before the build ships.** Until then the server refuses edits of the box, their Undo and Topics created from a ticket or PR. They stay in the sync panel (Phase 12); nothing is lost.
+- The outbox JSON carries `info`; changes saved by older builds have none and read as null.
+- Search matches `info`, or the old text while `info` is not saved.

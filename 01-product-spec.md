@@ -21,7 +21,7 @@ A parallel architectural task is a separate Topic.
 ## Topic
 
 - Name, optional goal/description, editable status.
-- Context fields: where I left off and next step.
+- Additional information: one free text box for context, links and decisions (D52). It replaced "Where I left off" and "Next step"; a Topic saved before shows that older text in the box until it is edited.
 - Associated Tasks, Notes, Jira tickets, PRs, and Reminders.
 - A Topic can exist with only a name; do not force a lengthy creation form.
 - Completion is independent of Jira completion.
@@ -120,7 +120,7 @@ A standalone object is not necessarily an untriaged Inbox object.
 
 - Both List and Board in v1.
 - Default List; remember the last selected view.
-- List shows status, next step, and personal Task progress.
+- List shows status, the next open Task (D52), and personal Task progress.
 - Board columns represent editable statuses, not just the four categories.
 - Drag a Topic to a column to change status.
 - Also provide a non-drag status-change action.
@@ -129,11 +129,11 @@ A standalone object is not necessarily an untriaged Inbox object.
 
 One page with collapsible sections, not a primary tab layout:
 - Header: name, status, goal.
-- Main: where I left off, next step, Tasks.
+- Main: Additional information (D52), Tasks.
 - Notes.
 - Related Jira tickets, PRs, and Reminders.
 - External item details open in a side panel on wide screens and a separate detail view on narrow screens.
-- Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic, its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click.
+- Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click.
 
 ## Integrations in v1
 

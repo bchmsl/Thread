@@ -120,6 +120,7 @@ internal object WorkspaceWriteJson {
             put("goal", topic.goal)
             put("leftOff", topic.leftOff)
             put("nextStep", topic.nextStep)
+            put("info", topic.info)
             put("createdAtMillis", topic.createdAtMillis)
             put("deleted", topic.deleted)
             put("deletedAtMillis", topic.deletedAtMillis)
@@ -134,6 +135,8 @@ internal object WorkspaceWriteJson {
             goal = json.str("goal") ?: return null,
             leftOff = json.str("leftOff") ?: return null,
             nextStep = json.str("nextStep") ?: return null,
+            // Absent in changes saved by builds before D52: never saved.
+            info = json.str("info"),
             createdAtMillis = json.long("createdAtMillis"),
             deleted = json.bool("deleted") ?: return null,
             deletedAtMillis = json.long("deletedAtMillis"),

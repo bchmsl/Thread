@@ -16,7 +16,7 @@ Suggestions come from fixed rules in `shared/domain` (`suggest/TopicSuggestions.
 
 | Signal | Source | Suggests |
 |---|---|---|
-| S1 Written | Jira keys and PR links in the Topic name, goal, Where I left off, Next step, the titles of its Tasks (not in Trash), and the titles and previews of its Notes (not in Trash). Never full Note bodies (Q82). | Jira tickets and PRs |
+| S1 Written | Jira keys and PR links in the Topic name, goal, Additional information (Where I left off and Next step before D52, ADR-018), the titles of its Tasks (not in Trash), and the titles and previews of its Notes (not in Trash). Never full Note bodies (Q82). | Jira tickets and PRs |
 | S2 Issue links | `related` (Jira `issuelinks`) of the linked tickets' saved copies | Jira tickets |
 | S3 PR mentions | Jira keys in the title, body and head branch of the linked PRs' saved copies | Jira tickets |
 

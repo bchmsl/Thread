@@ -2,6 +2,7 @@ package thread.web.presentation
 
 import thread.domain.note.NoteSaveState
 import thread.domain.note.UNTITLED_NOTE
+import thread.domain.topic.topicInfo
 import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.WorkspaceWrite
 import thread.web.presentation.notes.notePlace
@@ -79,8 +80,7 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
             listOfNotNull(
                 "Topic: ${write.topic.name}",
                 lineOf("Goal", write.topic.goal),
-                lineOf("Where I left off", write.topic.leftOff),
-                lineOf("Next step", write.topic.nextStep),
+                lineOf("Additional information", topicInfo(write.topic)),
                 "In Trash".takeIf { write.topic.deleted },
             )
         is WorkspaceWrite.PutStatus -> listOf("Status: ${write.status.name} (${categoryLabel(write.status.category)})")

@@ -105,7 +105,7 @@ class ExternalLinksTest {
 
     @Test
     fun createTopicFromATicketWritesTheTopicTheReferenceAndTheLink() {
-        val topic = Topic(TopicId("t-new"), "Synthetic ticket title", TopicColor.Peach, status, leftOff = "Created from SYN-101.")
+        val topic = Topic(TopicId("t-new"), "Synthetic ticket title", TopicColor.Peach, status, info = "Created from SYN-101.")
         val writes = createTopicLinkedTo(topic, ticket, empty)
         assertEquals(
             listOf(

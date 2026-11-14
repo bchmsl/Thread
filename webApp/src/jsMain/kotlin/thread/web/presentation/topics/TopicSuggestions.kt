@@ -286,8 +286,7 @@ internal fun reasonText(reason: SuggestionReason): String =
                 when (reason.field) {
                     TopicTextField.Name -> "the Topic name"
                     TopicTextField.Goal -> "the goal"
-                    TopicTextField.LeftOff -> "Where I left off"
-                    TopicTextField.NextStep -> "Next step"
+                    TopicTextField.Info -> "Additional information"
                     TopicTextField.Task -> "a Task"
                     TopicTextField.Note -> "a Note"
                 }

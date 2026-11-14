@@ -201,4 +201,21 @@ class TaskRulesTest {
         assertFalse(isOverdue(task("c", deadline = Deadline(today)), noon))
         assertFalse(isOverdue(task("d"), noon))
     }
+
+    @Test
+    fun theFirstOpenTaskOfEachTopicIsTheOldestOpenOne() {
+        val other = TopicId("t-other")
+        val tasks =
+            listOf(
+                task("done-first", createdAt = 1, done = true),
+                task("trashed", createdAt = 2, deleted = true),
+                task("second", createdAt = 4),
+                task("first", createdAt = 3),
+                task("loose", createdAt = 0, topicId = null),
+                task("other", createdAt = 5, topicId = other),
+            )
+        val first = firstOpenTasks(tasks)
+        assertEquals(mapOf(topic to "first", other to "other"), first.mapValues { it.value.id.value })
+        assertEquals(emptyMap(), firstOpenTasks(listOf(task("all-done", done = true))))
+    }
 }

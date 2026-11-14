@@ -4,6 +4,7 @@ import thread.domain.note.NoteSaveState
 import thread.domain.topic.SEED_STATUSES
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
+import thread.domain.topic.TOPIC_INFO_MAX_LENGTH
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicId
@@ -226,12 +227,24 @@ class WorkspaceEditsTest {
     }
 
     @Test
-    fun pickUpFieldsAreTrimmed() {
-        val t = topic("a", planned)
-        val after = (editPickUp(t, nextStep = "  Call the backend team ").edit().writes.single() as WorkspaceWrite.PutTopic).topic
-        assertEquals("Call the backend team", after.nextStep)
-        assertEquals("", after.leftOff)
-        assertEquals(EditResult.Unchanged, editPickUp(t, leftOff = "   "))
+    fun additionalInformationIsTrimmedAndOnlyAnEditStoresIt() {
+        val old = topic("a", planned).copy(leftOff = "Halfway", nextStep = "Call the backend team")
+        // A blur without typing sends the shown text back. It must not freeze the old text into `info`.
+        assertEquals(EditResult.Unchanged, editInfo(old, "  Where I left off: Halfway\n\nNext step: Call the backend team "))
+        val edit = editInfo(old, "  Context and links ").edit()
+        val write = edit.writes.single() as WorkspaceWrite.PutTopic
+        assertEquals("Context and links", write.topic.info)
+        assertEquals(Pair("Halfway", "Call the backend team"), Pair(write.topic.leftOff, write.topic.nextStep), "the old fields stay")
+        assertEquals(old, write.before)
+        assertEquals(null, (edit.undo.single() as WorkspaceWrite.PutTopic).topic.info, "Undo shows the old text again")
+
+        val cleared = (editInfo(old, "   ").edit().writes.single() as WorkspaceWrite.PutTopic).topic
+        assertEquals("", cleared.info, "a cleared box stays empty and does not fall back to the old text")
+        assertEquals(EditResult.Unchanged, editInfo(cleared, ""))
+        assertEquals(EditResult.Unchanged, editInfo(topic("b", planned), " "), "nothing to save on a new Topic")
+        val longest = "x".repeat(TOPIC_INFO_MAX_LENGTH)
+        assertEquals(longest, (editInfo(old, longest).edit().writes.single() as WorkspaceWrite.PutTopic).topic.info)
+        assertEquals(EditProblem.TextTooLong, editInfo(old, longest + "x").problem())
     }
 
     @Test

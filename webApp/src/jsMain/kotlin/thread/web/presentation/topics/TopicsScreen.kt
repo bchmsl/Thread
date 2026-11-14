@@ -20,6 +20,7 @@ import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
+import thread.domain.task.Task
 import thread.domain.task.TaskProgress
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
@@ -146,7 +147,7 @@ private fun TopicsList(
                                 }) {
                                     TopicHex(topic.name, topic.color, HexSize.Md)
                                     Span({ classes("trow2__name") }) { Text(topic.name) }
-                                    Span({ classes("trow2__next") }) { Text(nextStepText(topic, status)) }
+                                    Span({ classes("trow2__next") }) { Text(nextLine(workspace.nextTask(topic.id), status)) }
                                     Span({ classes("trow2__side") }) { TopicProgress(topic, workspace.progress(topic.id)) }
                                 }
                             }
@@ -158,14 +159,15 @@ private fun TopicsList(
     }
 }
 
-private fun nextStepText(
-    topic: Topic,
+/** A Topic row's second line (D52): its first open Task, the one Topic Details lists first. */
+private fun nextLine(
+    next: Task?,
     status: TopicStatus,
 ): String =
     when {
-        topic.nextStep.isNotEmpty() -> "Next: ${topic.nextStep}"
+        next != null -> "Next: ${next.title}"
         status.category == StatusCategory.Done -> "Finished"
-        else -> "No next step yet"
+        else -> "No open tasks"
     }
 
 /** The Board: drag a card by its handle to another lane, or use its "Move to" menu (keyboard and touch). */
@@ -227,6 +229,7 @@ private fun TopicsBoard(
                                 key(topic.id) {
                                     BoardCard(
                                         topic = topic,
+                                        next = workspace.nextTask(topic.id),
                                         progress = workspace.progress(topic.id),
                                         statuses = statuses,
                                         dragging = dragging == topic.id,
@@ -250,6 +253,7 @@ private fun TopicsBoard(
 @Composable
 private fun BoardCard(
     topic: Topic,
+    next: Task?,
     progress: TaskProgress,
     statuses: List<TopicStatus>,
     dragging: Boolean,
@@ -279,7 +283,7 @@ private fun BoardCard(
                 attr("aria-hidden", "true")
             }) { IconView(Icon.Grip, 18) }
         }
-        if (topic.nextStep.isNotEmpty()) P({ classes("bcard__next") }) { Text("Next: ${topic.nextStep}") }
+        if (next != null) P({ classes("bcard__next") }) { Text("Next: ${next.title}") }
         Div({ classes("bcard__foot") }) {
             TopicProgress(topic, progress)
             Span({ classes("bcard__move") }) {

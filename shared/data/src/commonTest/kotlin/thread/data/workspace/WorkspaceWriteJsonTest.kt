@@ -2,7 +2,9 @@ package thread.data.workspace
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import thread.domain.note.LinkHref
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
@@ -76,6 +78,8 @@ class WorkspaceWriteJsonTest {
         listOf(
             WorkspaceWrite.PutTopic(topic, isNew = true),
             WorkspaceWrite.PutTopic(topic.copy(name = "Renamed", deleted = true, deletedAtMillis = 9), before = topic),
+            WorkspaceWrite.PutTopic(topic.copy(info = "Synthetic additional information"), before = topic),
+            WorkspaceWrite.PutTopic(topic, before = topic.copy(info = "")),
             WorkspaceWrite.PutStatus(
                 TopicStatus(StatusId("s-1"), "Building", StatusCategory.Active, 1),
                 before = TopicStatus(StatusId("s-1"), "Active", StatusCategory.Active, 1),
@@ -100,6 +104,14 @@ class WorkspaceWriteJsonTest {
     @Test
     fun everyKindOfWriteComesBackUnchanged() {
         assertEquals(everyWrite, roundTrip(everyWrite))
+    }
+
+    @Test
+    fun aTopicSavedBeforeAdditionalInformationExistedReadsAsNeverSaved() {
+        val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutTopic(topic, isNew = true))).single().jsonObject
+        val value = stored.getValue("value").jsonObject
+        val older = JsonObject(stored + ("value" to JsonObject(value - "info")))
+        assertEquals(listOf(WorkspaceWrite.PutTopic(topic, isNew = true)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
     }
 
     @Test

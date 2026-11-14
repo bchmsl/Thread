@@ -145,6 +145,26 @@ class FirestoreWorkspaceRulesEmulatorTest {
         }
 
     @Test
+    fun aTopicMayCarryAdditionalInformationAndNothingElse() =
+        rulesTest { env, owner, other ->
+            val db = seed(env, owner)
+
+            // The seeded Topic has no info (the old shape). Throws when refused.
+            mergeSet(topicRef(db, owner), topicChange("info" to "Synthetic additional information"), db)
+            mergeSet(topicRef(db, owner), topicChange("info" to null), db)
+            mergeSet(topicRef(db, owner), topicChange("info" to ""), db)
+            mergeSet(topicRef(db, owner), topicChange("info" to "x".repeat(20_100)), db)
+            assertSucceeds(setDoc(topicRef(db, owner, "t-synthetic-2"), topic("info" to "Created from SYN-101."))).await()
+
+            assertFails(setDoc(topicRef(db, owner, "t-synthetic-3"), topic("info" to "x".repeat(20_101)))).await()
+            assertFails(setDoc(topicRef(db, owner, "t-synthetic-3"), topic("info" to 5))).await()
+            assertFails(setDoc(topicRef(db, owner, "t-synthetic-3"), topic("info" to true))).await()
+            assertFails(setDoc(topicRef(db, owner, "t-synthetic-3"), topic("infoHtml" to "synthetic"))).await()
+            val otherDb = env.authenticatedContext(other).firestore()
+            assertFails(setDoc(topicRef(otherDb, owner, "t-synthetic-3"), topic("info" to "synthetic"))).await()
+        }
+
+    @Test
     fun aTopicKeepsItsCreationTime() =
         rulesTest { env, owner, _ ->
             val db = seed(env, owner)

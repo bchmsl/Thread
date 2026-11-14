@@ -321,11 +321,13 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
                             }
                             StatusLabel(statusOf(topic, statuses))
                             Span({ classes("acard__next") }) {
-                                if (topic.nextStep.isNotEmpty()) {
+                                // D52: the Topic's first open Task, as on the Topics list.
+                                val next = workspace.nextTask(topic.id)
+                                if (next != null) {
                                     B { Text("Next:") }
-                                    Text(" ${topic.nextStep}")
+                                    Text(" ${next.title}")
                                 } else {
-                                    Span({ classes("muted") }) { Text("No next step yet.") }
+                                    Span({ classes("muted") }) { Text("No open tasks.") }
                                 }
                             }
                             Span({ classes("acard__foot") }) { TopicProgress(topic, workspace.progress(topic.id)) }

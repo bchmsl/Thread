@@ -50,6 +50,7 @@ Empty state should support quick capture, not just show an illustration.
 ### Topics List
 
 Rows: title, semantic status, next step, personal Task progress.
+The next step is the Topic's first open Task, the oldest one, as Topic Details lists it (D52): "Next: <title>". Without one: "Finished" for a Done-category status, else "No open tasks". Board cards and Today's Active Topics use the same Task; a Board card without one shows no line.
 Progress counts personal Tasks only; do not imply Jira completion.
 List / Board toggle preserves selected mode.
 Filtering and sorting controls should remain unobtrusive; exact options are open.
@@ -65,7 +66,8 @@ Preserve an intentional accessible horizontal-scroll experience on narrow displa
 ### Topic Details
 
 Header with title/status and short goal.
-Main flow: continuation context, next step, personal Tasks, Notes.
+Main flow: Additional information, personal Tasks, Notes.
+Additional information (D52) replaces v3's "Pick up here": the same tinted section, one text box (4 rows) labelled by its heading, placeholder "Context, links, decisions: anything worth keeping with this Topic". It saves on blur, a second after typing stops, and when the page leaves. A Topic saved before shows its "Where I left off" and "Next step" text in the box until it is edited.
 Secondary region: Jira, PRs, Reminders.
 Sections collapse; exact default expansion behavior to be designed.
 Open Jira/PR details in one contextual side panel on wide screens.
@@ -74,7 +76,7 @@ On narrow screens, show details as a routed screen with a clear return path.
 
 Suggestions (D49, ADR-017). Not in the v3 prototype; placement queued as Q77.
 - A "Suggested" group under the linked rows of the Jira and Pull requests sections. Hidden when not connected or when there is nothing to suggest.
-- Rows reuse the external row with a dashed icon frame and a muted title. The snippet line gives the best two reasons ("Mentioned in Next step", "Mentioned in pull request #12", "SYN-101 is blocked by this"). "Also in" tags show other Topics that link the item.
+- Rows reuse the external row with a dashed icon frame and a muted title. The snippet line gives the best two reasons ("Mentioned in Additional information", "Mentioned in pull request #12", "SYN-101 is blocked by this"). "Also in" tags show other Topics that link the item.
 - Each row has a small **Link** text button and a **Don't suggest** icon button ("Don't suggest SYN-104 in this Topic"). Both show a toast with Undo.
 - 3 rows, then "Show N more", up to 10. "Not suggested here (N)" opens a dialog with **Restore** per row (title from the device, else "Not on this device") and **Done**.
 - Focus: after Link or Don't suggest, the next suggestion, else the section heading. In the dialog, the next Restore, else Done; closing returns to "Not suggested here".

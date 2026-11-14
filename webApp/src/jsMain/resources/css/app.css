@@ -704,12 +704,11 @@ main:has(.board) { max-width: 1520px; }
 .colors label:has(input:checked) { outline: 2px solid var(--fog-100); outline-offset: 2px; }
 .colors label:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
 .pickup {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; padding: 20px 24px; margin-bottom: 32px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 20px 24px; margin-bottom: 32px;
   background: var(--bg-surface); border: 1px solid var(--border); border-left: 4px solid var(--tc); border-radius: var(--r-surface);
 }
-.pickup__h { grid-column: 1 / -1; font: 500 var(--fs-17) var(--font-display); }
-.pickup .field + .field { margin-top: 0; }
-.pickup textarea.input { min-height: 78px; }
+.pickup__h { font: 500 var(--fs-17) var(--font-display); }
+.pickup textarea.input { min-height: 104px; }
 .td-grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 32px 40px; align-items: start; }
 .td-side { min-width: 0; }
 .sect { border-top: 1px solid var(--border-strong); margin-bottom: 20px; }
@@ -762,7 +761,7 @@ main:has(.board) { max-width: 1520px; }
   .td-name { font-size: 28px; }
   .td-goal, .td-meta { grid-column: 1 / -1; }
   .td-acts { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
-  .pickup { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .pickup { padding: 16px; }
   .gone { grid-template-columns: minmax(0, 1fr); padding: 16px; }
   .gone > .hex { grid-row: auto; width: 56px; height: 56px; }
   .gone__h { font-size: var(--fs-24); }

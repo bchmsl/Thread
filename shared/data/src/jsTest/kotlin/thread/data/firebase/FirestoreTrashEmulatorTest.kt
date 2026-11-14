@@ -33,7 +33,7 @@ import thread.domain.workspace.WorkspaceWrite
 import thread.domain.workspace.createNoteWrites
 import thread.domain.workspace.createReminderWrite
 import thread.domain.workspace.createTaskWrite
-import thread.domain.workspace.editPickUp
+import thread.domain.workspace.editInfo
 import thread.domain.workspace.seedWrites
 import thread.domain.workspace.toggleTask
 import kotlin.test.Test
@@ -134,7 +134,7 @@ class FirestoreTrashEmulatorTest {
 
                 // B goes offline and edits the Topic and its Task.
                 deviceB.backend.goOfflineForTesting()
-                storeB.write(assertIs<EditResult.Changed>(editPickUp(onB.topics.single(), nextStep = "Synthetic stale step")).edit.writes)
+                storeB.write(assertIs<EditResult.Changed>(editInfo(onB.topics.single(), "Synthetic stale step")).edit.writes)
                 storeB.write(assertIs<EditResult.Changed>(toggleTask(onB.tasks.single(), LocalDay(2026, 11, 13))).edit.writes)
 
                 // A moves the Topic to Trash, then deletes it forever.

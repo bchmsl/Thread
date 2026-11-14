@@ -13,7 +13,7 @@ class SuggestionReasonTextTest {
     @Test
     fun eachReasonSaysWhereTheItemWasFound() {
         assertEquals("Mentioned in the Topic name", reasonText(SuggestionReason.Written(TopicTextField.Name)))
-        assertEquals("Mentioned in Where I left off", reasonText(SuggestionReason.Written(TopicTextField.LeftOff)))
+        assertEquals("Mentioned in Additional information", reasonText(SuggestionReason.Written(TopicTextField.Info)))
         assertEquals("Mentioned in a Note", reasonText(SuggestionReason.Written(TopicTextField.Note)))
         val pull = assertNotNull(PullRequestRef.parse("synthetic-org/synthetic-app#12"))
         assertEquals("Mentioned in pull request #12", reasonText(SuggestionReason.MentionedByPullRequest(pull)))

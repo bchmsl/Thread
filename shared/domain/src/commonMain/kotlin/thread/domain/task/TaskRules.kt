@@ -34,6 +34,17 @@ fun topicTasks(
     tasks: List<Task>,
 ): List<Task> = liveTasks(tasks).filter { it.topicId == topicId }.sortedWith(CREATION_ORDER)
 
+/**
+ * The first open Task of each Topic, in the order Topic Details lists them (oldest first): what Topic rows and cards
+ * show as "Next" (D52). Topics without an open Task are not in the map.
+ */
+fun firstOpenTasks(tasks: List<Task>): Map<TopicId, Task> =
+    liveTasks(tasks)
+        .filter { !it.done && it.topicId != null }
+        .sortedWith(CREATION_ORDER)
+        .groupBy { it.topicId!! }
+        .mapValues { it.value.first() }
+
 /** Personal Task progress of one Topic (v3 `progress`). Jira tickets and pull requests never count. */
 data class TaskProgress(
     val done: Int,

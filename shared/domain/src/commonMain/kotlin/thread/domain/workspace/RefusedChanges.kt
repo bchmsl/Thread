@@ -128,6 +128,7 @@ private fun Topic.fields(): Map<String, Any?> =
         "goal" to goal,
         "leftOff" to leftOff,
         "nextStep" to nextStep,
+        "info" to info,
         "deleted" to deleted,
     )
 

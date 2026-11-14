@@ -9,6 +9,20 @@ const val TOPIC_NAME_MAX_LENGTH: Int = 200
 /** Longest goal, "Where I left off" or "Next step" text. */
 const val TOPIC_TEXT_MAX_LENGTH: Int = 10_000
 
+/** Longest "Additional information" text (D52): room for both old fields at their limit, with their labels. */
+const val TOPIC_INFO_MAX_LENGTH: Int = 20_100
+
+/**
+ * The "Additional information" text of [topic] (D52, adr/ADR-018-topic-info-and-task-reminders.md): [Topic.info] once
+ * it was saved, even empty. Before that, the old "Pick up here" text, each non-empty part with its label, so nothing
+ * written there is hidden. Nothing is stored until the text is edited.
+ */
+fun topicInfo(topic: Topic): String =
+    topic.info ?: listOfNotNull(
+        topic.leftOff.takeIf { it.isNotBlank() }?.let { "Where I left off: $it" },
+        topic.nextStep.takeIf { it.isNotBlank() }?.let { "Next step: $it" },
+    ).joinToString("\n\n")
+
 /**
  * The statuses of a new workspace: Planned, Active, Paused, Done (01-product-spec.md). The ids are fixed, so two
  * devices that seed the same new workspace write the same documents.

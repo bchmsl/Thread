@@ -4,11 +4,13 @@ import thread.domain.topic.SEED_STATUSES
 import thread.domain.topic.STATUS_NAME_MAX_LENGTH
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
+import thread.domain.topic.TOPIC_INFO_MAX_LENGTH
 import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
 import thread.domain.topic.TOPIC_TEXT_MAX_LENGTH
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicStatus
+import thread.domain.topic.topicInfo
 import thread.domain.topic.visibleStatuses
 
 /** A change to write, and the change that takes it back for Undo. */
@@ -188,16 +190,19 @@ fun editTopic(
     return topicChange(topic, topic.copy(name = trimmedName, goal = trimmedGoal, color = color))
 }
 
-/** The "Pick up here" fields. Text is trimmed, as in v3. */
-fun editPickUp(
+/**
+ * The "Additional information" box (D52). Text is trimmed. Text equal to what the box shows writes nothing, so the old
+ * "Pick up here" text is stored as [Topic.info] only once it is edited. Undo puts back the [Topic.info] before, null
+ * included, so the old text shows again. The old fields are never written.
+ */
+fun editInfo(
     topic: Topic,
-    leftOff: String = topic.leftOff,
-    nextStep: String = topic.nextStep,
+    text: String,
 ): EditResult {
-    val left = leftOff.trim()
-    val next = nextStep.trim()
-    if (left.length > TOPIC_TEXT_MAX_LENGTH || next.length > TOPIC_TEXT_MAX_LENGTH) return EditResult.Refused(EditProblem.TextTooLong)
-    return topicChange(topic, topic.copy(leftOff = left, nextStep = next))
+    val trimmed = text.trim()
+    if (trimmed.length > TOPIC_INFO_MAX_LENGTH) return EditResult.Refused(EditProblem.TextTooLong)
+    if (trimmed == topicInfo(topic)) return EditResult.Unchanged
+    return topicChange(topic, topic.copy(info = trimmed))
 }
 
 /**

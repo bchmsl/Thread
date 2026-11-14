@@ -209,7 +209,7 @@ fun restoreSuggestion(
 
 /**
  * The writes of v3 "Create Topic from ticket": [topic] as a new Topic, linked to [reference]. The caller makes the
- * Topic (named after the ticket, "Created from KEY." where it left off).
+ * Topic (named after the ticket, "Created from KEY." in its Additional information, D52).
  */
 fun createTopicLinkedTo(
     topic: Topic,

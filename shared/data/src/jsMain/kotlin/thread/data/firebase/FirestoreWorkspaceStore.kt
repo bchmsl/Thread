@@ -59,8 +59,9 @@ class WorkspaceReadException(
  * adr/ADR-010-tasks-reminders-and-dates.md).
  *
  * - `users/{uid}/statuses/{statusId}`: `{name, category, sortOrder, deletedAt, updatedAt, schemaVersion: 1}`.
- * - `users/{uid}/topics/{topicId}`: `{name, color, statusId, goal, leftOff, nextStep, createdAt, updatedAt,
- *   schemaVersion: 1}`.
+ * - `users/{uid}/topics/{topicId}`: `{name, color, statusId, goal, leftOff, nextStep, info?, createdAt, updatedAt,
+ *   schemaVersion: 1}`. `info` is the Additional information (D52), absent or null until it is saved; this build writes
+ *   `leftOff` and `nextStep` only when it creates a Topic, as empty strings.
  * - `users/{uid}/tasks/{taskId}`: `{title, topicId, done, completedOn, plannedDay, deadline, inbox, createdAt,
  *   updatedAt, deletedAt, discarded, schemaVersion: 1}`. Days and deadlines are `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`
  *   strings in the workspace time zone, never instants.
@@ -311,6 +312,8 @@ class FirestoreWorkspaceStore internal constructor(
         if (base == null || base.goal != topic.goal) data.goal = topic.goal
         if (base == null || base.leftOff != topic.leftOff) data.leftOff = topic.leftOff
         if (base == null || base.nextStep != topic.nextStep) data.nextStep = topic.nextStep
+        // Additional information (D52): written only once it is saved. Undo writes null, which shows the old text again.
+        if ((base == null && topic.info != null) || (base != null && base.info != topic.info)) data.info = topic.info
         if ((base == null && topic.deleted) || (base != null && base.deleted != topic.deleted)) {
             data.deletedAt = if (topic.deleted) serverTimestamp() else null
         }
@@ -566,6 +569,7 @@ private fun decodeTopic(snapshot: DocumentSnapshot): Topic? {
         goal = stringOrNull(data.goal).orEmpty(),
         leftOff = stringOrNull(data.leftOff).orEmpty(),
         nextStep = stringOrNull(data.nextStep).orEmpty(),
+        info = stringOrNull(data.info),
         createdAtMillis = if (createdAt == null) null else createdAt.unsafeCast<Timestamp>().toMillis().toLong(),
         deleted = data.deletedAt != null,
         deletedAtMillis = millisOrNull(data.deletedAt),

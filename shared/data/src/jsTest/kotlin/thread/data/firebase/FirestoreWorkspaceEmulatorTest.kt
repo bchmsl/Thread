@@ -19,7 +19,7 @@ import thread.domain.workspace.TopicsView
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceWrite
 import thread.domain.workspace.deleteStatus
-import thread.domain.workspace.editPickUp
+import thread.domain.workspace.editInfo
 import thread.domain.workspace.moveTopic
 import thread.domain.workspace.renameStatus
 import thread.domain.workspace.savePrefs
@@ -252,7 +252,7 @@ class FirestoreWorkspaceEmulatorTest {
                         .topics
                         .single()
 
-                // A edits "Where I left off" offline. Meanwhile B moves the Topic to Active.
+                // A edits the Additional information offline. Meanwhile B moves the Topic to Active.
                 deviceA.backend.goOfflineForTesting()
                 val onA =
                     storeA
@@ -260,7 +260,8 @@ class FirestoreWorkspaceEmulatorTest {
                         .first { it.topics.isNotEmpty() }
                         .topics
                         .single()
-                storeA.write(assertIs<EditResult.Changed>(editPickUp(onA, leftOff = "Synthetic: halfway through")).edit.writes)
+                val edit = assertIs<EditResult.Changed>(editInfo(onA, "Synthetic: halfway through")).edit
+                storeA.write(edit.writes)
                 storeB.write(assertIs<EditResult.Changed>(moveTopic(onB, StatusId("s-active"), SEED_STATUSES)).edit.writes)
                 storeB.observe().first { !it.pendingWrites && it.topics.single().statusId == StatusId("s-active") }
 
@@ -268,15 +269,22 @@ class FirestoreWorkspaceEmulatorTest {
                 val merged =
                     storeB
                         .observe()
-                        .first { data ->
-                            data.topics
-                                .single()
-                                .leftOff
-                                .isNotEmpty()
-                        }.topics
+                        .first { it.topics.singleOrNull()?.info != null }
+                        .topics
                         .single()
                 assertEquals(StatusId("s-active"), merged.statusId, "A's late write does not move the Topic back")
-                assertEquals("Synthetic: halfway through", merged.leftOff)
+                assertEquals("Synthetic: halfway through", merged.info)
+                assertEquals(Pair("", ""), Pair(merged.leftOff, merged.nextStep), "the old fields are not written")
+
+                // Undo stores null, so every device shows the old text again. It writes only that field.
+                storeA.write(edit.undo)
+                val undone =
+                    storeB
+                        .observe()
+                        .first { it.topics.singleOrNull()?.let { t -> t.info == null } == true }
+                        .topics
+                        .single()
+                assertEquals(StatusId("s-active"), undone.statusId)
             } finally {
                 deviceA.backend.close()
                 deviceB.backend.close()

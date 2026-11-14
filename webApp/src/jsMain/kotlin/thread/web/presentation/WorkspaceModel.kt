@@ -26,6 +26,7 @@ import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
 import thread.domain.task.TaskId
 import thread.domain.task.TaskProgress
+import thread.domain.task.firstOpenTasks
 import thread.domain.task.inboxTasks
 import thread.domain.task.liveTasks
 import thread.domain.task.newTask
@@ -193,6 +194,9 @@ internal class WorkspaceModel(
 
     fun progress(topicId: TopicId): TaskProgress = derived().progress.getOrPut(topicId) { progressOf(topicId, storedTasks) }
 
+    /** The Task a Topic row shows as "Next": its oldest open Task, the first one in Topic Details (D52). */
+    fun nextTask(topicId: TopicId): Task? = derived().nextTasks[topicId]
+
     /** The lists screens read many times per frame, worked out once per store snapshot. */
     private class Derived(
         data: WorkspaceData?,
@@ -231,6 +235,7 @@ internal class WorkspaceModel(
         val remindersByTask = reminders.filter { it.target.kind == TargetKind.Task }.groupBy { it.target.id }
         val inbox = inboxTasks(data?.tasks.orEmpty())
         val progress = mutableMapOf<TopicId, TaskProgress>()
+        val nextTasks = firstOpenTasks(data?.tasks.orEmpty())
     }
 
     private var derivedFrom: WorkspaceData? = null
@@ -293,8 +298,8 @@ internal class WorkspaceModel(
     }
 
     /**
-     * v3 "Create Topic from ticket": a Topic named after the ticket (cut to the name limit), "Created from KEY." where
-     * it left off, linked to [reference] in the same write.
+     * v3 "Create Topic from ticket": a Topic named after the ticket (cut to the name limit), "Created from KEY." in its
+     * Additional information (D52), linked to [reference] in the same write.
      */
     fun createTopicLinkedTo(
         title: String,
@@ -305,7 +310,7 @@ internal class WorkspaceModel(
         val slot = maxOf(stored?.topics?.size ?: 0, lastColorSlot + 1)
         val topic =
             newTopic(TopicId(newId("t-")), title.trim().take(TOPIC_NAME_MAX_LENGTH), statuses, slot)
-                ?.copy(leftOff = "Created from ${recordLabel(reference)}.")
+                ?.copy(info = "Created from ${recordLabel(reference)}.")
                 ?: return TopicCreation.Refused(EditProblem.BlankName)
         lastColorSlot = slot
         store.write(createTopicLinkedTo(topic, reference, current))
