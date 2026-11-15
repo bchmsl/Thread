@@ -84,7 +84,7 @@ Next step: <nextStep>
 
 ### Not verified
 
-- The real Firebase project: the rules are not deployed.
+- The real Firebase project: the rules were deployed before `b8cfeb6` was pushed (2026-11-14), but the checks above ran on the emulators only.
 - Safari and Firefox. Only headless Chrome ran the browser checks.
 
 ## D. Today: Upcoming and No date (D53)

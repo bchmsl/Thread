@@ -1,6 +1,6 @@
 # ADR-017: Topic suggestions (Phases 1 and 2)
 
-Status: Proposed (2026-11-14). The feature is the owner's request (D49): "when I open a topic, it would be good to catch keywords, tickets and even if I attach PR or Jira to a topic, it would be good to suggest to add another Jiras and PRs which are related to it. It would also be good to remove specific suggestion if it is not relatable and it won't suggest in that topic anymore." The owner approved the plan and its recommended defaults with "all approved. I will be AFK, continue" (relayed by the orchestrator session). The details below are the worker's choices and are queued for review (owner-review-queue.md, Q77 to Q85). Checked with unit tests, emulator rules tests and headless Chrome on the emulators, with SYNTHETIC data only. The rules are not deployed yet.
+Status: Proposed (2026-11-14). The feature is the owner's request (D49): "when I open a topic, it would be good to catch keywords, tickets and even if I attach PR or Jira to a topic, it would be good to suggest to add another Jiras and PRs which are related to it. It would also be good to remove specific suggestion if it is not relatable and it won't suggest in that topic anymore." The owner approved the plan and its recommended defaults with "all approved. I will be AFK, continue" (relayed by the orchestrator session). The details below are the worker's choices and are queued for review (owner-review-queue.md, Q77 to Q85). Checked with unit tests, emulator rules tests and headless Chrome on the emulators, with SYNTHETIC data only. Update 2026-11-15: the rules were deployed to the real Firebase project before `a6ae332` was pushed (2026-11-14); Phase 2 changes no rules. The deployed ruleset matches `firebase/firestore.rules` at `cd0a581` (SHA-256 starts `765c3c9e48ac`).
 
 Phase 2 (S4 and S5, 2026-11-14) was built under the same approval, relayed by the orchestrator: "all approved. I am afk. Continue without my approvals please. Everything is approved from me", on the condition that it degrades quietly without live checks. It adds two GET searches with no new scopes, no Firestore field and no rules change. Its Jira and GitHub API assumptions are marked **[inference, not checked live]** below; only SYNTHETIC providers ran. Its details are queued as Q100 to Q103.
 
@@ -148,7 +148,7 @@ An item is dismissed in a Topic only when `dismissed == true && !linked`. **Link
 
 ## Not verified
 
-- The real Firebase project: the rules are not deployed.
+- The real Firebase project: the rules are deployed (see Status), but the checks above ran on the emulators only.
 - Live Jira and GitHub: only the SYNTHETIC providers ran. The noise level on real Topics is unknown.
 - Every Phase 2 API assumption listed under "Phase 2 searches" [inference, not checked live], and how Jira and GitHub rate-limit these searches in practice.
 - Safari and Firefox. Only headless Chrome ran the browser checks.

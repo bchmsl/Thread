@@ -48,7 +48,7 @@ Confirmed product behavior takes precedence over proposed technical details. Whe
 - Jira content fetched from its API and cached on each device, not mirrored into Firestore.
 - Notes may be stored in Firebase. User confirmed local Jira caching and work Notes are permitted.
 - Airy, Apple Notes-inspired first UI; optional Compact density later.
-- No production implementation has been delivered yet. The approved visual reference is the v3 prototype.
+- The pilot build is implemented and live at https://bchmsl.github.io/Thread/ (see Deploy). The pilot is closed with no fixes (D55, [pilot/PILOT-RESULTS.md](pilot/PILOT-RESULTS.md)). The approved visual reference stays the v3 prototype.
 
 ## How to use with Claude Code
 
@@ -74,7 +74,8 @@ After an approved decision changes, update its authoritative document and add a 
 
 The [v3 prototype](design/claude-pilot-prototype-v3/README.md) is the approved design reference for all pilot surfaces (D33). It replaces the v0.5 baseline. The pilot boundary is confirmed (D34): read-only Jira and GitHub are in the pilot, and the Focus timer comes after it.
 
+Done: the M1 feasibility slice, the pilot build (Phases 0 to 12) and the owner's changes D47 to D54. The pilot (Phase 13) is closed with no fixes (D55).
+
 Next steps:
-1. Write the ordered implementation phases described in [design/PILOT-DESIGN-PLAN.md](design/PILOT-DESIGN-PLAN.md).
-2. Start with Prompt 1 in 07-claude-prompts.md to plan the M1 technical feasibility slice.
-3. Use Prompt 3 with the v3 prototype for UI implementation, one named set of screens at a time.
+1. The Focus timer (Pomodoro), the v1 feature placed after the pilot (D25, D34, D45). Its phase plan needs the owner's approval before any code.
+2. Use Prompt 3 with the v3 prototype for UI work, one named set of screens at a time.

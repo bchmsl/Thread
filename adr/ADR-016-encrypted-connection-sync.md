@@ -1,6 +1,6 @@
 # ADR-016: Encrypted sync of the Jira and GitHub connections
 
-Status: Proposed (2026-11-14). The direction is the owner's choice (D47). The owner asked "How can we save credentials to remote? (jira token, clientid, github token)", then answered "Lets do A" (relayed by the orchestrator session). Option A: a passphrase in Settings, the browser encrypts the connections with a key made from it, and Firestore stores only the encrypted copy. The details below are the worker's choices and are queued for review (owner-review-queue.md, Q62 onwards). This ADR supersedes the "Never in Firestore" line of ADR-008 for the connection records only. Checked with unit tests, emulator rules tests and headless Chrome on the emulators, with SYNTHETIC tokens and passphrases only. The rules are not deployed yet.
+Status: Proposed (2026-11-14). The direction is the owner's choice (D47). The owner asked "How can we save credentials to remote? (jira token, clientid, github token)", then answered "Lets do A" (relayed by the orchestrator session). Option A: a passphrase in Settings, the browser encrypts the connections with a key made from it, and Firestore stores only the encrypted copy. The details below are the worker's choices and are queued for review (owner-review-queue.md, Q62 onwards). This ADR supersedes the "Never in Firestore" line of ADR-008 for the connection records only. Checked with unit tests, emulator rules tests and headless Chrome on the emulators, with SYNTHETIC tokens and passphrases only. Update 2026-11-15: the rules were deployed to the real Firebase project before `c1077a7` was pushed (2026-11-14). The deployed ruleset matches `firebase/firestore.rules` at `cd0a581` (SHA-256 starts `765c3c9e48ac`).
 
 ## Context
 
@@ -90,6 +90,6 @@ One document per account: `users/{uid}/vault/connections`.
 
 ## Not verified
 
-- The real Firebase project: the rules are not deployed.
+- The real Firebase project: the rules are deployed (see Status), but the checks above ran on the emulators only.
 - Safari and Firefox. Only headless Chrome ran the browser checks.
 - Two devices writing in the same second: covered by the transaction and the unit tests, not by a live race.
