@@ -15,9 +15,12 @@ import thread.data.github.GitHubPullRequestLists
 import thread.data.github.GitHubPullRequestMentions
 import thread.data.http.FetchHttpTransport
 import thread.data.http.HttpTransport
+import thread.data.http.InMemoryRequestLog
+import thread.data.http.RecordingTransport
 import thread.data.jira.JiraFamilyRepository
 import thread.data.jira.JiraIssueRepository
 import thread.data.jira.JiraListRepository
+import thread.data.jira.JiraRowRepository
 import thread.data.local.IndexedDbDraftStore
 import thread.data.local.IndexedDbKeyValueDatabase
 import thread.data.local.browserDeviceId
@@ -58,11 +61,15 @@ fun main() {
     val account = FirebaseAccountSession(backend)
     val testFlags = TestFlags()
     val backgroundProbe = if (backend.usesEmulators) backgroundRefreshProbe() else null
-    if (backend.usesEmulators) installTestHooks(backend, account, testFlags, backgroundProbe)
+    val showProbe = if (backend.usesEmulators) showRefreshProbe() else null
     // SYNTHETIC providers only on the emulators, and only when a check turned them on for this tab.
     val synthetic = backend.usesEmulators && readSessionFlag(SYNTHETIC_PROVIDERS_FLAG)
+    // Emulator checks count the SYNTHETIC requests (endpoint templates and statuses only). Real requests are never logged.
+    val requestLog = if (synthetic) InMemoryRequestLog(limit = 500) else null
+    if (backend.usesEmulators) installTestHooks(backend, account, testFlags, backgroundProbe, showProbe, requestLog)
     val connections = connectionStore(synthetic)
     val cache = externalCache(synthetic)
+    val revision = { testFlags.fixtureRevision }
     val services =
         AppServices(
             account = account,
@@ -74,10 +81,23 @@ fun main() {
             focusStore = { accountId -> IndexedDbFocusRunStore(accountId) },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
-            jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),
-            gitHub = gitHubServices(synthetic, connections, cache, transport(synthetic) { testFlags.gitHubScenario }),
+            jira =
+                jiraServices(
+                    synthetic,
+                    connections,
+                    cache,
+                    transport(synthetic, "jira", requestLog, revision) { testFlags.jiraScenario },
+                ),
+            gitHub =
+                gitHubServices(
+                    synthetic,
+                    connections,
+                    cache,
+                    transport(synthetic, "github", requestLog, revision) { testFlags.gitHubScenario },
+                ),
             connectionSync = connectionSync(synthetic, backend, connections),
             backgroundProbe = backgroundProbe,
+            showProbe = showProbe,
         )
     renderComposable(rootElementId = "root") {
         App(services)
@@ -171,16 +191,21 @@ private fun externalCache(synthetic: Boolean): IndexedDbKeyValueDatabase =
         IndexedDbKeyValueDatabase.EXTERNAL_CACHE_STORES,
     )
 
-/** The browser's fetch, or SYNTHETIC fixture answers that [scenario] can turn into one failure kind. */
+/**
+ * The browser's fetch, or SYNTHETIC fixture answers that [scenario] can turn into one failure kind, at fixture
+ * [revision]. SYNTHETIC requests are written to [requestLog] as [provider] when there is one.
+ */
 private fun transport(
     synthetic: Boolean,
+    provider: String,
+    requestLog: InMemoryRequestLog?,
+    revision: () -> Int,
     scenario: () -> SyntheticScenario,
-): HttpTransport =
-    if (synthetic) {
-        SyntheticHttpTransport(scenario, ::isOnline, ::nowMillis, latencyMillis = 400)
-    } else {
-        FetchHttpTransport()
-    }
+): HttpTransport {
+    if (!synthetic) return FetchHttpTransport()
+    val fixtures = SyntheticHttpTransport(scenario, ::isOnline, ::nowMillis, latencyMillis = 400, revision = revision)
+    return requestLog?.let { RecordingTransport(provider, fixtures, it, ::nowMillis, ::isOnline) } ?: fixtures
+}
 
 /** Jira, read-only (adr/ADR-006, ADR-008, ADR-013). */
 private fun jiraServices(
@@ -201,6 +226,7 @@ private fun jiraServices(
         search = lists,
         sprints = lists,
         family = JiraFamilyRepository(connections, transport, meta),
+        rows = JiraRowRepository(connections, transport, meta),
         deleteSavedCopies = {
             issues.clear()
             meta.clear()

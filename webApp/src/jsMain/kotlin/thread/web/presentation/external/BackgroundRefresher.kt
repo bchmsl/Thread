@@ -13,7 +13,6 @@ import org.w3c.dom.events.Event
 import thread.domain.external.BackgroundRefresh
 import thread.domain.external.ExternalProblem
 import thread.domain.external.PullRequestList
-import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
 
 /**
@@ -42,7 +41,7 @@ internal fun BackgroundRefresher(
     val scope = rememberCoroutineScope()
     val refresher = remember(jira, gitHub) { Refresher(jira, gitHub, probe) }
     DisposableEffect(refresher) {
-        val onVisibility: (Event) -> Unit = { if (isVisible()) scope.launch { refresher.check("visible") } }
+        val onVisibility: (Event) -> Unit = { if (isPageVisible()) scope.launch { refresher.check("visible") } }
         val onOnline: (Event) -> Unit = { scope.launch { refresher.check("online") } }
         document.addEventListener("visibilitychange", onVisibility)
         window.addEventListener("online", onOnline)
@@ -62,8 +61,6 @@ internal fun BackgroundRefresher(
         }
     }
 }
-
-private fun isVisible(): Boolean = document.asDynamic().visibilityState == "visible"
 
 private class Refresher(
     private val jira: JiraModel,
@@ -122,17 +119,7 @@ private class Refresher(
         connected: Boolean,
         problem: ExternalProblem?,
         blockedUntilMillis: Long?,
-    ): BackgroundRefresh.Conditions =
-        BackgroundRefresh.Conditions(
-            // This runs only inside the signed-in workspace.
-            signedIn = true,
-            fixtures = synthetic && probe?.withFixtures != true,
-            connected = connected,
-            online = isOnline(),
-            visible = isVisible(),
-            accessExpired = problem == ExternalProblem.Unauthorized,
-            blockedUntilMillis = blockedUntilMillis,
-        )
+    ): BackgroundRefresh.Conditions = providerConditions(synthetic, probe?.withFixtures == true, connected, problem, blockedUntilMillis)
 
     private fun due(
         conditions: BackgroundRefresh.Conditions,

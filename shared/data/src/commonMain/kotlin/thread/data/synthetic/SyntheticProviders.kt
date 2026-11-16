@@ -82,13 +82,15 @@ class SyntheticConnectionStore : ConnectionStore {
 
 /**
  * A transport that answers from [SyntheticFixtures] like Jira and GitHub would. [scenario] turns every answer into
- * one failure kind. When [isOnline] is false it gives no answer, like a browser offline.
+ * one failure kind. When [isOnline] is false it gives no answer, like a browser offline. [revision] is the fixture
+ * revision: from 1, a few SYNTHETIC records changed since revision 0, like Jira and GitHub between two calls (D67).
  */
 class SyntheticHttpTransport(
     private val scenario: () -> SyntheticScenario,
     private val isOnline: () -> Boolean,
     private val nowMillis: () -> Long,
     private val latencyMillis: Long = 0,
+    private val revision: () -> Int = { 0 },
 ) : HttpTransport {
     override suspend fun get(request: HttpRequest): HttpResponse {
         if (latencyMillis > 0) delay(latencyMillis)
@@ -112,10 +114,10 @@ class SyntheticHttpTransport(
         val path = url.substringBefore('?')
         val query = url.substringAfter('?', "")
         if (!gitHub && path.endsWith("/rest/api/3/search/jql")) {
-            val (status, body) = SyntheticJiraSearch.answer(query)
+            val (status, body) = SyntheticJiraSearch.answer(query, revision())
             return HttpResponse(status, emptyMap(), body)
         }
-        val body = if (gitHub) SyntheticFixtures.gitHub(path, query) else SyntheticFixtures.jira(path)
+        val body = if (gitHub) SyntheticFixtures.gitHub(path, query, revision()) else SyntheticFixtures.jira(path, revision())
         return if (body != null) ok(body, gitHub) else error(404, gitHub)
     }
 
@@ -164,20 +166,24 @@ object SyntheticFixtures {
     private val GITHUB_PULL = Regex("^https://api\\.github\\.com/repos/([^/]+)/([^/]+)/pulls/([0-9]+)(/reviews)?$")
     private val GITHUB_COMMIT = Regex("^https://api\\.github\\.com/repos/[^/]+/[^/]+/commits/([0-9a-f]{40})/(status|check-runs)$")
 
-    fun jira(path: String): String? {
+    fun jira(
+        path: String,
+        revision: Int = 0,
+    ): String? {
         if (path.endsWith("/_edge/tenant_info")) return """{"cloudId":"$CLOUD_ID"}"""
         if (path.endsWith("/rest/api/3/field")) return FIELDS
         JIRA_COMMENTS.matchEntire(path)?.let { match -> COMMENTS[match.groupValues[1]]?.let { return it } }
         JIRA_COMMENTS.matchEntire(path)?.let { match ->
             return SyntheticJiraSearch.issue(match.groupValues[1])?.let { """{"startAt":0,"maxResults":100,"total":0,"comments":[]}""" }
         }
-        JIRA_ISSUE.matchEntire(path)?.let { return ISSUES[it.groupValues[1]] ?: SyntheticJiraSearch.issue(it.groupValues[1]) }
+        JIRA_ISSUE.matchEntire(path)?.let { return ISSUES[it.groupValues[1]] ?: SyntheticJiraSearch.issue(it.groupValues[1], revision) }
         return null
     }
 
     fun gitHub(
         path: String,
         query: String,
+        revision: Int = 0,
     ): String? {
         if (path == "https://api.github.com/user") return VIEWER
         if (path == "https://api.github.com/search/issues") {
@@ -188,15 +194,42 @@ object SyntheticFixtures {
                 else -> null
             }
         }
+        val pulls = if (revision >= 1) PULLS + CHANGED_PULLS else PULLS
         GITHUB_PULL.matchEntire(path)?.let { match ->
-            val pull = PULLS["${match.groupValues[1]}/${match.groupValues[2]}#${match.groupValues[3]}"] ?: return null
+            val pull = pulls["${match.groupValues[1]}/${match.groupValues[2]}#${match.groupValues[3]}"] ?: return null
             return if (match.groupValues[4].isEmpty()) pull.json else pull.reviews
         }
         GITHUB_COMMIT.matchEntire(path)?.let { match ->
-            val pull = PULLS.values.firstOrNull { it.sha == match.groupValues[1] } ?: return null
+            val pull = pulls.values.firstOrNull { it.sha == match.groupValues[1] } ?: return null
             return if (match.groupValues[2] == "status") pull.statuses else pull.checkRuns
         }
         return null
+    }
+
+    /**
+     * From fixture revision 1 (D67): #12's tests passed and synthetic-reviewer-b approved it, so its CI and review
+     * state change between two calls. Its head commit stays the same.
+     */
+    private val CHANGED_PULLS: Map<String, SyntheticPull> by lazy {
+        val before = PULLS.getValue("synthetic-org/synthetic-app#12")
+        mapOf(
+            "synthetic-org/synthetic-app#12" to
+                SyntheticPull(
+                    sha = before.sha,
+                    json = before.json,
+                    reviews =
+                        """
+                        [{"user":{"login":"synthetic-reviewer-a"},"state":"APPROVED"},
+                         {"user":{"login":"synthetic-reviewer-b"},"state":"APPROVED"}]
+                        """.trimIndent(),
+                    statuses = before.statuses,
+                    checkRuns =
+                        """
+                        {"total_count":2,"check_runs":[{"name":"build","status":"completed","conclusion":"success"},
+                          {"name":"tests","status":"completed","conclusion":"success"}]}
+                        """.trimIndent(),
+                ),
+        )
     }
 
     private val MENTION_REPO = Regex("repo:([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)")

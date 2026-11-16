@@ -1,6 +1,9 @@
 package thread.domain.external
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -149,6 +152,10 @@ class RequestBudget(
  *
  * Device storage errors never stop the record from showing: a copy that cannot be read counts as no copy, and a
  * copy that cannot be saved is shown with `storedOnDevice = false`.
+ *
+ * One request per record at a time (D67): a load that starts while another load of the same record waits for the
+ * provider shares that answer instead of sending its own, so a detail view and a list row that show one record at
+ * once ask once. When the load that asked stops before the answer, a load still waiting asks itself.
  */
 class ExternalLoader<K, T>(
     private val source: ExternalRecordSource<K, T>,
@@ -156,6 +163,8 @@ class ExternalLoader<K, T>(
     private val nowMillis: () -> Long,
     private val rateLimit: RateLimitGate = RateLimitGate(),
 ) {
+    private val running = mutableMapOf<K, CompletableDeferred<ExternalResult<Refreshed<T>>>>()
+
     fun load(key: K): Flow<ExternalView<T>> =
         flow {
             if (!guard(false) { source.isConnected() }) {
@@ -174,18 +183,43 @@ class ExternalLoader<K, T>(
             }
         }
 
+    /** The provider's answer for [key]: the one already on its way, else a new request. */
+    private suspend fun ask(key: K): ExternalResult<Refreshed<T>> {
+        while (true) {
+            val shared = running[key] ?: break
+            try {
+                return shared.await()
+            } catch (e: CancellationException) {
+                // This load was stopped: stop. Else the load that asked was stopped: ask again below.
+                currentCoroutineContext().ensureActive()
+            }
+        }
+        val mine = CompletableDeferred<ExternalResult<Refreshed<T>>>()
+        running[key] = mine
+        try {
+            val result =
+                try {
+                    source.refresh(key, nowMillis())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    ExternalResult.Problem(ExternalProblem.Failed("client-error"))
+                }
+            mine.complete(result)
+            return result
+        } catch (e: CancellationException) {
+            mine.cancel()
+            throw e
+        } finally {
+            if (running[key] === mine) running.remove(key)
+        }
+    }
+
     private suspend fun refresh(
         key: K,
         saved: Saved<T>?,
     ): ExternalView<T> {
-        val result =
-            try {
-                source.refresh(key, nowMillis())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                ExternalResult.Problem(ExternalProblem.Failed("client-error"))
-            }
+        val result = ask(key)
         return when (result) {
             is ExternalResult.Ok -> ExternalView.Fresh(result.value.saved, result.value.storedOnDevice)
             is ExternalResult.Problem -> {

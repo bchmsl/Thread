@@ -1,11 +1,16 @@
 package thread.domain.external
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ExternalLoaderTest {
     /** In-memory source with SYNTHETIC records. */
     private class FakeSource(
@@ -219,4 +224,76 @@ class ExternalLoaderTest {
         assertEquals(null, budget.take(61_000))
         assertEquals(62_000, budget.take(61_500))
     }
+
+    /** A source whose answer waits until the test lets it go, to hold a request on its way. */
+    private class HeldSource : ExternalRecordSource<String, String> {
+        var refreshCalls = 0
+        var gate = CompletableDeferred<Unit>()
+
+        override suspend fun isConnected(): Boolean = true
+
+        override suspend fun readSaved(key: String): Saved<String>? = null
+
+        override suspend fun refresh(
+            key: String,
+            nowMillis: Long,
+        ): ExternalResult<Refreshed<String>> {
+            val call = ++refreshCalls
+            gate.await()
+            return ExternalResult.Ok(Refreshed(Saved("synthetic fresh $call", nowMillis), storedOnDevice = true))
+        }
+
+        override suspend fun forgetSaved(key: String) = Unit
+    }
+
+    @Test
+    fun twoLoadsOfOneRecordAtOnceShareOneRequest() =
+        runTest {
+            val source = HeldSource()
+            val loader = ExternalLoader(source, { online }, { now })
+
+            // A detail view and a row show the same record while its answer is on its way (D67).
+            val detail = async { loader.load("SYN-1").toList() }
+            val row = async { loader.load("SYN-1").toList() }
+            val other = async { loader.load("SYN-2").toList() }
+            runCurrent()
+            source.gate.complete(Unit)
+
+            val fresh = ExternalView.Fresh(Saved("synthetic fresh 1", 1_000L), true)
+            assertEquals(fresh, detail.await().last())
+            assertEquals(fresh, row.await().last(), "the row got the same answer")
+            assertEquals(ExternalView.Fresh(Saved("synthetic fresh 2", 1_000L), true), other.await().last())
+            assertEquals(2, source.refreshCalls, "one request per record")
+        }
+
+    @Test
+    fun whenTheLoadThatAskedStopsAWaitingLoadAsksItself() =
+        runTest {
+            val source = HeldSource()
+            val loader = ExternalLoader(source, { online }, { now })
+
+            val first = async { loader.load("SYN-1").toList() }
+            runCurrent()
+            val second = async { loader.load("SYN-1").toList() }
+            runCurrent()
+            first.cancel()
+            runCurrent()
+            source.gate.complete(Unit)
+
+            assertEquals(ExternalView.Fresh(Saved("synthetic fresh 2", 1_000L), true), second.await().last())
+            assertEquals(2, source.refreshCalls)
+        }
+
+    @Test
+    fun aLoadAfterTheAnswerAsksAgain() =
+        runTest {
+            val source = HeldSource()
+            source.gate.complete(Unit)
+            val loader = ExternalLoader(source, { online }, { now })
+
+            loader.load("SYN-1").toList()
+            loader.load("SYN-1").toList()
+
+            assertEquals(2, source.refreshCalls, "sharing covers only a request on its way")
+        }
 }

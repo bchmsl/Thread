@@ -19,7 +19,9 @@ import thread.domain.external.PullRequestRef
 import thread.domain.external.PullRequestSource
 import thread.domain.external.PullRequestSummary
 import thread.domain.external.RateLimitGate
+import thread.domain.external.RequestBudget
 import thread.domain.external.Saved
+import thread.domain.external.ShowRefresh
 import thread.domain.external.summary
 import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.gitHubReference
@@ -57,6 +59,7 @@ class GitHubServices(
 internal class GitHubModel(
     val services: GitHubServices,
     scope: CoroutineScope,
+    private val probe: ShowRefreshProbe? = null,
 ) {
     val name: String get() = services.name
     val isSynthetic: Boolean get() = services.isSynthetic
@@ -93,6 +96,33 @@ internal class GitHubModel(
     var version: Int by mutableStateOf(0)
         private set
 
+    /**
+     * Pull requests GitHub did not show in this page load (404, or 403 for this one pull request): deleted, or no
+     * access. Their Topic links stay; rows say so (D67). A later answer with the pull request clears it.
+     */
+    private var gone: Set<String> by mutableStateOf(emptySet())
+
+    /**
+     * Refresh on show (D67): pull requests on screen with their CI and reviews are loaded again one at a time, at most
+     * [PULLS_SHOWN_PER_MINUTE] a minute (four core requests each), and not again within a minute.
+     */
+    val pullRefresh =
+        ShowRefresh<PullRequestRef>(
+            scope = scope,
+            nowMillis = ::nowMillis,
+            chunkSize = 1,
+            budget = RequestBudget(PULLS_SHOWN_PER_MINUTE, 60_000L),
+            conditions = {
+                providerConditions(
+                    isSynthetic,
+                    probe?.withFixtures == true,
+                    connected,
+                    problem,
+                    services.coreRateLimit.blockedUntil(nowMillis()),
+                )
+            },
+        ) { refs -> refs.forEach { refreshShown(it) } }
+
     /** Reads the connection, the saved pull requests and the saved lists from this device. Storage errors read as nothing. */
     suspend fun reload() {
         connected = orFallback(null) { services.connections.gitHub() } != null
@@ -117,6 +147,8 @@ internal class GitHubModel(
     /** After a connect, disconnect or token change: every open view loads again. */
     suspend fun connectionChanged() {
         problem = null
+        pullRefresh.clear()
+        gone = emptySet()
         lists.clear()
         reload()
         version++
@@ -128,16 +160,38 @@ internal class GitHubModel(
         view: ExternalView<PullRequestDetail>,
     ) {
         when (view) {
+            // A request is on its way: a row showing the same pull request need not ask too (D67).
+            ExternalView.Loading, is ExternalView.Refreshing -> pullRefresh.noteAsked(ref, nowMillis())
             is ExternalView.Fresh -> {
                 problem = null
+                pullRefresh.noteAsked(ref, view.saved.savedAtMillis)
+                gone = gone - ref.id
                 if (view.storedOnDevice) saved = saved + (ref.id to view.saved)
             }
             is ExternalView.Missing -> {
                 if (view.problem == ExternalProblem.NotFound) saved = saved - ref.id
+                if (view.problem == ExternalProblem.NotFound || view.problem == ExternalProblem.Forbidden) gone = gone + ref.id
                 note(view.problem)
             }
-            is ExternalView.SavedCopy -> note(view.problem)
-            else -> Unit
+            is ExternalView.SavedCopy -> {
+                if (view.problem == ExternalProblem.Forbidden) gone = gone + ref.id
+                note(view.problem)
+            }
+        }
+    }
+
+    /** Whether GitHub did not show pull request [id] in this page load: deleted, or no access (D67). */
+    fun isGone(id: String): Boolean = id in gone
+
+    /**
+     * Loads pull request [ref], shown in a row, again with its CI and reviews (D67). A 403 for this one pull request
+     * marks it only: it says nothing about the connection, unlike a 401 or a rate limit.
+     */
+    private suspend fun refreshShown(ref: PullRequestRef) {
+        probe?.runs?.add("github:${ref.id}")
+        pullLoader.load(ref).collect { view ->
+            val refused = (view as? ExternalView.Missing)?.problem ?: (view as? ExternalView.SavedCopy)?.problem
+            if (refused == ExternalProblem.Forbidden) gone = gone + ref.id else observePull(ref, view)
         }
     }
 
@@ -181,6 +235,12 @@ internal class GitHubModel(
     /** The workspace reference of [ref], or null when GitHub is not connected. */
     fun reference(ref: PullRequestRef): ExternalReference? = if (connected) gitHubReference(ref) else null
 }
+
+/**
+ * Pull requests refreshed on show a minute (D67): 32 core requests at most, far inside GitHub's 5,000 an hour, and
+ * spread out so the secondary limits never see a burst.
+ */
+private const val PULLS_SHOWN_PER_MINUTE = 8
 
 /** Loads pull request [ref] (null: nothing) and keeps [gitHub] up to date with what it showed. [refresh] reloads it. */
 @Composable

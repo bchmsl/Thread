@@ -30,6 +30,7 @@ Status: Proposed (2026-11-13). Written in Phase 10 while the owner was away. Bui
 - Assigned to me: `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`, up to 2 pages of 50. The list says when it is not complete.
 - Search: a typed key looks up that ticket (`key = "ABC-1"`); a 400 answer for a key means "no result". Other text becomes `text ~ "words"`, and a single word is also tried as a label. Lucene special characters and quotes are dropped, so typed text never reaches JQL unescaped. One page, never saved.
 - Copies refresh when opened and then every 5 minutes while the page is visible and online.
+- Rows refresh when they show (D67): a Topic's linked tickets and confirmed suggestions go in one search, `key in (...)` with the row fields only, up to 50 keys and 6 searches a minute, and a ticket asked less than a minute ago is skipped. The rows are saved in `jiraMeta` under `row:<KEY>`. A key Jira refuses (400) is found by splitting the search, shows "Not found or no access", and keeps its saved row.
 - Offline or rate limited: the saved copy is shown with its age; no request is made. 401 keeps copies readable and asks to reconnect. 403 and 404 say so; 404 forgets the saved copy. One rate-limit gate covers tickets, lists and search.
 
 ### Screens

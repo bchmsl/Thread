@@ -31,6 +31,7 @@ Status: Proposed (2026-11-13). Written in Phase 11 while the owner was away. Bui
 - Thread keeps to 10 search requests a minute (GitHub allows 30 for the whole token), so other tools using the same token keep their share. Past that, the list shows its saved copy and says GitHub is limiting requests until the minute is over.
 - Rows show CI and review state only for pull requests opened on this device, because one list request cannot carry them (ADR-007). Other rows say "Open to load CI and reviews".
 - A pull request refreshes when opened and then every 5 minutes while the page is visible and online, like Jira.
+- Rows refresh when they show (D67): a Topic's linked pull requests, and in the list groups and Today's rail the rows of pull requests opened before, ask the four requests of one pull request, at most 8 pull requests a minute, skipping any asked less than a minute ago. A 404 or 403 shows "Not found or no access" on the row.
 - Offline or rate limited: the saved copy is shown with its age; no request is made. 401 keeps copies readable and asks to reconnect. 403 says GitHub refused; 403 or 404 on statuses or check runs only marks that CI part unreadable ("CI sources"). 404 on the pull request forgets the saved copy. Search and core each have their own rate-limit gate.
 
 ### Screens

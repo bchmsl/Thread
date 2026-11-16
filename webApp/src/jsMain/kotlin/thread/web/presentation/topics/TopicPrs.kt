@@ -36,7 +36,9 @@ import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.CONNECTIONS_PLACE
 import thread.web.presentation.external.CiIndicator
 import thread.web.presentation.external.GitHubModel
+import thread.web.presentation.external.GoneBadge
 import thread.web.presentation.external.PullRequestDetailView
+import thread.web.presentation.external.RefreshPullsOnShow
 import thread.web.presentation.external.ReviewIndicator
 import thread.web.presentation.external.ViewBanner
 import thread.web.presentation.external.XD_TITLE_ID
@@ -140,11 +142,14 @@ private fun LinkedPulls(
     onOpen: (PullRequestRef) -> Boolean,
 ) {
     val toasts = LocalToasts.current
+    // The rows show CI and reviews: GitHub is asked for the latest while they show (D67). The open one asks on its own.
+    RefreshPullsOnShow(gitHub, references.mapNotNull(::pullRequestRefOf).filter { it.id != openId })
     Ul({ classes("tlist") }) {
         references.forEach { reference ->
             val ref = pullRequestRefOf(reference)
             val summary = ref?.let { gitHub.summary(it.id) }
             val detail = ref?.let { gitHub.detail(it.id) }
+            val gone = ref != null && gitHub.isGone(ref.id)
             val isOpen = ref != null && openId == ref.id
             val label = "#${reference.key}"
             key(reference.id) {
@@ -159,13 +164,17 @@ private fun LinkedPulls(
                         }) {
                             Span({ classes("xrow__key") }) {
                                 B { Text(label) }
-                                if (detail != null) {
+                                if (gone) {
+                                    GoneBadge()
+                                } else if (detail != null) {
                                     CiIndicator(detail.ci)
                                     ReviewIndicator(detail.review)
                                 }
                             }
                             if (summary != null) {
                                 Span({ classes("xrow__title") }) { Text(summary.title) }
+                            } else if (gone) {
+                                Span({ classes("xrow__snip") }) { Text(reference.instance) }
                             } else {
                                 Span({ classes("xrow__snip") }) {
                                     Text("${reference.instance} ")

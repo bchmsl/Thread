@@ -33,9 +33,11 @@ import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.CONNECTIONS_PLACE
+import thread.web.presentation.external.GoneBadge
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
 import thread.web.presentation.external.JiraTicket
+import thread.web.presentation.external.RefreshJiraOnShow
 import thread.web.presentation.external.ViewBanner
 import thread.web.presentation.external.XD_TITLE_ID
 import thread.web.presentation.external.jiraItemPlace
@@ -88,6 +90,14 @@ internal fun TopicJiraSection(
             }
         },
     ) {
+        // Linked and suggested rows show a status: Jira is asked for the latest while they show (D67). Only keys Jira
+        // showed before are suggested here, and the open ticket asks on its own.
+        val shownKeys =
+            (
+                references.filter(jira::isHere).mapNotNull { JiraIssueKey.parse(it.key) } +
+                    suggestions.jira.mapNotNull { it.jiraKey }.filter { jira.summary(it.value) != null }
+            ).distinct().filter { it.value != openKey }
+        RefreshJiraOnShow(jira, shownKeys)
         if (references.isEmpty()) {
             P({ classes("sect__empty") }) { Text("Nothing linked. Link a ticket here or from its page.") }
         } else {
@@ -154,7 +164,7 @@ private fun LinkedTickets(
                             attr("data-key", reference.key)
                             if (isOpen) attr("aria-current", "true")
                             onClick { if (onOpen(issueKey)) it.preventDefault() }
-                        }) { RowText(reference.key, summary?.status, summary?.title, here = true) }
+                        }) { RowText(reference.key, summary?.status, summary?.title, here = true, gone = jira.isGone(reference.key)) }
                     } else {
                         Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false) }
                     }
@@ -177,13 +187,20 @@ private fun RowText(
     status: JiraStatus?,
     title: String?,
     here: Boolean,
+    gone: Boolean = false,
 ) {
     Span({ classes("xrow__key") }) {
         B { Text(key) }
-        if (status != null) JiraStatusLozenge(status)
+        // Jira did not show the ticket now: the saved status may be out of date, so it is not shown (D67).
+        if (gone) {
+            GoneBadge()
+        } else if (status != null) {
+            JiraStatusLozenge(status)
+        }
     }
     when {
         title != null -> Span({ classes("xrow__title") }) { Text(title) }
+        gone -> Unit
         here ->
             Span({ classes("xrow__snip") }) {
                 Span({ classes("dl-badge") }) {

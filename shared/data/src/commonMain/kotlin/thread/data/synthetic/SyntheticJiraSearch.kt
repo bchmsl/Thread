@@ -164,8 +164,41 @@ internal object SyntheticJiraSearch {
     private val IN_LIST = Regex("^(key|parent) in \\(([^)]*)\\)")
     private val QUOTED_KEY = Regex("\"([A-Z][A-Z0-9_]*-[0-9]+)\"")
 
+    /**
+     * The tickets at fixture [revision] (D67): from 1, SYN-103 moved to In Progress, so a row shows a new status
+     * between two calls.
+     */
+    private fun ticketsAt(revision: Int): List<SyntheticTicket> =
+        if (revision < 1) {
+            tickets
+        } else {
+            tickets.map { ticket ->
+                if (ticket.key != "SYN-103") {
+                    ticket
+                } else {
+                    SyntheticTicket(
+                        ticket.key,
+                        ticket.type,
+                        ticket.title,
+                        "In Progress",
+                        "indeterminate",
+                        ticket.labels,
+                        ticket.mine,
+                        updated = "2026-11-16T09:00:00.000+0400",
+                        text = ticket.text,
+                        inOpenSprint = ticket.inOpenSprint,
+                        parent = ticket.parent,
+                    )
+                }
+            }
+        }
+
     /** The status and body of a `GET /rest/api/3/search/jql` answer for [query] (the URL query string). */
-    fun answer(query: String): Pair<Int, String> {
+    fun answer(
+        query: String,
+        revision: Int = 0,
+    ): Pair<Int, String> {
+        val tickets = ticketsAt(revision)
         val params = query.split('&').associate { it.substringBefore('=') to percentDecode(it.substringAfter('=', "")) }
         val jql = params["jql"] ?: return 400 to error("The JQL query is missing.")
         val pageSize = params["maxResults"]?.toIntOrNull()?.coerceIn(1, 100) ?: 50
@@ -217,8 +250,11 @@ internal object SyntheticJiraSearch {
     }
 
     /** The issue answer for the tickets that have no hand-written fixture. */
-    fun issue(key: String): String? {
-        val ticket = tickets.firstOrNull { it.key == key } ?: return null
+    fun issue(
+        key: String,
+        revision: Int = 0,
+    ): String? {
+        val ticket = ticketsAt(revision).firstOrNull { it.key == key } ?: return null
         val description =
             if (ticket.text.isEmpty()) {
                 "null"

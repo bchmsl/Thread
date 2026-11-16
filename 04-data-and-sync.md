@@ -207,6 +207,7 @@ Status: **provisional**. Written in Phase 10 while the owner was away. Details: 
 - A Topic in Trash hides its Jira links; Restore brings them back. Delete forever leaves the id-only refs and links.
 - Offline or rate limited shows the saved copy with its age and makes no request. Expired access keeps copies readable. Not found forgets the saved copy.
 - Copies refresh on open and every 5 minutes while visible and online.
+- Since D67, rows that show a ticket's or pull request's status also refresh when they show. Jira rows are saved on the device under `row:<KEY>` in `jiraMeta`; nothing reaches Firestore.
 
 ## Phase 11 outcome (proposed, 2026-11-13)
 

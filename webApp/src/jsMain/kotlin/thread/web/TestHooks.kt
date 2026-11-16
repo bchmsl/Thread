@@ -5,11 +5,14 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.promise
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
+import thread.data.http.InMemoryRequestLog
 import thread.data.synthetic.SyntheticScenario
 import thread.domain.external.BackgroundRefresh
 import thread.web.platform.WallClock
+import thread.web.platform.readSessionFlag
 import thread.web.platform.writeSessionFlag
 import thread.web.presentation.external.BackgroundRefreshProbe
+import thread.web.presentation.external.ShowRefreshProbe
 
 /** The tab flag that makes the app use the SYNTHETIC Jira and GitHub providers (emulators only). */
 internal const val SYNTHETIC_PROVIDERS_FLAG = "thread.syntheticProviders"
@@ -34,8 +37,20 @@ internal fun backgroundRefreshProbe(): BackgroundRefreshProbe {
     )
 }
 
+/** The tab flag that lets refresh on show run with the SYNTHETIC providers (D67). */
+private const val SHOW_PROBE_FLAG = "thread.showRefreshProbe"
+
+/**
+ * The refresh-on-show probe for this tab (emulators only). It runs with the SYNTHETIC fixtures only after a check
+ * turned it on with `threadTest.setShowRefresh`; otherwise it only records runs.
+ */
+internal fun showRefreshProbe(): ShowRefreshProbe = ShowRefreshProbe(withFixtures = readSessionFlag(SHOW_PROBE_FLAG))
+
 /** Failure switches for automated checks. Only the emulator test hooks change them. */
 internal class TestFlags {
+    /** The SYNTHETIC fixture revision: from 1, a few tickets and pull requests changed, as between two calls (D67). */
+    var fixtureRevision: Int = 0
+
     /** When true, every local save aborts its IndexedDB transaction. */
     var failLocalSaves: Boolean = false
 
@@ -61,6 +76,8 @@ internal fun installTestHooks(
     account: FirebaseAccountSession,
     flags: TestFlags,
     backgroundProbe: BackgroundRefreshProbe?,
+    showProbe: ShowRefreshProbe?,
+    requestLog: InMemoryRequestLog?,
 ) {
     val hooks: dynamic = js("({})")
     hooks.signIn = { subject: String ->
@@ -106,5 +123,23 @@ internal fun installTestHooks(
     }
     // The background refreshes started in this page load, as `provider:list:reason`.
     hooks.backgroundRuns = { backgroundProbe?.runs?.toTypedArray() ?: emptyArray() }
+    // Lets refresh on show run with the SYNTHETIC fixtures (or not), and reloads (D67).
+    hooks.setShowRefresh = { on: Boolean ->
+        writeSessionFlag(SHOW_PROBE_FLAG, on)
+        window.location.reload()
+    }
+    // The refresh-on-show requests started in this page load, as `provider:ITEM+ITEM`.
+    hooks.showRuns = { showProbe?.runs?.toTypedArray() ?: emptyArray() }
+    // Moves the SYNTHETIC fixtures to [revision]: from 1, SYN-103 is In Progress and #12's CI and reviews passed.
+    hooks.setFixtureRevision = { revision: Int -> flags.fixtureRevision = revision }
+    // The SYNTHETIC requests of this page load, as `provider endpoint status`. No URL, header or body is kept.
+    hooks.requests = {
+        requestLog
+            ?.entries
+            ?.value
+            ?.map { "${it.provider} ${it.endpoint} ${it.status ?: "none"}" }
+            ?.toTypedArray() ?: emptyArray()
+    }
+    hooks.clearRequests = { requestLog?.clear() }
     window.asDynamic().threadTest = hooks
 }

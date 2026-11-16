@@ -58,6 +58,7 @@ import thread.web.presentation.external.JiraScreen
 import thread.web.presentation.external.JiraServices
 import thread.web.presentation.external.PrItemScreen
 import thread.web.presentation.external.PrScreen
+import thread.web.presentation.external.ShowRefreshProbe
 import thread.web.presentation.external.jiraPlace
 import thread.web.presentation.external.jiraSearchPlace
 import thread.web.presentation.external.jiraStatusClasses
@@ -124,6 +125,8 @@ class AppServices(
     val connectionSync: ((AccountId) -> ConnectionSync)?,
     /** Emulator checks only: lets the background refresh run with the SYNTHETIC fixtures and records its runs. */
     val backgroundProbe: BackgroundRefreshProbe? = null,
+    /** Emulator checks only: lets refresh on show run with the SYNTHETIC fixtures and records its requests (D67). */
+    val showProbe: ShowRefreshProbe? = null,
 )
 
 @Composable
@@ -167,8 +170,8 @@ private fun Workspace(
         }
     // Lists load in the workspace's scope, so leaving a page does not cancel a refresh; signing out stops them all.
     val workspaceScope = rememberCoroutineScope()
-    val jira = remember { JiraModel(services.jira, workspaceScope) }
-    val gitHub = remember { GitHubModel(services.gitHub, workspaceScope) }
+    val jira = remember { JiraModel(services.jira, workspaceScope, services.showProbe) }
+    val gitHub = remember { GitHubModel(services.gitHub, workspaceScope, services.showProbe) }
     val focus =
         remember {
             FocusModel(services.focusStore(signedIn.accountId), workspace, workspaceScope, { services.newId("") }) { text ->

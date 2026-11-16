@@ -22,11 +22,14 @@ import thread.domain.external.JiraIssueList
 import thread.domain.external.JiraIssueSource
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraList
+import thread.domain.external.JiraRowSource
 import thread.domain.external.JiraSearch
 import thread.domain.external.JiraSite
 import thread.domain.external.JiraSprints
 import thread.domain.external.RateLimitGate
+import thread.domain.external.RequestBudget
 import thread.domain.external.Saved
+import thread.domain.external.ShowRefresh
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.jiraReference
@@ -53,6 +56,8 @@ class JiraServices(
     val sprints: JiraSprints,
     /** Parents, children and siblings of a Topic's linked tickets, for Topic suggestions (D49 S4). */
     val family: JiraFamilySource,
+    /** Ticket rows refreshed by key while a screen shows them (D67). */
+    val rows: JiraRowSource,
     /** Deletes every saved Jira copy on this device. The connection stays. */
     val deleteSavedCopies: suspend () -> Unit,
 ) {
@@ -74,6 +79,7 @@ internal class JiraSiteInfo(
 internal class JiraModel(
     val services: JiraServices,
     scope: CoroutineScope,
+    private val probe: ShowRefreshProbe? = null,
 ) {
     val name: String get() = services.name
     val isSynthetic: Boolean get() = services.isSynthetic
@@ -110,8 +116,38 @@ internal class JiraModel(
     var saved: Map<String, Saved<JiraIssue>> by mutableStateOf(emptyMap())
         private set
 
-    /** Rows of the saved Assigned list and of searches in this page load, by key, for tickets not opened here. */
-    private var rows: Map<String, JiraIssueSummary> by mutableStateOf(emptyMap())
+    /**
+     * Ticket rows by key, with when Jira sent them: the saved Assigned list, rows refreshed on show (D67, saved on this
+     * device), and searches in this page load. The newest answer for a key wins.
+     */
+    private var rows: Map<String, Saved<JiraIssueSummary>> by mutableStateOf(emptyMap())
+
+    /**
+     * Keys Jira did not show in this page load: not found, or not shared with this account (a search cannot tell
+     * which). Their Topic links stay; rows say so (D67). A later answer with the ticket clears it.
+     */
+    private var gone: Set<String> by mutableStateOf(emptySet())
+
+    /**
+     * Refresh on show (D67): ticket rows on screen are asked about in one `key in (...)` search per
+     * [ROW_SEARCH_KEYS] keys, at most [ROW_SEARCHES_PER_MINUTE] searches a minute, and not again within a minute.
+     */
+    val rowRefresh =
+        ShowRefresh<JiraIssueKey>(
+            scope = scope,
+            nowMillis = ::nowMillis,
+            chunkSize = ROW_SEARCH_KEYS,
+            budget = RequestBudget(ROW_SEARCHES_PER_MINUTE, 60_000L),
+            conditions = {
+                providerConditions(
+                    isSynthetic,
+                    probe?.withFixtures == true,
+                    connected,
+                    problem,
+                    services.rateLimit.blockedUntil(nowMillis()),
+                )
+            },
+        ) { keys -> refreshRows(keys) }
 
     /** The last access problem Jira answered with (expired, refused, rate limited). A fresh answer clears it. */
     var problem: ExternalProblem? by mutableStateOf(null)
@@ -142,18 +178,17 @@ internal class JiraModel(
             }
         if (connection == null) sprints = null
         val assigned = if (connection == null) null else orFallback(null) { services.lists.readSaved(JiraList.Assigned) }
-        rows =
-            assigned
-                ?.value
-                ?.issues
-                .orEmpty()
-                .associateBy { it.key.value }
+        val shownRows = if (connection == null) emptyList() else orFallback(emptyList()) { services.rows.allSavedRows() }
+        rows = emptyMap()
+        keepNewer(assigned?.let { list -> list.value.issues.map { Saved(it, list.savedAtMillis) } }.orEmpty() + shownRows)
         checked = true
     }
 
     /** After a connect, disconnect or token change: every open view loads again. */
     suspend fun connectionChanged() {
         problem = null
+        rowRefresh.clear()
+        gone = emptySet()
         lists.clear()
         sprints = null
         notTickets = emptyMap()
@@ -180,17 +215,52 @@ internal class JiraModel(
         view: ExternalView<JiraIssue>,
     ) {
         when (view) {
+            // A request is on its way: a row showing the same ticket need not ask too (D67).
+            ExternalView.Loading, is ExternalView.Refreshing -> rowRefresh.noteAsked(key, nowMillis())
             is ExternalView.Fresh -> {
                 problem = null
+                rowRefresh.noteAsked(key, view.saved.savedAtMillis)
+                gone = gone - key.value
                 if (view.storedOnDevice) saved = saved + (key.value to view.saved)
             }
             is ExternalView.Missing -> {
                 if (view.problem == ExternalProblem.NotFound) saved = saved - key.value
+                if (view.problem == ExternalProblem.NotFound || view.problem == ExternalProblem.Forbidden) gone = gone + key.value
                 note(view.problem)
             }
             is ExternalView.SavedCopy -> note(view.problem)
-            else -> Unit
         }
+    }
+
+    /** Whether Jira did not show [key] in this page load: not found, or no access (D67). */
+    fun isGone(key: String): Boolean = key in gone
+
+    /** Asks Jira for the rows of [keys] on screen and shows the answers in place (D67). */
+    private suspend fun refreshRows(keys: List<JiraIssueKey>) {
+        probe?.runs?.add("jira:" + keys.joinToString("+") { it.value })
+        val answer = services.rows.refreshRows(keys, keys.filter { it.value in gone }.toSet(), nowMillis())
+        keepNewer(answer.rows)
+        gone = gone - answer.rows.map { it.value.key.value }.toSet() + answer.refused.map { it.value }
+        when (val stopped = answer.problem) {
+            null -> problem = null
+            is ExternalProblem.RateLimited -> {
+                services.rateLimit.block(stopped.retryAtMillis)
+                note(stopped)
+            }
+            else -> note(stopped)
+        }
+    }
+
+    /** Takes [fetched] rows where they are newer than the row Thread has. */
+    private fun keepNewer(fetched: List<Saved<JiraIssueSummary>>) {
+        if (fetched.isEmpty()) return
+        val next = rows.toMutableMap()
+        for (row in fetched) {
+            val key = row.value.key.value
+            val current = next[key]
+            if (current == null || current.savedAtMillis <= row.savedAtMillis) next[key] = row
+        }
+        rows = next
     }
 
     /** Whether Jira said less than a day ago that [key] is not a ticket it shows. */
@@ -213,7 +283,11 @@ internal class JiraModel(
         when (view) {
             is ExternalView.Fresh -> {
                 problem = null
-                keepRows(view.saved.value.issues)
+                val at = view.saved.savedAtMillis
+                keepRows(view.saved.value.issues, at)
+                // The list just brought these rows: rows on screen need not ask about them again (D67).
+                view.saved.value.issues
+                    .forEach { rowRefresh.noteAsked(it.key, at) }
             }
             is ExternalView.SavedCopy -> note(view.problem)
             is ExternalView.Missing -> note(view.problem)
@@ -221,9 +295,13 @@ internal class JiraModel(
         }
     }
 
-    /** Remembers search result rows for this page load. They are never saved. */
-    fun keepRows(issues: List<JiraIssueSummary>) {
-        rows = rows + issues.associateBy { it.key.value }
+    /** Remembers rows Jira sent at [atMillis], such as search results. Search rows are never saved. */
+    fun keepRows(
+        issues: List<JiraIssueSummary>,
+        atMillis: Long = nowMillis(),
+    ) {
+        keepNewer(issues.map { Saved(it, atMillis) })
+        gone = gone - issues.map { it.key.value }.toSet()
     }
 
     fun note(problem: ExternalProblem) {
@@ -233,11 +311,16 @@ internal class JiraModel(
         }
     }
 
-    /** The newest row Thread knows for [key]: the saved ticket, else a list or search row. */
-    fun summary(key: String): JiraIssueSummary? = saved[key]?.value?.summary() ?: rows[key]
+    /** The newest row Thread knows for [key]: the saved ticket or a row, whichever Jira sent last. */
+    fun summary(key: String): JiraIssueSummary? {
+        val ticket = saved[key]
+        val row = rows[key]
+        return if (ticket == null || (row != null && row.savedAtMillis > ticket.savedAtMillis)) row?.value else ticket.value.summary()
+    }
 
     /** Every ticket Thread knows on this device, saved tickets first. */
-    fun known(): List<JiraIssueSummary> = saved.values.map { it.value.summary() } + rows.values.filter { it.key.value !in saved }
+    fun known(): List<JiraIssueSummary> =
+        saved.keys.mapNotNull(::summary) + rows.values.filter { it.value.key.value !in saved }.map { it.value }
 
     /** Whether [key] can be shown now: saved here, or Jira is reachable (v3 jiraAvailable). */
     fun canShow(key: String): Boolean = connected && (key in saved || isOnline())
@@ -257,6 +340,15 @@ private const val CURRENT_SPRINT_FLAG = "thread.jira.currentSprintOnly"
 private const val NOT_TICKETS_NAME = "thread.jira.notTickets"
 
 private const val NOT_A_TICKET_MILLIS = 24 * 60 * 60 * 1_000L
+
+/** Keys in one refresh-on-show search: one page of Jira's enhanced search (JiraClient.SEARCH_PAGE). */
+private const val ROW_SEARCH_KEYS = 50
+
+/**
+ * Refresh-on-show searches a minute (D67). A Topic needs one; a split to find a key Jira refuses happens once per
+ * key and page load, and counts as one here.
+ */
+private const val ROW_SEARCHES_PER_MINUTE = 6
 
 /** The stored pairs; anything unreadable is left out. Keys are checked with [JiraIssueKey.parse]. */
 private fun readNotTickets(name: String): Map<String, Long> =

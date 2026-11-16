@@ -265,6 +265,12 @@ private fun ListPanel(
                     pullRequestsByRepository(page.items).forEachIndexed { index, group ->
                         key(list, group.repo.lowercase()) {
                             RepositoryGroup(group, list, index) {
+                                // Rows of an open group that show CI and reviews ask GitHub for the latest (D67). The
+                                // list itself brings the rest; the pull request open next to it asks on its own.
+                                RefreshPullsOnShow(
+                                    gitHub,
+                                    group.pulls.map { it.ref }.filter { it != shownRef && gitHub.detail(it.id) != null },
+                                )
                                 group.pulls.forEach { pull ->
                                     key(pull.ref.id) {
                                         PrRow(

@@ -51,6 +51,8 @@ internal fun ReviewRequestedRail(gitHub: GitHubModel) {
                 if (items.isEmpty()) {
                     P({ classes("muted") }) { Text("No review requests.") }
                 } else {
+                    // Rows that show CI and reviews ask GitHub for the latest while Today shows them (D67).
+                    RefreshPullsOnShow(gitHub, items.map { it.ref }.filter { gitHub.detail(it.id) != null })
                     Div {
                         items.forEach { pull ->
                             val detail = gitHub.detail(pull.ref.id)

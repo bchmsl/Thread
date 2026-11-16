@@ -6,6 +6,8 @@ Phase 4 review (2026-11-13, owner away): checked for consistency with the other 
 
 Update 2026-11-16 (D57): the description is shown as formatted text, parsed from its GitHub Markdown. See "Description" below. The rest is unchanged.
 
+Update 2026-11-16 (D67): pull request rows refresh when they show. See "Cache policy" below.
+
 ## Context
 
 - GitHub is read-only in v1. The v3 design shows two lists, "Mine" and "Review requested", and one pull request with its reviews and CI state.
@@ -76,13 +78,15 @@ Update 2026-11-16 (D57): the description is shown as formatted text, parsed from
 - IndexedDB `thread-external-cache`, stores `prLists` (`mine`, `review-requested`) and `pullRequests` (by `owner/repo#number`). Fixture mode uses `thread-external-cache-synthetic`.
 - A record is `{recordVersion: 1, savedAtMillis, scope: "github", data}`. `data` keeps only what Thread shows.
 - A list row in `data` keeps `number`, `title`, `user.login`, `draft`, `updated_at`, `repository_url` and, since D62, `assignees: [{login, id}]` (always an array; GitHub's `null` is saved as none). A list saved before D62 has no `assignees` key: its rows show no assignees until the next refresh. The record version stays 1, because reading the old shape is still correct.
-- A copy is refreshed when it is opened, or with Refresh. There is no background refresh and no ETag revalidation yet.
+- A copy is refreshed when it is opened, every 5 minutes while it stays open (ADR-014), or with Refresh. The two lists also refresh in the background (D51).
+- **Refresh on show (D67):** a pull request that shows as a row with its CI and reviews refreshes when the row shows, with the four requests of "One pull request": a Topic's linked pull requests, and on the Pull requests page and Today's rail the rows of a pull request opened before. A pull request asked less than a minute ago is not asked again, one on its way is not asked twice, and rows ask one after another, at most 8 pull requests (32 core requests) a minute. The D51 guards apply: nothing goes out offline, hidden, with fixtures, after a 401 or inside a rate limit. A 404 or 403 shows "Not found or no access" on the row; the Topic link stays.
+- There is no ETag revalidation yet.
 - "Delete saved copies" clears all four cache stores. Disconnect hides the copies until GitHub is connected again (v3).
 - Nothing goes to Firestore. The worker (ADR-008) never sees these requests.
 
 ## Consequences
 
-- One pull request costs four core requests per refresh. That is fine for a person opening pull requests by hand. Lists of CI states would need GraphQL or ETags later.
+- One pull request costs four core requests per refresh. That is fine for a person opening pull requests by hand. Since D67, rows refresh CI states with the same four requests, capped at 8 pull requests a minute and, in the lists, only for pull requests opened before. A full list of CI states would still need GraphQL or ETags.
 - The four requests run one after another: 3.2 s in the live run. Reviews, status and check runs could run side by side after the pull request call. Not changed in this phase.
 - The core limit belongs to the person, not to the token. In the live run, 732 of the 5,000 hourly requests were already used before Thread's first core request, by other use of the same account. Thread shows "GitHub is limiting requests" when that budget runs out.
 - An organization that owns the repositories may need to approve the token. Until then the token sees public data only. Private repos then answer 404, which reads as "not found". P3-G2 records it if it happens.
