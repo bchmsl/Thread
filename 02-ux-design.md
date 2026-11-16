@@ -53,7 +53,7 @@ Upcoming and No date follow Earlier planned (D53). A Task is in the first group 
 Active and paused Topics (D59): Topics whose status is in the Active or Paused category, one group per status in Settings order, oldest first.
 - List / Board switch, List by default; each device keeps the choice.
 - List: a heading per status (chevron, status swatch, name, count) over Topics list rows. A status with no Topic has no group. Groups start open, and each device remembers which are closed.
-- Board: one read-only lane per status with the Today cards. A lane with no Topic says "No Topics", hidden on phones. Lanes scroll inside the section.
+- Board: one read-only lane per status with the Today cards. A lane with no Topic says "No Topics", hidden on phones. At 760 px and wider, lanes that do not fit first widen the board (264 px a lane, up to the window less a 50 px gutter; the heading keeps the page width), then shrink evenly to 210 px, and only then scroll inside the section (D66). Below 760 px the lanes stack, as before.
 - With only one Active or Paused status there is no heading, and the hint names the status.
 Topic labels provide context.
 A Task that qualifies for multiple sections should not create confusing duplicates.
@@ -74,6 +74,7 @@ Small, readable cards. No giant nested previews.
 Drag-and-drop with keyboard/menu equivalent.
 Reflect the status change locally and persist it.
 Preserve an intentional accessible horizontal-scroll experience on narrow displays.
+Width (D66), at 760 px and wider: when the lanes fit the page, nothing changes. When they do not, the board grows past the page, centered, only as far as the lanes need (256 px a lane, gaps included), up to the window less a 50 px gutter or the safe area. The page heading row keeps the page width. If the lanes still do not fit, they shrink evenly to a 210 px floor, and only then does the board scroll sideways inside itself. At the floor a card keeps its hex, its wrapped name, its next line and its status select. Six lanes fit from a 1424 px window, seven from 1672 px. Below 760 px the board scrolls inside itself with 240 px lanes, as before.
 
 ### Topic Details
 
@@ -81,6 +82,7 @@ Header with title/status and short goal.
 Main flow: Additional information, personal Tasks, Notes.
 Additional information (D52) replaces v3's "Pick up here": the same tinted section, one text box (4 rows) labelled by its heading, placeholder "Context, links, decisions: anything worth keeping with this Topic". It saves on blur, a second after typing stops, and when the page leaves. A Topic saved before shows its "Where I left off" and "Next step" text in the box until it is edited.
 Secondary region: Jira, PRs. Since D54 there is no Reminders section: Task rows show a bell with the next reminder, and "Topic reminders" appears only while the Topic has some left from an older build.
+Linked Jira tickets nest under their linked parent (D64), by Jira's `parent` field only; issue links stay flat. Nested lists, 25 px a level (16 px below 760 px) with a thin guide line, no deeper indent after 3 levels. A ticket whose parent is not linked shows a muted "in <KEY>" after its title; if an older ancestor is linked, it nests under the closest one and keeps the hint.
 Sections collapse; exact default expansion behavior to be designed.
 Open Jira/PR details in one contextual side panel on wide screens.
 Do not stack multiple competing sidebars; related links may collapse into the panel header.
@@ -88,6 +90,7 @@ On narrow screens, show details as a routed screen with a clear return path.
 
 Suggestions (D49, ADR-017). Not in the v3 prototype; placement queued as Q77.
 - A "Suggested" group under the linked rows of the Jira and Pull requests sections. Hidden when not connected or when there is nothing to suggest.
+- The "Suggested N" heading is a button with a chevron that folds the group away and opens it again, like Today's groups (D65). Folded, the heading and the count stay. Each device remembers it per Topic and section; it starts open and is not synced.
 - Rows reuse the external row with a dashed icon frame and a muted title. The snippet line gives the best two reasons ("Mentioned in Additional information", "Mentioned in pull request #12", "SYN-101 is blocked by this"). "Also in" tags show other Topics that link the item.
 - Phase 2 reasons: "Parent of SYN-103", "Child of SYN-101", "Same parent as SYN-103" (Jira) and "Mentions SYN-101" (pull requests). A closed or merged PR found this way ranks below open ones. No new controls.
 - Each row has a small **Link** text button and a **Don't suggest** icon button ("Don't suggest SYN-104 in this Topic"). Both show a toast with Undo.
@@ -112,6 +115,7 @@ Show last refreshed time and whether the content is cached.
 Loading more comments should not block already available content.
 Include Open in Jira/GitHub. It opens the original page in a new tab (D46).
 Jira status shows as a small lozenge colored by status category, like Jira (D50): To Do gray, In Progress blue, Done green. The text is Jira's status name as written, not uppercased. Each color pair meets WCAG AA on the dark theme. Used on Jira list and search rows, the ticket header, a Topic's Jira section, ⌘K results and suggestion rows.
+Jira issue types show as Thread's own icons (D63): a white glyph on a colored tile for Epic, Story, Task, Subtask, Bug and Defect, and a gray one for any other type. Rows show the icon only, with the type name in its label and hover title; the ticket header shows the icon and the name. A ticket whose type is not on the device keeps the plain Jira mark, and so do places that mean Jira itself (nav, Settings, empty states, ⌘K "Search Jira", the "Link a Jira ticket" picker).
 The Jira "Assigned to me" tab has a "Current sprint only" checkbox above the list (D50). Off by default, remembered on this device, hidden when the site has no sprints. The label is the 40 px tap target. With it on and nothing in the sprint, the empty state says "Nothing assigned to you in the current sprint".
 Unsupported rich content should degrade to an understandable placeholder/link, not disappear silently.
 

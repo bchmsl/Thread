@@ -40,7 +40,8 @@ internal object JiraJson {
     /** The schema type of Jira Software's Sprint field. Its field id differs per site, so `/field` finds it. */
     const val SPRINT_SCHEMA: String = "com.pyxis.greenhopper.jira:gh-sprint"
 
-    const val ISSUE_FIELDS: String = "summary,issuetype,status,priority,assignee,reporter,labels,updated,description,issuelinks"
+    /** An opened ticket's fields. Of `parent` only the key is kept, to nest linked tickets in a Topic (D64). */
+    const val ISSUE_FIELDS: String = "summary,issuetype,status,priority,assignee,reporter,labels,updated,description,issuelinks,parent"
 
     /** The fields of a list or search row (v3 `jiraRow`). */
     const val SUMMARY_FIELDS: String = "summary,issuetype,status,updated"
@@ -81,6 +82,7 @@ internal object JiraJson {
                     copy(fields, "description")
                     val links = fields.objects("issuelinks").mapNotNull(::issueLink)
                     if (links.isNotEmpty()) put("issuelinks", JsonArray(links))
+                    putIfNotNull("parent", fields.obj("parent")?.pick("key"))
                     val sprints = sprintFieldId?.let { fields.objects(it) }
                     if (!sprints.isNullOrEmpty()) put("sprint", JsonArray(sprints.map { it.pick("name", "state") }))
                 },
@@ -104,7 +106,7 @@ internal object JiraJson {
         }
     }
 
-    /** One linked issue: the relation as this issue reads it ("is blocked by"), its key, title and status. */
+    /** One linked issue: the relation as this issue reads it ("is blocked by"), its key, title, status and type. */
     private fun issueLink(link: JsonObject): JsonObject? {
         val type = link.obj("type") ?: return null
         val outward = link.obj("outwardIssue")
@@ -116,6 +118,7 @@ internal object JiraJson {
             copy(other, "key")
             if (fields != null) copy(fields, "summary")
             putIfNotNull("status", fields?.obj("status")?.let(::status))
+            putIfNotNull("issuetype", fields?.obj("issuetype")?.pick("name"))
         }
     }
 
@@ -221,13 +224,14 @@ internal object JiraJson {
             commentTotal = maxOf(page?.int("total") ?: 0, comments.size),
             webUrl = LinkHref.parse("https://${site.host}/browse/${key.value}"),
             related = fields.objects("issuelinks").mapNotNull(::related),
+            parentKey = fields.obj("parent")?.str("key")?.let(JiraIssueKey::parse),
         )
     }
 
     private fun related(link: JsonObject): JiraRelated? {
         val key = link.str("key")?.let(JiraIssueKey::parse) ?: return null
         val relation = link.str("relation") ?: return null
-        return JiraRelated(relation, key, link.str("summary"), link.obj("status")?.let(::readStatus))
+        return JiraRelated(relation, key, link.str("summary"), link.obj("status")?.let(::readStatus), link.obj("issuetype")?.str("name"))
     }
 
     private fun readStatus(status: JsonObject): JiraStatus? {

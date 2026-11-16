@@ -56,6 +56,7 @@ import thread.web.presentation.external.JiraItemScreen
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraScreen
 import thread.web.presentation.external.JiraServices
+import thread.web.presentation.external.JiraTypeIcon
 import thread.web.presentation.external.PrItemScreen
 import thread.web.presentation.external.PrScreen
 import thread.web.presentation.external.ShowRefreshProbe
@@ -533,7 +534,7 @@ private fun searchGroups(
                     SearchOption(
                         "${issue.key.value} ${issue.title}",
                         issue.status?.name.orEmpty(),
-                        { IconView(Icon.Jira, 18) },
+                        { JiraTypeIcon(issue.type, 18) },
                         issue.status?.let { jiraStatusClasses(it.category) }.orEmpty(),
                     ) {
                         go(jiraPlace(issue.key))

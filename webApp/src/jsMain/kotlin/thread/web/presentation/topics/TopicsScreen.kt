@@ -190,6 +190,8 @@ private fun TopicsBoard(
     Div({
         classes("board")
         attr("aria-label", "Board. Drag a card by its handle, or use its Move to menu.")
+        // The board widens past the page only as far as its lanes need (owner change #14, D66).
+        style { property("--lanes", statuses.size.toString()) }
     }) {
         statuses.forEach { status ->
             val inStatus = topicsIn(status, topics, statuses)

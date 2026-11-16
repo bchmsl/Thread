@@ -23,6 +23,8 @@ import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraStatus
+import thread.domain.external.NestedTicket
+import thread.domain.external.nestUnderParents
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
@@ -37,6 +39,7 @@ import thread.web.presentation.external.GoneBadge
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
 import thread.web.presentation.external.JiraTicket
+import thread.web.presentation.external.JiraTypeIcon
 import thread.web.presentation.external.RefreshJiraOnShow
 import thread.web.presentation.external.ViewBanner
 import thread.web.presentation.external.XD_TITLE_ID
@@ -101,7 +104,7 @@ internal fun TopicJiraSection(
         if (references.isEmpty()) {
             P({ classes("sect__empty") }) { Text("Nothing linked. Link a ticket here or from its page.") }
         } else {
-            LinkedTickets(workspace, jira, topic, references, openKey, onOpen)
+            LinkedTickets(workspace, jira, topic, references, suggestions.jiraParentOf, openKey, onOpen)
         }
         SuggestedGroup(
             sectionKey = "jira",
@@ -138,55 +141,111 @@ internal fun TopicJiraSection(
     }
 }
 
-/** The linked rows. Unlinking also keeps the ticket from being suggested in the Topic again (D49, Q79). */
+/** A linked ticket and the linked tickets under it (D64). */
+private class TicketNode(
+    val row: NestedTicket<ExternalReference>,
+    val children: List<TicketNode>,
+)
+
+/** [rows] as [nestUnderParents] lists them (each row followed by the rows under it) turned into a tree. */
+private fun treeOf(rows: List<NestedTicket<ExternalReference>>): List<TicketNode> {
+    var index = 0
+
+    fun level(depth: Int): List<TicketNode> {
+        val nodes = mutableListOf<TicketNode>()
+        while (index < rows.size && rows[index].depth == depth) {
+            val row = rows[index++]
+            nodes += TicketNode(row, level(depth + 1))
+        }
+        return nodes
+    }
+    return level(0)
+}
+
+/**
+ * The linked rows, each under its linked parent as nested lists (owner change #10, D64): an Epic, then its Stories,
+ * then their Subtasks. [parentOf] is what this device knows of each ticket's parent. Unlinking also keeps the ticket
+ * from being suggested in the Topic again (D49, Q79).
+ */
 @Composable
 private fun LinkedTickets(
     workspace: WorkspaceModel,
     jira: JiraModel,
     topic: Topic,
     references: List<ExternalReference>,
+    parentOf: (JiraIssueKey) -> JiraIssueKey?,
+    openKey: String?,
+    onOpen: (JiraIssueKey) -> Boolean,
+) {
+    val rows = nestUnderParents(references, { if (jira.isHere(it)) JiraIssueKey.parse(it.key) else null }, parentOf)
+    Ul({ classes("tlist", "jtree") }) {
+        treeOf(rows).forEach { LinkedTicket(it, workspace, jira, topic, openKey, onOpen) }
+    }
+}
+
+@Composable
+private fun LinkedTicket(
+    node: TicketNode,
+    workspace: WorkspaceModel,
+    jira: JiraModel,
+    topic: Topic,
     openKey: String?,
     onOpen: (JiraIssueKey) -> Boolean,
 ) {
     val toasts = LocalToasts.current
-    Ul({ classes("tlist") }) {
-        references.forEach { reference ->
-            val issueKey = JiraIssueKey.parse(reference.key)
-            val here = jira.isHere(reference) && issueKey != null
-            val summary = if (here) jira.summary(reference.key) else null
-            val isOpen = here && openKey == reference.key
-            key(reference.id) {
-                Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
-                    Span({ classes("xrow__icon") }) { IconView(Icon.Jira, 18) }
-                    if (here && issueKey != null) {
-                        A(jiraItemPlace(issueKey, topic.id.value).hash, {
-                            classes("xrow__main")
-                            attr("data-key", reference.key)
-                            if (isOpen) attr("aria-current", "true")
-                            onClick { if (onOpen(issueKey)) it.preventDefault() }
-                        }) { RowText(reference.key, summary?.status, summary?.title, here = true, gone = jira.isGone(reference.key)) }
-                    } else {
-                        Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false) }
-                    }
-                    IconButton(Icon.Unlink, "Unlink ${reference.key} from this Topic", small = true) {
-                        val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
-                        toasts.show(
-                            "Unlinked from ${topic.name} and not suggested there. The ticket is unchanged.",
-                            undo = { workspace.undo(edit) },
+    val reference = node.row.item
+    val issueKey = JiraIssueKey.parse(reference.key)
+    val here = jira.isHere(reference) && issueKey != null
+    val summary = if (here) jira.summary(reference.key) else null
+    val isOpen = here && openKey == reference.key
+    key(reference.id) {
+        Li({ classes("jnode") }) {
+            Div({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
+                Span({ classes("xrow__icon") }) { JiraTypeIcon(summary?.type, 18) }
+                if (here && issueKey != null) {
+                    A(jiraItemPlace(issueKey, topic.id.value).hash, {
+                        classes("xrow__main")
+                        attr("data-key", reference.key)
+                        if (isOpen) attr("aria-current", "true")
+                        onClick { if (onOpen(issueKey)) it.preventDefault() }
+                    }) {
+                        RowText(
+                            reference.key,
+                            summary?.status,
+                            summary?.title,
+                            here = true,
+                            parentNotLinked = node.row.parentNotLinked,
+                            gone = jira.isGone(reference.key),
                         )
                     }
+                } else {
+                    Div({ classes("xrow__main") }) { RowText(reference.key, null, null, here = false, parentNotLinked = null) }
+                }
+                IconButton(Icon.Unlink, "Unlink ${reference.key} from this Topic", small = true) {
+                    val edit = workspace.unlinkFromTopic(reference, topic.id) ?: return@IconButton
+                    toasts.show(
+                        "Unlinked from ${topic.name} and not suggested there. The ticket is unchanged.",
+                        undo = { workspace.undo(edit) },
+                    )
+                }
+            }
+            if (node.children.isNotEmpty()) {
+                Ul({ classes("tlist", "jtree__kids") }) {
+                    node.children.forEach { LinkedTicket(it, workspace, jira, topic, openKey, onOpen) }
                 }
             }
         }
     }
 }
 
+/** [parentNotLinked]: the ticket's parent when the Topic does not link it, named so the row says where it belongs. */
 @Composable
 private fun RowText(
     key: String,
     status: JiraStatus?,
     title: String?,
     here: Boolean,
+    parentNotLinked: JiraIssueKey?,
     gone: Boolean = false,
 ) {
     Span({ classes("xrow__key") }) {
@@ -197,6 +256,7 @@ private fun RowText(
         } else if (status != null) {
             JiraStatusLozenge(status)
         }
+        if (parentNotLinked != null) Span({ classes("xrow__in") }) { Text("in ${parentNotLinked.value}") }
     }
     when {
         title != null -> Span({ classes("xrow__title") }) { Text(title) }

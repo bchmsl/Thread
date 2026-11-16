@@ -78,7 +78,14 @@ class JiraFamilyRepositoryTest {
             }
             assertEquals(keys("SYN-103", "SYN-109"), family.keys)
             assertEquals(
-                listOf("SYN-109" to "SYN-101", "SYN-103" to "SYN-110", "SYN-101" to "SYN-110", "SYN-110" to null, "SYN-105" to "SYN-110"),
+                listOf(
+                    "SYN-109" to "SYN-101",
+                    "SYN-103" to "SYN-110",
+                    "SYN-101" to "SYN-110",
+                    "SYN-110" to null,
+                    "SYN-105" to "SYN-110",
+                    "SYN-114" to "SYN-103",
+                ),
                 family.rows.map { it.key.value to it.parentKey?.value },
                 "each ticket once, its first row kept",
             )
@@ -125,7 +132,7 @@ class JiraFamilyRepositoryTest {
             val family = repository(transport).refresh(topic, keys("SYN-103"), NOW).family()
 
             assertEquals("parent in (\"SYN-103\") ORDER BY updated DESC", jql(transport.requests.last()))
-            assertEquals(listOf("SYN-103"), family.rows.map { it.key.value })
+            assertEquals(listOf("SYN-103", "SYN-114"), family.rows.map { it.key.value })
         }
 
     @Test

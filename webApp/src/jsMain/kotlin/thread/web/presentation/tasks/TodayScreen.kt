@@ -574,7 +574,11 @@ private fun ActiveBoard(
     groups: List<TopicGroup>,
     workspace: WorkspaceModel,
 ) {
-    Div({ classes("aboard") }) {
+    Div({
+        classes("aboard")
+        // The board widens past the page only as far as its lanes need (owner change #14, D66).
+        style { property("--lanes", shownStatuses.size.toString()) }
+    }) {
         shownStatuses.forEach { status ->
             val topics = groups.firstOrNull { it.status.id == status.id }?.topics.orEmpty()
             key(status.id.value) {

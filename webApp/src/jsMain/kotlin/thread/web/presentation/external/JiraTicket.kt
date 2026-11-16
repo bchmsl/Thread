@@ -148,7 +148,12 @@ private fun JiraArticle(
         Header({ classes("xd__head") }) {
             P({ classes("xd__kicker") }) {
                 Span({ classes("xd__key") }) { Text(issue.key.value) }
-                issue.type?.let { Span { Text(it) } }
+                issue.type?.let {
+                    Span({ classes("xd__type") }) {
+                        JiraTypeIcon(it, decorative = true)
+                        Text(it)
+                    }
+                }
                 issue.status?.let { JiraStatusLozenge(it) }
                 if (onDevice) {
                     Span({ classes("dl-badge") }) {
@@ -297,7 +302,9 @@ private fun RelatedIssues(
     }
     Ul({ classes("rel") }) {
         issue.related.forEach { related ->
-            val title = related.title ?: jira.summary(related.key.value)?.title
+            val saved = jira.summary(related.key.value)
+            val title = related.title ?: saved?.title
+            val type = related.type ?: saved?.type
             Li {
                 Span({ classes("rel__type") }) { Text(related.relation) }
                 if (title != null && jira.canShow(related.key.value)) {
@@ -306,11 +313,13 @@ private fun RelatedIssues(
                         attr("data-key", related.key.value)
                         onClick { if (onOpenRelated(related.key)) it.preventDefault() }
                     }) {
+                        if (type != null) JiraTypeIcon(type)
                         B { Text(related.key.value) }
                         Text(" $title")
                     }
                 } else {
                     Span {
+                        if (type != null) JiraTypeIcon(type)
                         B { Text(related.key.value) }
                         Text(" ")
                         Span({ classes("muted") }) { Text(if (title != null) "$title (not on this device)" else "not shared with you") }

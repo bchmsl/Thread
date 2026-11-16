@@ -39,7 +39,8 @@ data class JiraStatus(
  * A Jira issue as Thread shows it (v3 Jira detail). Read-only. Person fields hold display names.
  *
  * [comments] are the newest comments, oldest first. [commentTotal] counts all comments in Jira. [related] are its
- * issue links, as Jira lists them.
+ * issue links, as Jira lists them. [parentKey] is its parent (an Epic, or the ticket a Subtask belongs to); a copy saved
+ * before Thread asked for it has none until the next refresh.
  */
 data class JiraIssue(
     val key: JiraIssueKey,
@@ -57,8 +58,9 @@ data class JiraIssue(
     val commentTotal: Int,
     val webUrl: LinkHref?,
     val related: List<JiraRelated> = emptyList(),
+    val parentKey: JiraIssueKey? = null,
 ) {
-    fun summary(): JiraIssueSummary = JiraIssueSummary(key, type, title, status, updatedAtMillis)
+    fun summary(): JiraIssueSummary = JiraIssueSummary(key, type, title, status, updatedAtMillis, parentKey)
 }
 
 /** One issue link: how it relates ("blocks", "is blocked by"), and the other issue as Jira names it. */
@@ -67,6 +69,7 @@ data class JiraRelated(
     val key: JiraIssueKey,
     val title: String?,
     val status: JiraStatus?,
+    val type: String? = null,
 )
 
 data class JiraComment(
@@ -84,7 +87,7 @@ interface JiraIssueSource : ExternalRecordSource<JiraIssueKey, JiraIssue> {
 
 /**
  * One row of a Jira list or search result (v3 `jiraRow`). [parentKey] is the ticket's parent; only the Topic
- * suggestion search asks Jira for it (D49 S4), so other rows have none.
+ * suggestion search (D49 S4) and an opened ticket (D64) carry it, so list rows have none.
  */
 data class JiraIssueSummary(
     val key: JiraIssueKey,

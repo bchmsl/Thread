@@ -491,8 +491,9 @@ private fun JiraRow(
             }
         }) {
             Span({ classes("xi__top") }) {
+                // The type is the icon's name for screen readers and on hover (D63).
+                issue.type?.let { JiraTypeIcon(it) }
                 Span({ classes("xi__key") }) { Text(issue.key.value) }
-                issue.type?.let { Span { Text(it) } }
                 issue.status?.let { JiraStatusLozenge(it) }
             }
             Span({ classes("xi__title") }) { Text(issue.title) }

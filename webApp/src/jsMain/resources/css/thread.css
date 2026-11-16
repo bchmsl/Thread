@@ -229,3 +229,65 @@ img.ProseMirror-separator {
   font-weight: 650;
 }
 .av--me { box-shadow: 0 0 0 1.5px var(--bg-app), 0 0 0 3px var(--action); }
+
+/* Owner change #9 (D63): Thread's own Jira issue type icons, a white mark on a colored tile. Each tile keeps at least
+   3:1 with its mark and with every dark background a row can have. The type's name is in the icon's label and title. */
+.jti { display: inline-flex; flex: none; line-height: 0; }
+.jti__svg { display: block; }
+.jti--epic { color: #9061f9; }
+.jti--story { color: #2f9e5f; }
+.jti--task { color: #3b82f6; }
+.jti--subtask { color: #2193b0; }
+.jti--bug { color: #e5484d; }
+.jti--defect { color: #dd6b20; }
+.jti--other { color: #7a849f; }
+.xd__type { display: inline-flex; align-items: center; gap: 6px; }
+.rel .jti { display: inline-block; vertical-align: -3px; margin-right: 6px; }
+.xrow--suggested .xrow__icon:has(.jti) { padding: 3px; }
+
+/* Owner change #10 (D64): a linked ticket under its linked parent, one nested list per level with a guide line. The
+   fourth level and deeper stop moving right, so a narrow screen never scrolls sideways. */
+.jtree .jnode > .xrow { border-top: 1px solid var(--border); }
+.jtree > .jnode:first-child > .xrow { border-top: 0; }
+.jtree__kids { margin: 0 0 0 13px; padding: 0 0 0 10px; border-left: 2px solid var(--border-strong); }
+.jtree__kids .jtree__kids .jtree__kids { margin-left: 0; padding-left: 0; border-left: 0; }
+.xrow__in { color: var(--text-3); font-weight: 400; }
+@media (max-width: 759px) {
+  .jtree__kids { margin-left: 8px; padding-left: 6px; }
+}
+
+/* Owner change #11 (D65): the "Suggested" heading folds its suggestions away and opens them again, like Today's
+   groups (D53). Folded, only the heading and the count show. */
+.sugg__toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin-left: -4px; padding: 4px 8px 4px 4px;
+  background: none; border: 0; border-radius: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.sugg__toggle:hover { background: var(--ink-850); color: var(--text-2); }
+.sugg__toggle .chev { display: inline-flex; color: var(--text-3); transition: transform var(--t-fast); }
+.sugg__toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.sugg__toggle .n { font-weight: 500; font-variant-numeric: tabular-nums; }
+.sugg.is-folded { padding-bottom: 4px; }
+
+/* Owner change #14 (D66): when the lanes do not fit the page, the Topics board and Today's board grow past the page
+   only as far as the lanes need (--lanes is the lane count, 256 / 264 px a lane at its normal smallest, gaps included),
+   up to the window less a 50 px gutter or the safe area. The rest of the page, its heading row included, keeps its
+   width. The gutter is 50, not the page's 40: 100vw counts a classic scrollbar (up to 17 px), and the extra 10 px a
+   side keeps the board from creeping into the page's gutter when it has nothing to gain. */
+@media (min-width: 760px) {
+  .board, .aboard {
+    --gut: max(50px, calc(env(safe-area-inset-left, 0px) + 16px), calc(env(safe-area-inset-right, 0px) + 16px));
+    --bw: max(100%, min(var(--need), calc(100vw - 2 * var(--gut))));
+    width: var(--bw);
+    margin-inline: calc((100% - var(--bw)) / 2);
+  }
+  .board { --need: calc(var(--lanes, 1) * 256px - 12px); }
+  .aboard { --need: calc(var(--lanes, 1) * 264px - 12px); }
+  /* When the lanes still do not fit the widened board, they shrink evenly down to --floor, and only then does the board
+     scroll sideways (D66). This only adds shrinking: lanes that fit, and how they grow, are unchanged. At 210 px a Topic
+     card still holds its hex, its name (on more lines, never clipped), "No tasks yet" or "Next: ...", and a status
+     select with a long custom name; at 200 px that select no longer fits the card. */
+  .board, .aboard { --floor: 210px; }
+  .board > .lane { flex-shrink: 1; min-width: var(--floor); }
+  .aboard { grid-auto-columns: minmax(var(--floor), 1fr); }
+  .alane .lane__list { grid-template-columns: repeat(auto-fill, minmax(min(232px, 100%), 1fr)); }
+}

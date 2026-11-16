@@ -78,16 +78,21 @@ class JiraIssueRepositoryTest {
                         requireNotNull(JiraIssueKey.parse("SYN-104")),
                         "SYNTHETIC: Rate limit message when Jira slows down",
                         JiraStatus("In Progress", JiraStatusCategory.InProgress),
+                        "Bug",
                     ),
                     JiraRelated(
                         "relates to",
                         requireNotNull(JiraIssueKey.parse("SYN-106")),
                         "SYNTHETIC: Search tickets by key, words or label",
                         JiraStatus("In Progress", JiraStatusCategory.InProgress),
+                        "Story",
                     ),
                 ),
                 issue.related,
             )
+            // Only the parent's key is kept (D64).
+            assertEquals("SYN-110", issue.parentKey?.value)
+            assertEquals("SYN-110", issue.summary().parentKey?.value)
         }
 
     @Test
@@ -103,7 +108,7 @@ class JiraIssueRepositoryTest {
                 listOf(
                     "$base/field",
                     "$base/issue/SYN-101?fields=summary%2Cissuetype%2Cstatus%2Cpriority%2Cassignee%2Creporter%2Clabels" +
-                        "%2Cupdated%2Cdescription%2Cissuelinks%2Ccustomfield_10020",
+                        "%2Cupdated%2Cdescription%2Cissuelinks%2Cparent%2Ccustomfield_10020",
                     "$base/issue/SYN-101/comment?orderBy=-created&maxResults=100",
                 ),
                 urls,

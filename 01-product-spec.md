@@ -97,7 +97,7 @@ Two more groups follow Earlier planned (D53):
 
 Every group opens and closes from its heading. Upcoming and No date start closed, and each device remembers the choice.
 
-Below the Tasks, Today shows the Topics whose status is in the Active or Paused category, grouped by status in Settings order (D59). Planned and Done Topics are not shown. A List / Board switch picks the layout; List is the default.
+Below the Tasks, Today shows the Topics whose status is in the Active or Paused category, grouped by status in Settings order (D59). Planned and Done Topics are not shown. A List / Board switch picks the layout; List is the default. On wide screens the Board, like the Topics Board, uses more width and then narrower lanes before it scrolls sideways (D66).
 
 A Task added from Today without a Topic is planned for today and also waits in Inbox until it is filed (D38).
 
@@ -139,9 +139,9 @@ One page with collapsible sections, not a primary tab layout:
 - Header: name, status, goal.
 - Main: Additional information (D52), Tasks.
 - Notes.
-- Related Jira tickets and PRs. Task rows show their next reminder (D54); "Topic reminders" lists only Topic reminders not moved yet or kept by Undo.
+- Related Jira tickets and PRs. Task rows show their next reminder (D54); "Topic reminders" lists only Topic reminders not moved yet or kept by Undo. Linked Jira tickets nest under their linked Jira parent (D64).
 - External item details open in a side panel on wide screens and a separate detail view on narrow screens.
-- Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click.
+- Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click. The "Suggested" heading folds the group away; each device remembers it per Topic (D65).
 
 ## Integrations in v1
 

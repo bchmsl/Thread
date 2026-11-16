@@ -68,6 +68,8 @@ import thread.domain.workspace.referencesOf
 import thread.domain.workspace.restoreSuggestion
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
+import thread.web.platform.readDeviceText
+import thread.web.platform.writeDeviceText
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
@@ -77,6 +79,7 @@ import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
+import thread.web.presentation.external.JiraTypeIcon
 import thread.web.presentation.external.orFallback
 import thread.web.presentation.rememberOnline
 
@@ -99,6 +102,8 @@ internal class SuggestionRow(
     val alsoIn: List<Topic>,
     val jiraKey: JiraIssueKey?,
     val pull: PullRequestRef?,
+    /** A ticket's Jira issue type, for its icon (D63). */
+    val type: String? = null,
 )
 
 /** A record not suggested in the Topic, with the title saved on this device when there is one. */
@@ -106,14 +111,21 @@ internal class DismissedRow(
     val reference: ExternalReference,
     val label: String,
     val title: String?,
+    /** A Jira ticket's type, for its icon (D63). */
+    val type: String? = null,
 )
 
-/** The suggestions of one Topic, and what is not suggested there, per section. */
+/**
+ * The suggestions of one Topic, and what is not suggested there, per section. [jiraParentOf] is a ticket's parent as
+ * this device knows it, for nesting the linked tickets (D64): the Topic's family answer (D49 S4) when it has the ticket,
+ * else the ticket's saved copy.
+ */
 internal class TopicSuggestions(
     val jira: List<SuggestionRow>,
     val jiraDismissed: List<DismissedRow>,
     val pulls: List<SuggestionRow>,
     val pullsDismissed: List<DismissedRow>,
+    val jiraParentOf: (JiraIssueKey) -> JiraIssueKey? = { null },
 ) {
     companion object {
         val None = TopicSuggestions(emptyList(), emptyList(), emptyList(), emptyList())
@@ -232,11 +244,14 @@ internal fun rememberTopicSuggestions(
                     alsoIn = workspace.topicsLinkedTo(reference.id).filter { it.id != topic.id },
                     jiraKey = key,
                     pull = null,
+                    type = summary?.type ?: relatedRow?.type,
                 )
             },
         jiraDismissed =
             jiraDismissedRefs.map { reference ->
-                DismissedRow(reference, reference.key, jira.summary(reference.key)?.title ?: related[reference.key]?.title)
+                val summary = jira.summary(reference.key)
+                val relatedRow = related[reference.key]
+                DismissedRow(reference, reference.key, summary?.title ?: relatedRow?.title, summary?.type ?: relatedRow?.type)
             },
         pulls =
             pullRanked.mapNotNull { suggestion ->
@@ -259,6 +274,13 @@ internal fun rememberTopicSuggestions(
                 val title = pullRequestRefOf(reference)?.let { gitHub.summary(it.id)?.title }
                 DismissedRow(reference, "#${reference.key}", title ?: reference.instance)
             },
+        // A family row without a parent means Jira gave none, so it wins over an older saved copy. Without one, the saved
+        // ticket's parent: list rows and the rows a refresh brings (D67) never ask for the parent, so a newer row
+        // without one says nothing about it.
+        jiraParentOf = { key ->
+            val row = familyRows[key.value]
+            if (row != null) row.parentKey else jira.saved[key.value]?.value?.parentKey ?: jira.summary(key.value)?.parentKey
+        },
     )
 }
 
@@ -413,9 +435,25 @@ internal fun reasonText(reason: SuggestionReason): String =
         is SuggestionReason.MentionsLinkedTicket -> "Mentions ${reason.linkedKey.value}"
     }
 
+/** Where this device keeps whether a Topic's suggestions are open, per Topic and section: `1` or `0`. Not synced (D65). */
+internal const val SUGGESTIONS_OPEN_NAME = "thread.suggest.open"
+
+/** Whether [section]'s suggestions in Topic [topicId] are open on this device. They start open, also when storage is blocked. */
+internal fun areSuggestionsOpen(
+    topicId: String,
+    section: String,
+): Boolean = readDeviceText("$SUGGESTIONS_OPEN_NAME.$topicId.$section") != "0"
+
+internal fun keepSuggestionsOpen(
+    topicId: String,
+    section: String,
+    open: Boolean,
+) = writeDeviceText("$SUGGESTIONS_OPEN_NAME.$topicId.$section", if (open) "1" else "0")
+
 /**
  * The "Suggested" group under a section's linked rows: [SUGGESTIONS_SHOWN] rows, "Show N more", and "Not suggested
- * here (N)". [sectionKey] is the section's key (`jira`, `prs`); focus moves to the next suggestion after Link or
+ * here (N)". Its heading folds the group away and opens it again, remembered on this device per Topic (owner change
+ * #11, D65). [sectionKey] is the section's key (`jira`, `prs`); focus moves to the next suggestion after Link or
  * "Don't suggest", else to the section heading.
  */
 @Composable
@@ -434,6 +472,7 @@ internal fun SuggestedGroup(
     val scope = rememberCoroutineScope()
     var expanded by remember(topic.id) { mutableStateOf(false) }
     var reviewing by remember(topic.id) { mutableStateOf(false) }
+    var open by remember(topic.id, sectionKey) { mutableStateOf(areSuggestionsOpen(topic.id.value, sectionKey)) }
     val groupId = "sg-$sectionKey"
     val heading = { document.querySelector("#sh-$sectionKey button") as? HTMLElement }
     // After Link or "Don't suggest" the row leaves: focus the suggestion now at its place, else the heading.
@@ -446,81 +485,110 @@ internal fun SuggestedGroup(
     }
     val shown = if (expanded) rows else rows.take(SUGGESTIONS_SHOWN)
     if (rows.isEmpty() && dismissed.isEmpty()) return
+    // With no suggestions there is nothing to fold: only "Not suggested here" shows, as before.
+    val folded = !open && rows.isNotEmpty()
     Div({
         classes("sugg")
+        if (folded) classes("is-folded")
         id(groupId)
     }) {
         if (rows.isNotEmpty()) {
-            H3({ classes("sect__sub", "sugg__head") }) { Text("Suggested") }
-            Ul({ classes("tlist") }) {
-                shown.forEachIndexed { index, row ->
-                    key(row.reference.id) {
-                        Li({ classes("xrow", "xrow--suggested") }) {
-                            Span({ classes("xrow__icon") }) { IconView(icon, 18) }
-                            A(href(row), {
-                                classes("xrow__main")
-                                attr("data-suggested", row.reference.id)
-                                onClick { if (onOpen(row)) it.preventDefault() }
-                            }) {
-                                Span({ classes("xrow__key") }) {
-                                    B { Text(row.label) }
-                                    if (row.status != null) JiraStatusLozenge(row.status)
-                                    if (row.repo != null) Span { Text(row.repo) }
+            H3({ classes("sect__sub", "sugg__head") }) {
+                Button({
+                    type(ButtonType.Button)
+                    classes("sugg__toggle")
+                    attr("aria-expanded", open.toString())
+                    attr("aria-controls", "$groupId-b")
+                    onClick {
+                        open = !open
+                        keepSuggestionsOpen(topic.id.value, sectionKey, open)
+                    }
+                }) {
+                    Span({ classes("chev") }) { IconView(Icon.ChevDown, 16) }
+                    Text("Suggested ")
+                    Span({ classes("n") }) { Text(rows.size.toString()) }
+                }
+            }
+        }
+        Div({
+            id("$groupId-b")
+            if (folded) attr("hidden", "")
+        }) {
+            if (!folded && rows.isNotEmpty()) {
+                Ul({ classes("tlist") }) {
+                    shown.forEachIndexed { index, row ->
+                        key(row.reference.id) {
+                            Li({ classes("xrow", "xrow--suggested") }) {
+                                Span({ classes("xrow__icon") }) {
+                                    if (row.jiraKey != null) JiraTypeIcon(row.type, 18) else IconView(icon, 18)
                                 }
-                                if (row.title != null) Span({ classes("xrow__title") }) { Text(row.title) }
-                                Span(
-                                    { classes("xrow__snip", "sugg__why") },
-                                ) { Text(row.reasons.joinToString(" · ", transform = ::reasonText)) }
-                                if (row.alsoIn.isNotEmpty()) {
-                                    Span({ classes("xrow__also") }) {
-                                        Text("Also in ")
-                                        row.alsoIn.forEach { PlainTopicTag(it) }
+                                A(href(row), {
+                                    classes("xrow__main")
+                                    attr("data-suggested", row.reference.id)
+                                    onClick { if (onOpen(row)) it.preventDefault() }
+                                }) {
+                                    Span({ classes("xrow__key") }) {
+                                        B { Text(row.label) }
+                                        if (row.status != null) JiraStatusLozenge(row.status)
+                                        if (row.repo != null) Span { Text(row.repo) }
+                                    }
+                                    if (row.title != null) Span({ classes("xrow__title") }) { Text(row.title) }
+                                    Span(
+                                        { classes("xrow__snip", "sugg__why") },
+                                    ) { Text(row.reasons.joinToString(" · ", transform = ::reasonText)) }
+                                    if (row.alsoIn.isNotEmpty()) {
+                                        Span({ classes("xrow__also") }) {
+                                            Text("Also in ")
+                                            row.alsoIn.forEach { PlainTopicTag(it) }
+                                        }
                                     }
                                 }
-                            }
-                            Div({ classes("sugg__acts") }) {
-                                Button({
-                                    type(ButtonType.Button)
-                                    classes("btn", "btn--text", "btn--sm", "sg__link")
-                                    attr("aria-label", "Link ${row.label} to this Topic")
-                                    onClick {
-                                        val edit = workspace.linkToTopic(row.reference, topic.id) ?: return@onClick
-                                        toasts.show("Linked", undo = { workspace.undo(edit) })
+                                Div({ classes("sugg__acts") }) {
+                                    Button({
+                                        type(ButtonType.Button)
+                                        classes("btn", "btn--text", "btn--sm", "sg__link")
+                                        attr("aria-label", "Link ${row.label} to this Topic")
+                                        onClick {
+                                            val edit = workspace.linkToTopic(row.reference, topic.id) ?: return@onClick
+                                            toasts.show("Linked", undo = { workspace.undo(edit) })
+                                            focusAfter(row, index)
+                                        }
+                                    }) {
+                                        IconView(Icon.Link, 15)
+                                        Text(" Link")
+                                    }
+                                    IconButton(Icon.X, "Don't suggest ${row.label} in this Topic", small = true) {
+                                        val current = workspace.data ?: return@IconButton
+                                        val edit = workspace.apply(dismissSuggestion(row.reference, topic.id, current)) ?: return@IconButton
+                                        toasts.show("${row.label} won't be suggested in this Topic.", undo = { workspace.undo(edit) })
                                         focusAfter(row, index)
                                     }
-                                }) {
-                                    IconView(Icon.Link, 15)
-                                    Text(" Link")
-                                }
-                                IconButton(Icon.X, "Don't suggest ${row.label} in this Topic", small = true) {
-                                    val current = workspace.data ?: return@IconButton
-                                    val edit = workspace.apply(dismissSuggestion(row.reference, topic.id, current)) ?: return@IconButton
-                                    toasts.show("${row.label} won't be suggested in this Topic.", undo = { workspace.undo(edit) })
-                                    focusAfter(row, index)
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-        val more = rows.size - shown.size
-        if (more > 0 || dismissed.isNotEmpty()) {
-            Div({ classes("sugg__foot") }) {
-                if (more > 0) {
-                    Button({
-                        type(ButtonType.Button)
-                        classes("btn", "btn--text", "btn--sm")
-                        onClick { expanded = true }
-                    }) { Text("Show $more more") }
-                }
-                if (dismissed.isNotEmpty()) {
-                    Button({
-                        type(ButtonType.Button)
-                        classes("btn", "btn--text", "btn--sm", "sg__review")
-                        attr("aria-haspopup", "dialog")
-                        onClick { reviewing = true }
-                    }) { Text("Not suggested here (${dismissed.size})") }
+            if (!folded) {
+                val more = rows.size - shown.size
+                if (more > 0 || dismissed.isNotEmpty()) {
+                    Div({ classes("sugg__foot") }) {
+                        if (more > 0) {
+                            Button({
+                                type(ButtonType.Button)
+                                classes("btn", "btn--text", "btn--sm")
+                                onClick { expanded = true }
+                            }) { Text("Show $more more") }
+                        }
+                        if (dismissed.isNotEmpty()) {
+                            Button({
+                                type(ButtonType.Button)
+                                classes("btn", "btn--text", "btn--sm", "sg__review")
+                                attr("aria-haspopup", "dialog")
+                                onClick { reviewing = true }
+                            }) { Text("Not suggested here (${dismissed.size})") }
+                        }
+                    }
                 }
             }
         }
@@ -570,7 +638,9 @@ private fun NotSuggestedDialog(
                                 classes("xrow")
                                 attr("data-dismissed", reference.id)
                             }) {
-                                Span({ classes("xrow__icon") }) { IconView(icon, 18) }
+                                Span({ classes("xrow__icon") }) {
+                                    if (reference.provider == ExternalProvider.Jira) JiraTypeIcon(row.type, 18) else IconView(icon, 18)
+                                }
                                 Div({ classes("xrow__main") }) {
                                     Span({ classes("xrow__key") }) { B { Text(label) } }
                                     Span({ classes("xrow__title") }) { Text(title ?: "Not on this device") }

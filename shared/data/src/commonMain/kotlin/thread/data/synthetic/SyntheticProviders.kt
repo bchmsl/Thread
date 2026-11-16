@@ -388,11 +388,15 @@ object SyntheticFixtures {
                    "issuelinks":[
                      {"id":"30001","type":{"id":"1","name":"Blocks","inward":"is blocked by","outward":"blocks"},
                       "inwardIssue":{"id":"10104","key":"SYN-104","fields":{"summary":"SYNTHETIC: Rate limit message when Jira slows down",
-                        "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}}}}},
+                        "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}},
+                        "issuetype":{"id":"10004","name":"Bug","iconUrl":"https://synthetic.example.test/icon"}}}},
                      {"id":"30002","type":{"id":"2","name":"Relates","inward":"relates to","outward":"relates to"},
                       "outwardIssue":{"id":"10106","key":"SYN-106","fields":{"summary":"SYNTHETIC: Search tickets by key, words or label",
-                        "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}}}}}
-                   ]
+                        "status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}},
+                        "issuetype":{"id":"10001","name":"Story","iconUrl":"https://synthetic.example.test/icon"}}}}
+                   ],
+                   "parent":{"id":"10110","key":"SYN-110","fields":{"summary":"SYNTHETIC: Workspace polish epic",
+                     "status":{"name":"To Do","statusCategory":{"key":"new"}},"issuetype":{"name":"Epic"}}}
                  }}
                 """.trimIndent(),
             "SYN-102" to

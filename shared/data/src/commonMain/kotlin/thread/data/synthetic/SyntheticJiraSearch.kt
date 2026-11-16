@@ -155,6 +155,43 @@ internal object SyntheticJiraSearch {
                 text = "An issue type this site made itself.",
                 inOpenSprint = true,
             ),
+            // Owner changes #9 and #10 (D63, D64): the other common type names, and a parent that is easy to leave
+            // unlinked. Not assigned to the synthetic account, so "Assigned to me" does not change.
+            SyntheticTicket(
+                "SYN-112",
+                "Bug",
+                "SYNTHETIC: Link picker loses focus after Undo",
+                "To Do",
+                "new",
+                listOf("synthetic"),
+                mine = false,
+                updated = "2026-11-05T10:00:00.000+0400",
+                text = "A bug under a story.",
+                parent = "SYN-105",
+            ),
+            SyntheticTicket(
+                "SYN-113",
+                "Defect",
+                "SYNTHETIC: Sync badge shows the wrong count",
+                "In Progress",
+                "indeterminate",
+                listOf("synthetic"),
+                mine = false,
+                updated = "2026-11-05T09:00:00.000+0400",
+                text = "A site's Defect type.",
+            ),
+            SyntheticTicket(
+                "SYN-114",
+                "Subtask",
+                "SYNTHETIC: Write the banner tests",
+                "To Do",
+                "new",
+                listOf("synthetic"),
+                mine = false,
+                updated = "2026-11-04T09:00:00.000+0400",
+                text = "A subtask, as newer sites name the type.",
+                parent = "SYN-103",
+            ),
         )
 
     private const val OPEN_SPRINTS = "sprint in openSprints()"
@@ -263,6 +300,7 @@ internal object SyntheticJiraSearch {
             }
         val assignee = if (ticket.mine) """{"displayName":"Synthetic Person A"}""" else """{"displayName":"Synthetic Person C"}"""
         val labels = ticket.labels.joinToString(",") { "\"$it\"" }
+        val parent = ticket.parent?.let { ""","parent":${parentObject(it)}""" }.orEmpty()
         return """
             {"id":"${ticket.key.hashCode()}","key":"${ticket.key}",
              "fields":{
@@ -270,7 +308,7 @@ internal object SyntheticJiraSearch {
                "issuetype":{"name":"${ticket.type}"},
                "status":{"name":"${ticket.status}","statusCategory":{"key":"${ticket.category}"}},
                "priority":{"name":"Medium"},"assignee":$assignee,"reporter":{"displayName":"Synthetic Person B"},
-               "labels":[$labels],"updated":"${ticket.updated}","description":$description,"issuelinks":[]
+               "labels":[$labels],"updated":"${ticket.updated}","description":$description,"issuelinks":[]$parent
              }}
             """.trimIndent()
     }
@@ -280,16 +318,16 @@ internal object SyntheticJiraSearch {
         ticket: SyntheticTicket,
         withParent: Boolean,
     ): String {
-        val parent =
-            ticket.parent
-                ?.takeIf { withParent }
-                ?.let { key ->
-                    val title = tickets.first { it.key == key }.title
-                    ""","parent":{"id":"${key.hashCode()}","key":"$key","fields":{"summary":"$title"}}"""
-                }.orEmpty()
+        val parent = if (withParent && ticket.parent != null) ""","parent":${parentObject(ticket.parent)}""" else ""
         return """{"id":"${ticket.key.hashCode()}","key":"${ticket.key}","fields":{"summary":"${ticket.title}",""" +
             """"issuetype":{"name":"${ticket.type}","iconUrl":"https://synthetic.example.test/icon"},""" +
             """"status":{"name":"${ticket.status}","statusCategory":{"key":"${ticket.category}"}},"updated":"${ticket.updated}"$parent}}"""
+    }
+
+    /** A parent as Jira sends it, with more than Thread keeps. */
+    private fun parentObject(key: String): String {
+        val title = tickets.first { it.key == key }.title
+        return """{"id":"${key.hashCode()}","key":"$key","fields":{"summary":"$title"}}"""
     }
 
     private fun error(message: String): String = """{"errorMessages":["$message"],"warningMessages":[]}"""
