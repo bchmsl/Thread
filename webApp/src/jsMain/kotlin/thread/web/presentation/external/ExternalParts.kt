@@ -9,23 +9,44 @@ import androidx.compose.runtime.setValue
 import kotlinx.browser.document
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.web.attributes.ATarget
+import org.jetbrains.compose.web.attributes.AttrsScope
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.disabled
 import org.jetbrains.compose.web.attributes.target
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
+import org.jetbrains.compose.web.dom.Blockquote
+import org.jetbrains.compose.web.dom.Br
 import org.jetbrains.compose.web.dom.Button
+import org.jetbrains.compose.web.dom.CheckboxInput
 import org.jetbrains.compose.web.dom.Code
 import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.H4
+import org.jetbrains.compose.web.dom.H5
+import org.jetbrains.compose.web.dom.H6
+import org.jetbrains.compose.web.dom.Hr
+import org.jetbrains.compose.web.dom.Li
+import org.jetbrains.compose.web.dom.Ol
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Pre
 import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.Table
+import org.jetbrains.compose.web.dom.TagElement
+import org.jetbrains.compose.web.dom.Tbody
+import org.jetbrains.compose.web.dom.Td
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.compose.web.dom.Th
+import org.jetbrains.compose.web.dom.Thead
+import org.jetbrains.compose.web.dom.Tr
+import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLHeadingElement
+import thread.domain.external.CellAlign
 import thread.domain.external.CiState
 import thread.domain.external.CiSummary
 import thread.domain.external.ExternalBlock
 import thread.domain.external.ExternalDocument
+import thread.domain.external.ExternalInline
 import thread.domain.external.ExternalLoader
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
@@ -254,23 +275,163 @@ internal fun CacheBar(
     }
 }
 
+/** Where a document comes from, for the line that stands in for content Thread does not show. */
+internal enum class DocumentSource { Jira, GitHub }
+
 /**
- * Jira rich text, read-only (adr/ADR-006). Built from DOM elements only, never HTML strings. Content Thread does not
- * show becomes the v3 placeholder.
+ * Jira rich text (adr/ADR-006) or GitHub Markdown (adr/ADR-007, D57), read-only. Built from DOM elements only, never
+ * HTML strings. Content Thread does not show becomes the v3 placeholder.
  */
 @Composable
-internal fun ExternalDocumentView(document: ExternalDocument) {
-    document.blocks.forEach { block ->
-        when (block) {
-            is ExternalBlock.Rich -> RichTextBlockView(block.block, smallHeadings = true)
-            is ExternalBlock.Code -> Pre { Code { Text(block.text) } }
-            is ExternalBlock.Unsupported ->
-                P({ classes("unsup") }) {
-                    IconView(Icon.Doc, 16)
-                    Text("${block.kind} is not supported here. Open the ticket in Jira to see it.")
+internal fun ExternalDocumentView(
+    document: ExternalDocument,
+    source: DocumentSource,
+) {
+    document.blocks.forEach { ExternalBlockView(it, source) }
+}
+
+@Composable
+private fun ExternalBlockView(
+    block: ExternalBlock,
+    source: DocumentSource,
+) {
+    when (block) {
+        is ExternalBlock.Rich -> RichTextBlockView(block.block, smallHeadings = true)
+        is ExternalBlock.Code -> Pre { Code { Text(block.text) } }
+        is ExternalBlock.Unsupported ->
+            P({ classes("unsup") }) {
+                IconView(Icon.Doc, 16)
+                Text(
+                    when (source) {
+                        DocumentSource.Jira -> "${block.kind} is not supported here. Open the ticket in Jira to see it."
+                        DocumentSource.GitHub -> "${block.kind} is not shown here. Open the pull request on GitHub to see it."
+                    },
+                )
+            }
+        is ExternalBlock.Paragraph -> P { ExternalInlines(block.content) }
+        is ExternalBlock.Heading -> MarkdownHeading(block)
+        is ExternalBlock.MarkdownList -> MarkdownList(block, source)
+        is ExternalBlock.Quote -> Blockquote { block.blocks.forEach { ExternalBlockView(it, source) } }
+        ExternalBlock.Rule -> Hr()
+        is ExternalBlock.Table -> MarkdownTable(block)
+    }
+}
+
+/** The page's own heading is an H3, so Markdown levels 1 and 2 are H4, level 3 is H5 and the rest H6. */
+@Composable
+private fun MarkdownHeading(heading: ExternalBlock.Heading) {
+    val attrs: AttrsScope<HTMLHeadingElement>.() -> Unit = { classes("md-h", "md-h${heading.level}") }
+    when (heading.level) {
+        1, 2 -> H4(attrs) { ExternalInlines(heading.content) }
+        3 -> H5(attrs) { ExternalInlines(heading.content) }
+        else -> H6(attrs) { ExternalInlines(heading.content) }
+    }
+}
+
+@Composable
+private fun MarkdownList(
+    list: ExternalBlock.MarkdownList,
+    source: DocumentSource,
+) {
+    val items: @Composable () -> Unit = {
+        list.items.forEach { item ->
+            val checked = item.checked
+            Li({ if (checked != null) classes("md-task") }) {
+                if (checked != null) {
+                    CheckboxInput(checked) {
+                        disabled()
+                        attr("aria-label", if (checked) "Done checklist item" else "Open checklist item")
+                    }
                 }
+                item.blocks.forEach { ExternalBlockView(it, source) }
+            }
         }
     }
+    val start = list.start
+    if (start == null) {
+        Ul { items() }
+    } else {
+        Ol({ if (start != 1) attr("start", start.toString()) }) { items() }
+    }
+}
+
+/** A table scrolls sideways inside its own box, so the page never does. */
+@Composable
+private fun MarkdownTable(table: ExternalBlock.Table) {
+    Div({ classes("md-table") }) {
+        Table {
+            Thead {
+                Tr {
+                    table.header.forEachIndexed { column, cell ->
+                        Th({
+                            attr("scope", "col")
+                            alignClass(table.align[column])?.let { classes(it) }
+                        }) { ExternalInlines(cell.content) }
+                    }
+                }
+            }
+            if (table.rows.isNotEmpty()) {
+                Tbody {
+                    table.rows.forEach { row ->
+                        Tr {
+                            row.forEachIndexed { column, cell ->
+                                Td({ alignClass(table.align[column])?.let { classes(it) } }) { ExternalInlines(cell.content) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun alignClass(align: CellAlign): String? =
+    when (align) {
+        CellAlign.None -> null
+        CellAlign.Left -> "ta-left"
+        CellAlign.Center -> "ta-center"
+        CellAlign.Right -> "ta-right"
+    }
+
+@Composable
+private fun ExternalInlines(content: List<ExternalInline>) {
+    content.forEach { inline ->
+        when (inline) {
+            ExternalInline.HardBreak -> Br()
+            is ExternalInline.Text -> {
+                val link = inline.link
+                if (link != null) {
+                    A(link.value, {
+                        target(ATarget.Blank)
+                        attr("rel", "noopener noreferrer")
+                    }) { StyledText(inline) }
+                } else {
+                    StyledText(inline)
+                }
+            }
+        }
+    }
+}
+
+/** Bold, italic, strikethrough and inline code nest in this order. */
+@Composable
+private fun StyledText(text: ExternalInline.Text) {
+    Wrap("b", text.bold) {
+        Wrap("i", text.italic) {
+            Wrap("del", text.strike) {
+                if (text.code) Code { Text(text.text) } else Text(text.text)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Wrap(
+    tag: String,
+    on: Boolean,
+    content: @Composable () -> Unit,
+) {
+    if (on) TagElement<HTMLElement>(tag, null) { content() } else content()
 }
 
 /** A link to the record on the provider's site, in a new tab. Hidden in the fixture mode. */

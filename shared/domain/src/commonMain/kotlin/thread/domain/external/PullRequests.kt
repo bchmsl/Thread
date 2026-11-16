@@ -97,8 +97,10 @@ data class PullRequestDetail(
     val isDraft: Boolean,
     val headBranch: String,
     val baseBranch: String,
-    /** The description as plain text. Thread does not render GitHub Markdown. */
+    /** The description as GitHub sent it: Markdown source. Used to find Jira keys (D49); the screen shows [description]. */
     val body: String,
+    /** [body] parsed from GitHub Markdown into safe blocks (ADR-007, D57). Empty when there is no description. */
+    val description: ExternalDocument,
     val updatedAtMillis: Long?,
     val webUrl: LinkHref?,
     val reviewers: List<Reviewer>,

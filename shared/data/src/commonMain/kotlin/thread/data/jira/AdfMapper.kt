@@ -140,12 +140,18 @@ internal object AdfMapper {
                 when (child) {
                     is ExternalBlock.Rich -> child.block
                     is ExternalBlock.Code -> RichTextBlock.Paragraph(lines(child.text))
-                    is ExternalBlock.Unsupported ->
-                        RichTextBlock.Paragraph(listOf(RichTextInline.Text("${child.kind} is not shown here.", italic = true)))
+                    is ExternalBlock.Unsupported -> notShown(child.kind)
+                    // The Markdown kinds come from GitHub only; ADF never produces them.
+                    is ExternalBlock.Paragraph, is ExternalBlock.Heading, is ExternalBlock.MarkdownList, is ExternalBlock.Quote,
+                    ExternalBlock.Rule, is ExternalBlock.Table,
+                    -> notShown(UNKNOWN)
                 }
             }
         return if (blocks.firstOrNull() is RichTextBlock.Paragraph) blocks else listOf(RichTextBlock.Paragraph(emptyList())) + blocks
     }
+
+    private fun notShown(kind: String): RichTextBlock =
+        RichTextBlock.Paragraph(listOf(RichTextInline.Text("$kind is not shown here.", italic = true)))
 
     private fun lines(text: String): List<RichTextInline> =
         text.split('\n').flatMapIndexed { index, line ->

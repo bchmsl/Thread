@@ -10,6 +10,9 @@ import thread.data.synthetic.SyntheticConnections
 import thread.data.syntheticTransport
 import thread.domain.external.CiState
 import thread.domain.external.CiSummary
+import thread.domain.external.ExternalBlock
+import thread.domain.external.ExternalDocument
+import thread.domain.external.ExternalInline
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.PullRequestDetail
@@ -25,6 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /** SYNTHETIC connection and answers only. */
 class GitHubRepositoriesTest {
@@ -112,6 +116,10 @@ class GitHubRepositoriesTest {
             )
             assertEquals(ReviewState.Approved, detail.review)
             assertEquals(CiSummary(CiState.Running, statusesReadable = true, checksReadable = true), detail.ci)
+            // The screen shows the parsed description (D57); the Markdown source stays for the Jira key search (D49).
+            assertTrue("Follows SYN-103 and SYN-105." in detail.body)
+            assertEquals(ExternalBlock.Heading(2, listOf(ExternalInline.Text("Summary"))), detail.description.blocks.first())
+            assertTrue(detail.description.blocks.any { it is ExternalBlock.Table })
             val sha = "1".repeat(40)
             assertEquals(
                 listOf(
@@ -131,6 +139,7 @@ class GitHubRepositoriesTest {
 
             assertEquals(true, detail.isDraft)
             assertEquals("", detail.body)
+            assertEquals(ExternalDocument.EMPTY, detail.description)
             assertEquals(ReviewState.ChangesRequested, detail.review)
             assertEquals(CiState.Failing, detail.ci.state)
         }

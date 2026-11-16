@@ -110,6 +110,7 @@ class TopicSuggestionsTest {
                 headBranch = "feature/SYN-105-banner",
                 baseBranch = "main",
                 body = "Also SYN-103 and https://other.atlassian.net/browse/OTH-1",
+                description = ExternalDocument.EMPTY,
                 updatedAtMillis = null,
                 webUrl = null,
                 reviewers = emptyList(),

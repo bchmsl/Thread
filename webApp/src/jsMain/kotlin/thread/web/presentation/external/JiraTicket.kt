@@ -174,7 +174,7 @@ private fun JiraArticle(
                 if (issue.description.blocks.isEmpty()) {
                     P({ classes("muted") }) { Text("No description.") }
                 } else {
-                    Div({ classes("desc") }) { ExternalDocumentView(issue.description) }
+                    Div({ classes("desc") }) { ExternalDocumentView(issue.description, DocumentSource.Jira) }
                 }
                 H3({ classes("xd__h") }) {
                     Text("Comments ")
@@ -344,7 +344,7 @@ private fun Comments(issue: JiraIssue) {
                         Text(comment.author ?: "Someone")
                         comment.createdAtMillis?.let { Span({ classes("cmt__at") }) { Text(Times.whenText(it)) } }
                     }
-                    Div({ classes("cmt__x", "desc") }) { ExternalDocumentView(comment.body) }
+                    Div({ classes("cmt__x", "desc") }) { ExternalDocumentView(comment.body, DocumentSource.Jira) }
                 }
             }
         }

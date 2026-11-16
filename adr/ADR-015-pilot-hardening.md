@@ -31,7 +31,7 @@ A `<meta http-equiv="Content-Security-Policy">` in `index.html`, because there a
 
 ### Rendering untrusted content
 
-- Jira rich text is built as DOM elements from the document tree, never from HTML strings (ADR-006). GitHub descriptions are plain text (ADR-014).
+- Jira rich text is built as DOM elements from the document tree, never from HTML strings (ADR-006). GitHub descriptions are parsed from their Markdown into the same kind of document tree and built the same way; raw HTML in them stays text (D57, ADR-007).
 - The only `innerHTML` writes are the constant icon and brand SVGs that ship in the bundle.
 - Links in Notes keep only `href`, are not opened on click inside the editor, and must pass the link check (`https:`, `http:`, `mailto:`; no spaces or control characters). Links to Jira and GitHub open in a new tab with `rel="noopener noreferrer"`.
 

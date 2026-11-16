@@ -4,6 +4,8 @@ Status: Proposed (2026-11-13). Written in Phase 3 (M1-C). Checked on synthetic f
 
 Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued. Phase 11 builds on it, with `review-requested:@me` as the review query.
 
+Update 2026-11-16 (D57): the description is shown as formatted text, parsed from its GitHub Markdown. See "Description" below. The rest is unchanged.
+
 ## Context
 
 - GitHub is read-only in v1. The v3 design shows two lists, "Mine" and "Review requested", and one pull request with its reviews and CI state.
@@ -41,7 +43,16 @@ Phase 4 review (2026-11-13, owner away): checked for consistency with the other 
 - **Reviewers:** one entry per person. The person's newest approval, change request or dismissal counts; a later comment does not undo it. A person whose review is requested again shows "Review requested". Requested teams are listed by name. A pending review is the viewer's own unsent draft and does not count.
 - **Review indicator:** any change request, else any approval, else any open request, else "No reviews yet".
 - **CI:** any failure wins, then anything still running, then success. No status and no check run gives "No checks". Check runs count as failing when they end `failure`, `timed_out`, `cancelled`, `action_required` or `startup_failure`; other ends, such as `neutral` or `skipped`, are neutral.
-- **Description:** plain text, split into paragraphs on blank lines. GitHub Markdown is not rendered and no HTML from GitHub is inserted.
+- **Description (D57):** GitHub Markdown, parsed in shared Kotlin (`GitHubMarkdown`, `shared/data` commonMain) into the read-only `ExternalDocument` blocks and drawn as DOM elements by `ExternalDocumentView`. Thread does not ask GitHub for rendered HTML, and no HTML from GitHub is inserted. Owner's words: "Also pull requests should be rendered as formatted text as it is on Github pull request". Replaces the earlier rule "plain text, split into paragraphs on blank lines".
+  - Covers CommonMark plus GitHub's tables, task lists (read-only checkboxes), strikethrough, bare `https://` and `www.` links, `#123` (an issue or pull request in the same repository) and `@name` (the GitHub account). A team (`@org/team`) and an email address stay text.
+  - A newline inside a paragraph is a line break, as GitHub shows pull request descriptions.
+  - Images become a link "Image: <alt>" that opens the image, because the CSP loads images only from Thread itself.
+  - Raw HTML stays visible text, except three things GitHub never shows as text: comments are hidden, `<br>` is a line break and `<img>` becomes an image link. `<details>`, `<summary>`, `<kbd>` and other tags show as typed.
+  - Every link passes the Notes link rule (`https`, `http`, `mailto`, no spaces or control characters) or stays plain text. Links open in a new tab with `rel="noopener noreferrer"` (D46).
+  - Caps against hostile text: 65,536 characters (GitHub's own limit), 2,000 blocks, tables of 100 rows by 20 columns, 16 levels of nesting. The screen says what it did not show ("The rest of this description", "The rest of this table", "Deeply nested content"). A wide table or code block scrolls inside its own box, and quotes and lists stop indenting after four levels, so the page never scrolls sideways, even at 390 px.
+  - Headings stay one step under the screen's own "Description" title, so a `## Summary` reads as part of the description.
+  - The device cache keeps the Markdown source, and parsing runs on each read, so a saved pull request shows the same way offline. The Jira key search (D49) still reads the source.
+  - Footnotes, emoji shortcodes (`:tada:`), math and diagrams are not converted; they show as typed.
 
 ### Problems and rate limits
 

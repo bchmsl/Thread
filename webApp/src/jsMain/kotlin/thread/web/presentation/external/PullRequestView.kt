@@ -23,6 +23,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
 import thread.domain.external.CiSummary
+import thread.domain.external.ExternalDocument
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.PullRequestDetail
@@ -188,7 +189,7 @@ private fun PullRequestArticle(
         Div({ classes("xd__grid") }) {
             Div({ classes("xd__main") }) {
                 H3({ classes("xd__h") }) { Text("Description") }
-                PlainDescription(pull.body)
+                Description(pull.description)
                 H3({ classes("xd__h") }) { Text("Reviewers") }
                 if (pull.reviewers.isEmpty()) {
                     P({ classes("muted") }) { Text("No reviewers yet.") }
@@ -228,15 +229,14 @@ internal fun StatePill(isDraft: Boolean) {
     }
 }
 
-/** GitHub's description as plain text: one paragraph per blank-line block, line breaks kept. No Markdown or HTML. */
+/** GitHub's description, parsed from its Markdown into safe blocks (ADR-007, D57). No HTML from GitHub is inserted. */
 @Composable
-private fun PlainDescription(body: String) {
-    val paragraphs = body.split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotEmpty() }
-    if (paragraphs.isEmpty()) {
+private fun Description(description: ExternalDocument) {
+    if (description.blocks.isEmpty()) {
         P({ classes("muted") }) { Text("No description.") }
         return
     }
-    Div({ classes("desc", "desc--plain") }) { paragraphs.forEach { P { Text(it) } } }
+    Div({ classes("desc", "desc--md") }) { ExternalDocumentView(description, DocumentSource.GitHub) }
 }
 
 private fun reviewerText(state: ReviewerState): String =

@@ -1,6 +1,7 @@
 package thread.data.synthetic
 
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.JsonPrimitive
 import thread.data.http.HttpNoResponseException
 import thread.data.http.HttpRequest
 import thread.data.http.HttpResponse
@@ -409,6 +410,81 @@ object SyntheticFixtures {
         val checkRuns: String,
     )
 
+    /** A SYNTHETIC description that uses every Markdown element Thread shows (D57). It names SYN-103 and SYN-105 (D49). */
+    private val MARKDOWN_SHOWCASE: String =
+        """
+        <!-- SYNTHETIC: the template's hint. GitHub hides it. -->
+        ## Summary
+
+        SYNTHETIC description. Adds the **offline shell**, so the app opens _without a network_. ~~Ship it later~~ It ships now,
+        after #13. Thanks @synthetic-reviewer-a!
+
+        Follows SYN-103 and SYN-105.
+
+        ### Changes
+
+        - Cache the app shell with a `service worker`
+        - Keep the sync status truthful
+          - pending edits stay on the device
+          - see the [synthetic notes](https://example.com/synthetic-notes)
+        - First line of an item<br>second line of the same item
+
+        ### Checklist
+
+        - [x] Unit tests
+        - [x] Offline reload checked
+        - [ ] Safari check
+
+        ### Steps to test
+
+        1. Open the app and go offline.
+        2. Reload the page.
+        3. Edit a Note, then go online again.
+
+        > **Note**
+        > The shell is versioned by its build id, so an old shell never serves new code.
+
+        ```kotlin
+        val shell = OfflineShell(buildId = "synthetic")
+        shell.install()
+        ```
+
+        | Screen | Before | After |
+        |:-------|:------:|------:|
+        | Today | 1.2 s | 0.3 s |
+        | Notes | 0.9 s | 0.2 s |
+
+        ---
+
+        ![Synthetic screenshot](https://example.com/synthetic-screenshot.png)
+
+        #### Follow-ups
+        Tracked in https://example.com/synthetic-board and on www.example.com/synthetic.
+        """.trimIndent()
+
+    /** A SYNTHETIC hostile description (D57). All of it must show as harmless text, and no link may run script. */
+    private val HOSTILE_BODY: String =
+        """
+        SYNTHETIC hostile description. Everything below must show as plain text.
+
+        <script>alert('synthetic')</script>
+        [javascript link](javascript:alert(1)) [data link](data:text/html;base64,PHNjcmlwdD4=) <javascript:alert(1)>
+        <a href="javascript:alert(1)">raw anchor</a> <img src="javascript:alert(1)" onerror="alert(1)">
+        <iframe src="https://evil.example"></iframe> <style>body{display:none}</style> <svg onload=alert(1)>
+
+        > > > > > > > > > > > > > > > > > > > > Deeply quoted text
+
+        A table of 30 columns and 150 rows follows. Thread shows 20 columns and 100 rows.
+
+        """.trimIndent() + "\n\n" + hostileTable()
+
+    private fun hostileTable(): String {
+        val header = (1..30).joinToString("|", "|", "|") { "Column $it" }
+        val delimiter = "|---".repeat(30) + "|"
+        val rows = (1..150).joinToString("\n") { row -> "|<script>row $row</script>" + "|cell".repeat(29) + "|" }
+        return "$header\n$delimiter\n$rows"
+    }
+
     private val PULLS: Map<String, SyntheticPull> =
         mapOf(
             "synthetic-org/synthetic-app#12" to
@@ -418,7 +494,7 @@ object SyntheticFixtures {
                         """
                         {"number":12,"title":"SYNTHETIC: Add the offline shell","user":{"login":"synthetic-me"},"draft":false,
                          "head":{"ref":"feature/offline-shell","sha":"${"1".repeat(40)}"},"base":{"ref":"main"},
-                         "body":"SYNTHETIC description.\n\nPlain text only; <b>no HTML</b> and **no Markdown** rendering.\n\nFollows SYN-103 and SYN-105.",
+                         "body":${JsonPrimitive(MARKDOWN_SHOWCASE)},
                          "updated_at":"2026-11-12T14:00:00Z",
                          "requested_reviewers":[{"login":"synthetic-reviewer-b"}],"requested_teams":[{"name":"synthetic-team","slug":"synthetic-team"}]}
                         """.trimIndent(),
@@ -459,6 +535,21 @@ object SyntheticFixtures {
                          "body":"Closed synthetic change.","updated_at":"2026-11-10T16:00:00Z","requested_reviewers":[],"requested_teams":[]}
                         """.trimIndent(),
                     reviews = """[{"user":{"login":"synthetic-me"},"state":"APPROVED"}]""",
+                    statuses = """{"state":"success","total_count":1,"statuses":[{"context":"synthetic/lint","state":"success"}]}""",
+                    checkRuns = """{"total_count":1,"check_runs":[{"name":"build","status":"completed","conclusion":"success"}]}""",
+                ),
+            "synthetic-org/synthetic-app#15" to
+                SyntheticPull(
+                    sha = "5".repeat(40),
+                    json =
+                        """
+                        {"number":15,"title":"SYNTHETIC: Hostile description check","user":{"login":"synthetic-teammate"},"draft":false,
+                         "head":{"ref":"test/hostile","sha":"${"5".repeat(
+                            40,
+                        )}"},"base":{"ref":"main"},"body":${JsonPrimitive(HOSTILE_BODY)},
+                         "updated_at":"2026-11-13T09:00:00Z","requested_reviewers":[],"requested_teams":[]}
+                        """.trimIndent(),
+                    reviews = "[]",
                     statuses = """{"state":"success","total_count":1,"statuses":[{"context":"synthetic/lint","state":"success"}]}""",
                     checkRuns = """{"total_count":1,"check_runs":[{"name":"build","status":"completed","conclusion":"success"}]}""",
                 ),

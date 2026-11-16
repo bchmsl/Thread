@@ -221,6 +221,7 @@ internal object GitHubJson {
             headBranch = pull.obj("head")?.str("ref").orEmpty(),
             baseBranch = pull.obj("base")?.str("ref").orEmpty(),
             body = pull.str("body").orEmpty(),
+            description = GitHubMarkdown.document(pull.str("body"), ref.owner, ref.repo),
             updatedAtMillis = ExternalTime.parseMillis(pull.str("updated_at")),
             webUrl = webUrl(ref),
             reviewers = reviewers,

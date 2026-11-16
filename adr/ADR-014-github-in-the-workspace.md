@@ -36,7 +36,7 @@ Status: Proposed (2026-11-13). Written in Phase 11 while the owner was away. Bui
 
 - Pull requests page: "Mine" and "Review requested" tabs with counts. At 1000px and wider the pull request shows next to the list (the first one when none is picked), narrower one at a time with a back link.
 - `#/item/pr/owner/repo/number`: the pull request as a page, with a back link to the Topic it came from.
-- Detail: state pill (Open, or Draft), repository, head branch, title and number, CI and review indicators, Topic chips, Link to Topic (several Topics), Create Topic from pull request, Open in GitHub (hidden for SYNTHETIC data), description as plain text, reviewers (people and teams), and fields (repository, author, branch, updated, CI sources). No comments.
+- Detail: state pill (Open, or Draft), repository, head branch, title and number, CI and review indicators, Topic chips, Link to Topic (several Topics), Create Topic from pull request, Open in GitHub (hidden for SYNTHETIC data), description as formatted text from its Markdown (D57, ADR-007), reviewers (people and teams), and fields (repository, author, branch, updated, CI sources). No comments.
 - Topic details: the Pull requests section lists linked pull requests. At 1000px and wider one opens in the side panel; narrower, as its own page.
 - Today: the "Review requested" column lists the saved list, then GitHub's answer.
 - ⌘K adds "Pull requests (downloaded)" for pull requests saved on this device (title, number or repository).

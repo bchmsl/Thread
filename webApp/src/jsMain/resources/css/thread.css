@@ -93,9 +93,67 @@ img.ProseMirror-separator {
 }
 
 /* Phase 11: GitHub. v3 has no draft state, so a draft pull request gets a quiet outlined pill in place of the
-   green Open pill; descriptions are GitHub plain text with its line breaks kept (owner-review-queue, ADR-014). */
+   green Open pill (owner-review-queue, ADR-014). */
 .pill-open--draft { background: transparent; color: var(--text-2); border: 1px solid var(--border-strong); }
-.desc--plain p { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* D57: a pull request description is GitHub Markdown, drawn as DOM from the parsed blocks (ADR-007). v3 only had one
+   plain paragraph, so headings, lists, task items, quotes, rules, tables, inline code and strikethrough use v3 tokens
+   in GitHub's arrangement. A table scrolls inside its own box; the page never scrolls sideways. */
+.desc--md { overflow-wrap: anywhere; }
+.desc--md > :last-child { margin-bottom: 0; }
+.desc--md a { text-decoration-color: var(--fog-500); text-underline-offset: 3px; }
+.desc--md a:hover { text-decoration-color: var(--text); }
+.desc--md .md-h { font-family: var(--font-text); font-weight: 600; line-height: 1.35; color: var(--text); margin: 22px 0 8px; }
+.desc--md > .md-h:first-child { margin-top: 0; }
+/* Headings stay one step under the screen's own section title ("Description", 17px), so `## Summary` reads as part of
+   the description. Level 1 and 2 keep GitHub's underline. */
+.desc--md .md-h1, .desc--md .md-h2 { padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.desc--md .md-h1 { font-size: var(--fs-17); }
+.desc--md .md-h2, .desc--md .md-h3 { font-size: var(--fs-15); }
+.desc--md .md-h4 { font-size: var(--fs-14); }
+.desc--md .md-h5, .desc--md .md-h6 { font-size: var(--fs-13); }
+.desc--md .md-h6 { color: var(--text-3); }
+.desc--md ul, .desc--md ol { margin: 0 0 12px; padding-left: 1.6em; line-height: 1.6; }
+.desc--md li > p { margin: 0; }
+.desc--md li + li { margin-top: 4px; }
+.desc--md li > * + * { margin-top: 6px; }
+.desc--md li > ul, .desc--md li > ol, .desc--md li > pre, .desc--md li > blockquote { margin-bottom: 0; }
+.desc--md li.md-task { list-style: none; position: relative; }
+.desc--md li.md-task > input[type="checkbox"] {
+  position: absolute; left: -1.55em; top: 0.3em; appearance: none; -webkit-appearance: none; width: 16px; height: 16px;
+  margin: 0; border: 2px solid var(--fog-500); border-radius: 4px; background: transparent;
+}
+.desc--md li.md-task > input[type="checkbox"]:checked {
+  border-color: var(--cat-done);
+  background: var(--cat-done) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230e1322' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 11px no-repeat;
+}
+.desc--md blockquote { margin: 0 0 12px; padding: 2px 0 2px 14px; border-left: 3px solid var(--border-strong); }
+.desc--md blockquote p { color: var(--text-2); }
+.desc--md blockquote > :last-child { margin-bottom: 0; }
+/* Quotes and lists stop indenting after four levels, so deep nesting cannot squeeze the text to nothing on a phone. */
+.desc--md :is(blockquote, ul, ol) :is(blockquote, ul, ol) :is(blockquote, ul, ol) :is(blockquote, ul, ol) blockquote {
+  padding-left: 0; border-left: 0;
+}
+.desc--md :is(blockquote, ul, ol) :is(blockquote, ul, ol) :is(blockquote, ul, ol) :is(blockquote, ul, ol) :is(ul, ol) { padding-left: 0; }
+.desc--md hr { border: 0; border-top: 1px solid var(--border-strong); margin: 20px 0; }
+.desc--md :not(pre) > code {
+  font: 0.88em/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--fog-200); background: var(--ink-800);
+  border: 1px solid var(--border); border-radius: 5px; padding: 0.1em 0.35em;
+}
+.desc--md del { color: var(--text-3); }
+.desc--md .md-table { width: fit-content; max-width: 100%; overflow-x: auto; margin: 0 0 12px; border: 1px solid var(--border); border-radius: 8px; }
+.desc--md table { border-collapse: collapse; font-size: var(--fs-14); line-height: 1.5; }
+.desc--md th, .desc--md td {
+  padding: 7px 12px; text-align: left; vertical-align: top; overflow-wrap: normal;
+  border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+}
+.desc--md th:last-child, .desc--md td:last-child { border-right: 0; }
+.desc--md tbody tr:last-child td { border-bottom: 0; }
+.desc--md th { font-weight: 600; color: var(--text); background: var(--ink-850); }
+.desc--md tbody tr:nth-child(even) { background: var(--bg-line); }
+.desc--md .ta-left { text-align: left; }
+.desc--md .ta-center { text-align: center; }
+.desc--md .ta-right { text-align: right; }
 
 /* Phase 12: a change the server refused gets Retry, Copy and Discard under its line in the sync panel. v3 only had
    the line and its red state (owner-review-queue Q14, adr/ADR-009-workspace-entities-and-sync.md). */
