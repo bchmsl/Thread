@@ -51,6 +51,26 @@ class PullRequestStatesTest {
     }
 
     @Test
+    fun aRequestedTeamComesAfterThePeopleOnceAndIsMarkedAsATeam() {
+        val reviewers =
+            PullRequestStates.reviewers(
+                requested = listOf("synthetic-b"),
+                reviews = listOf(SubmittedReview("synthetic-a", Approved)),
+                requestedTeams = listOf("synthetic-team", "synthetic-team", "synthetic-a"),
+            )
+
+        assertEquals(
+            listOf(
+                Reviewer("synthetic-a", Approved),
+                Reviewer("synthetic-b", Requested),
+                Reviewer("synthetic-team", Requested, isTeam = true),
+            ),
+            reviewers,
+            "A team named like a reviewer is not listed twice",
+        )
+    }
+
+    @Test
     fun reviewStateOrder() {
         fun state(vararg states: ReviewerState) = PullRequestStates.reviewState(states.mapIndexed { i, s -> Reviewer("synthetic-$i", s) })
 

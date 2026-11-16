@@ -17,6 +17,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.GitHubConnection
 import thread.domain.external.GitHubPerson
+import thread.domain.external.PullRequestChanges
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
@@ -56,6 +57,9 @@ class GitHubRepositoriesTest {
 
     private companion object {
         const val USER = "https://api.github.com/user"
+
+        /** The address Thread builds from a SYNTHETIC account id. */
+        fun avatar(id: Int): LinkHref? = LinkHref.parse("https://avatars.githubusercontent.com/u/$id?s=40&v=4")
     }
 
     @Test
@@ -100,6 +104,10 @@ class GitHubRepositoriesTest {
                 },
             )
             assertEquals(emptyList(), review.items[3].assignees, "GitHub's \"assignees\": null is nobody")
+            // Owner change #13 (D69): a row shows the author, so the author keeps an avatar; no id, no avatar.
+            assertEquals(GitHubPerson("synthetic-me", avatar(1)), mine.items[1].author)
+            assertEquals(GitHubPerson("synthetic-reviewer-a", avatar(3)), review.items[0].author)
+            assertEquals(GitHubPerson("synthetic-lead", null), review.items[3].author)
             assertEquals("synthetic-me", mine.viewer)
             assertEquals("synthetic-me", review.viewer)
             assertEquals(
@@ -140,15 +148,23 @@ class GitHubRepositoriesTest {
             assertEquals("SYNTHETIC: Add the offline shell", detail.title)
             assertEquals("feature/offline-shell", detail.headBranch)
             assertEquals("main", detail.baseBranch)
-            // The author's own comment does not count; a re-requested reviewer shows as requested.
+            // The author's own comment does not count; a re-requested reviewer shows as requested. A person's avatar comes
+            // from the id (D69); a team has none.
             assertEquals(
                 listOf(
-                    Reviewer("synthetic-reviewer-a", ReviewerState.Approved),
-                    Reviewer("synthetic-reviewer-b", ReviewerState.Requested),
-                    Reviewer("synthetic-team", ReviewerState.Requested),
+                    Reviewer("synthetic-reviewer-a", ReviewerState.Approved, avatar(3)),
+                    Reviewer("synthetic-reviewer-b", ReviewerState.Requested, avatar(4)),
+                    Reviewer("synthetic-team", ReviewerState.Requested, isTeam = true),
                 ),
                 detail.reviewers,
             )
+            // Owner change #13 (D69): the author with an avatar, the assignees and the size of the change.
+            assertEquals(GitHubPerson("synthetic-me", avatar(1)), detail.author)
+            assertEquals(
+                listOf(GitHubPerson("synthetic-me", avatar(1)), GitHubPerson("synthetic-teammate", avatar(2))),
+                detail.assignees,
+            )
+            assertEquals(PullRequestChanges(commits = 4, changedFiles = 6, additions = 128, deletions = 14), detail.changes)
             assertEquals(ReviewState.Approved, detail.review)
             assertEquals(CiSummary(CiState.Running, statusesReadable = true, checksReadable = true), detail.ci)
             // The screen shows the parsed description (D57); the Markdown source stays for the Jira key search (D49).
@@ -199,6 +215,64 @@ class GitHubRepositoriesTest {
             assertEquals(fresh, assertNotNull(details.readSaved(key)).value)
             val stored = assertNotNull(store.get(key.id))
             assertFalse("\"name\":\"tests\"" in stored, "The saved copy keeps check names")
+        }
+
+    @Test
+    fun aDetailSavedBeforeOwnerChange13ReadsWithoutAssigneesOrCounts() =
+        runTest {
+            val details = details(syntheticTransport())
+            val key = ref("synthetic-org/synthetic-app#12")
+            store.put(
+                key.id,
+                """
+                {"recordVersion":1,"savedAtMillis":$NOW,"scope":"github","data":{"pull":{"title":"SYNTHETIC: Old copy",
+                  "user":{"login":"synthetic-me"},"draft":false,"head":{"ref":"feature/a"},"base":{"ref":"main"},
+                  "requested_reviewers":[{"login":"synthetic-reviewer-a"}],"requested_teams":[{"name":"synthetic-team"}]},
+                 "reviews":[]}}
+                """.trimIndent(),
+            )
+
+            val saved = assertNotNull(details.readSaved(key)).value
+
+            assertNull(saved.assignees, "not known, so the Assignees card asks for a refresh")
+            assertNull(saved.changes, "not known, so the counts stay hidden")
+            assertEquals(GitHubPerson("synthetic-me", null), saved.author)
+            assertEquals(
+                listOf(
+                    Reviewer("synthetic-reviewer-a", ReviewerState.Requested),
+                    Reviewer("synthetic-team", ReviewerState.Requested, isTeam = true),
+                ),
+                saved.reviewers,
+            )
+        }
+
+    @Test
+    fun countsShowOnlyWhenAllFourAreReadable() =
+        runTest {
+            val details = details(syntheticTransport())
+            val key = ref("synthetic-org/synthetic-app#12")
+            val cases =
+                listOf(
+                    """"commits":2,"changed_files":3,"additions":0,"deletions":0""" to PullRequestChanges(2, 3, 0, 0),
+                    """"commits":2,"changed_files":3,"additions":5""" to null,
+                    """"commits":2,"changed_files":3,"additions":5,"deletions":-1""" to null,
+                    """"commits":"2","changed_files":3,"additions":5,"deletions":1""" to null,
+                    """"commits":2.5,"changed_files":3,"additions":5,"deletions":1""" to null,
+                )
+            for ((counts, expected) in cases) {
+                store.put(
+                    key.id,
+                    """
+                    {"recordVersion":1,"savedAtMillis":$NOW,"scope":"github","data":{"pull":{"title":"SYNTHETIC: Counts",
+                      "draft":false,"head":{"ref":"feature/a"},"base":{"ref":"main"},"assignees":[],$counts},"reviews":[]}}
+                    """.trimIndent(),
+                )
+
+                val saved = assertNotNull(details.readSaved(key)).value
+
+                assertEquals(expected, saved.changes, counts)
+                assertEquals(emptyList(), saved.assignees, counts)
+            }
         }
 
     @Test

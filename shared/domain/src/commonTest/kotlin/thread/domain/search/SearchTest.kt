@@ -1,5 +1,6 @@
 package thread.domain.search
 
+import thread.domain.external.GitHubPerson
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.PullRequestRef
@@ -82,7 +83,7 @@ class SearchTest {
         fun pr(
             id: String,
             title: String,
-        ) = PullRequestSummary(requireNotNull(PullRequestRef.parse(id)), title, "synthetic-me", false, null, null)
+        ) = PullRequestSummary(requireNotNull(PullRequestRef.parse(id)), title, GitHubPerson("synthetic-me", null), false, null, null)
         val prs =
             listOf(
                 pr("synthetic-org/synthetic-app#12", "SYNTHETIC: Add the offline shell"),

@@ -40,7 +40,7 @@ Update 2026-11-16 (D67): pull request rows refresh when they show. See "Cache po
 
 - The list rows link to `owner/repo#number`. Owner and repo names must match `A-Z a-z 0-9 _ . -`, and the head SHA must be a full SHA, because both go into request paths.
 - **Assignees and the viewer (D62):** list rows keep each assignee's `login` and numeric `id` from the search answer. A login must match `A-Z a-z 0-9 _ . - [ ]` (apps end in `[bot]`), or that person is left out. The avatar address is built from the id, `https://avatars.githubusercontent.com/u/{id}?s=40&v=4`; Thread never uses `avatar_url` or any other address from an answer, so no other image host can appear (ADR-015). The 40 px size stays sharp at 20 px on a 2x screen. The viewer's login from `GET /user` passes the same check and is saved with the connection (ADR-008), not in the cache. A failed or odd answer leaves it unknown: the list still loads, rows show the login instead of "You", and the next refresh asks again. A token changed while GitHub answered keeps that answer out of the store.
-- When the token cannot read statuses or check runs (403 or 404), the pull request still loads. "CI sources" then says which part was not readable, and the CI state comes from the readable part only (G3).
+- When the token cannot read statuses or check runs (403 or 404), the pull request still loads. A muted line in the detail then says which part was not readable (D69 replaced the "CI sources" field with it), and the CI state comes from the readable part only (G3).
 
 ### Indicators (pure domain rules, `PullRequestStates`)
 

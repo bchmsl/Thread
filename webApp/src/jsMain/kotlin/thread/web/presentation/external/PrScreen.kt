@@ -17,16 +17,15 @@ import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
-import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
+import thread.domain.external.GitHubPerson
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
 import thread.domain.external.PullRequestRef
@@ -36,14 +35,18 @@ import thread.domain.external.pullRequestsByRepository
 import thread.domain.workspace.gitHubReference
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
+import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.PageHeader
 import thread.web.presentation.Place
 import thread.web.presentation.Router
+import thread.web.presentation.SectionCard
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.itemCard
 import thread.web.presentation.topics.PlainTopicTag
 import thread.web.presentation.topics.topicPlace
 
@@ -111,7 +114,7 @@ internal fun PrScreen(
         previousOpen = openRef
         if (was != null && openRef == null) {
             delay(16)
-            (document.querySelector(".xi[data-id=\"${was.id}\"]") as? HTMLElement)?.focus()
+            (document.querySelector(".icard__main[data-id=\"${was.id}\"]") as? HTMLElement)?.focus()
         }
     }
 
@@ -131,7 +134,7 @@ internal fun PrScreen(
             ?: pullView?.takeIf { it.savedOrNull != null }
             ?: listView?.takeIf { it.savedOrNull != null }
     ViewBanner(bannerView, gitHub.name, "pull requests") { router.go(CONNECTIONS_PLACE) }
-    Div({ classes("md", *(if (openRef != null) arrayOf("has-open") else emptyArray())) }) {
+    Div({ classes("md", "md--wide", *(if (openRef != null) arrayOf("has-open") else emptyArray())) }) {
         Div({ classes("md__list") }) {
             PrTabs(
                 reviewTab,
@@ -300,8 +303,9 @@ private fun ListPanel(
 }
 
 /**
- * One repository's pull requests in a list (owner change #8): a heading with `owner/name` and the count, which opens
- * and closes the group like Today's groups (D53). This device remembers it per list and repository.
+ * One repository's pull requests in a list (owner change #8), as a pull request section card (D69): the repository
+ * mark, `owner/name` and the count, which opens and closes the group like Today's groups (D53). This device remembers
+ * it per list and repository.
  */
 @Composable
 private fun RepositoryGroup(
@@ -315,48 +319,34 @@ private fun RepositoryGroup(
     var open by remember(key) { mutableStateOf(readDeviceText("$PR_GROUP_OPEN_NAME.$key") != "0") }
     val owner = group.repo.substringBefore('/')
     val name = group.repo.substringAfter('/')
-    Section({
-        classes("tgroup", "prgroup")
-        if (!open) classes("is-closed")
-        attr("aria-labelledby", id)
-    }) {
-        H2({
-            classes("tgroup__head")
-            id(id)
-        }) {
-            Button({
-                type(ButtonType.Button)
-                classes("tgroup__toggle")
-                attr("aria-expanded", open.toString())
-                attr("aria-controls", "$id-b")
-                onClick {
-                    open = !open
-                    writeDeviceText("$PR_GROUP_OPEN_NAME.$key", if (open) "1" else "0")
-                }
-            }) {
-                Span({ classes("chev") }) { IconView(Icon.ChevDown, 18) }
-                Span({ classes("prgroup__name") }) {
-                    Span({ classes("prgroup__owner") }) { Text("$owner/") }
-                    Text(name)
-                }
-                Span({ classes("n") }) { Text(group.pulls.size.toString()) }
-            }
-        }
-        Ul({
-            classes("prgroup__body")
-            id("$id-b")
-            if (!open) attr("hidden", "")
-        }) { if (open) rows() }
-    }
+    SectionCard(
+        kind = CardKind.PullRequest,
+        headingId = id,
+        bodyId = "$id-b",
+        title = group.repo,
+        count = group.pulls.size.toString(),
+        open = open,
+        onToggle = {
+            open = !open
+            writeDeviceText("$PR_GROUP_OPEN_NAME.$key", if (open) "1" else "0")
+        },
+        mark = Icon.Repo,
+        attrs = { classes("prgroup") },
+        titleContent = {
+            Span({ classes("prgroup__owner") }) { Text("$owner/") }
+            Text(name)
+        },
+    ) { Ul({ classes("tlist") }) { rows() } }
 }
 
 /** Where this device keeps whether a repository group is open, per list and repository: `1` or `0`. Not synced. */
 private const val PR_GROUP_OPEN_NAME = "thread.prs.open"
 
 /**
- * v3 `X.prRow`, in a repository group (owner change #8): state and the assignees; title and number; CI and review
- * state; the author (Review requested only: Mine is always yours) and Topics. The repository is the group's heading. CI
- * and review state show once the pull request was opened on this device (one list request cannot carry them, ADR-007).
+ * v3 `X.prRow` as a pull request card, in a repository group (owner changes #8 and #13): state and the author; title
+ * and number; CI and review state; Topics. The repository is the group's heading. Mine hides the author when it is the
+ * viewer (D69): Mine searches `author:@me`, so an unknown viewer is the author too. CI and review state show once the
+ * pull request was opened on this device (one list request cannot carry them, ADR-007).
  */
 @Composable
 private fun PrRow(
@@ -371,9 +361,14 @@ private fun PrRow(
 ) {
     val topics = gitHubReference(pull.ref)?.let { workspace.topicsLinkedTo(it.id) }.orEmpty()
     val detail = gitHub.detail(pull.ref.id)
-    Li {
+    val author = rowAuthor(pull.author, mine, viewer)
+    Li({
+        itemCard(CardKind.PullRequest)
+        if (current) classes("is-current")
+    }) {
+        KindMark(CardKind.PullRequest)
         A(to.hash, {
-            classes("xi")
+            classes("icard__main")
             attr("data-id", pull.ref.id)
             if (current) attr("aria-current", "true")
             onClick {
@@ -383,7 +378,7 @@ private fun PrRow(
         }) {
             Span({ classes("xi__top") }) {
                 StatePill(pull.isDraft)
-                Assignees(pull.assignees, viewer)
+                author?.let { Author(it, viewer) }
             }
             Span({ classes("xi__title") }) {
                 Text("${pull.title} ")
@@ -401,12 +396,21 @@ private fun PrRow(
                 }
             }
             Span({ classes("xi__meta") }) {
-                if (!mine) Span({ classes("xi__by") }) { Text("by ${pull.author ?: "someone"}") }
                 if (topics.isEmpty()) Span { Text("Not linked") } else topics.forEach { PlainTopicTag(it) }
             }
         }
     }
 }
+
+/**
+ * The author a row shows (Q2 of D69). Mine hides it when it is the viewer, or when the viewer is not known yet: Mine
+ * searches `author:@me`, so its author is the viewer. Any other author shows, on either list.
+ */
+internal fun rowAuthor(
+    author: GitHubPerson?,
+    mine: Boolean,
+    viewer: String?,
+): GitHubPerson? = author?.takeUnless { mine && (viewer == null || it.isLogin(viewer)) }
 
 /**
  * One pull request as its own page (v3 item.html?kind=pr): from a Topic on narrow screens or "Open as page". The back

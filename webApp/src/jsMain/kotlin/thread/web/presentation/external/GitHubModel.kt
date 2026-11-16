@@ -88,6 +88,10 @@ internal class GitHubModel(
     var reviewRequested: List<PullRequestRef> by mutableStateOf(emptyList())
         private set
 
+    /** The token's own login, from the saved or fresh lists; null until a list has it. A pull request marks it "You". */
+    var viewer: String? by mutableStateOf(null)
+        private set
+
     /** The last access problem GitHub answered with (expired, refused, rate limited). A fresh answer clears it. */
     var problem: ExternalProblem? by mutableStateOf(null)
         private set
@@ -134,6 +138,7 @@ internal class GitHubModel(
                 PullRequestList.entries.map { list -> list to orFallback(null) { services.lists.readSaved(list) }?.value }
             }
         rows = lists.flatMap { it.second?.items.orEmpty() }.associateBy { it.ref.id }
+        viewer = lists.firstNotNullOfOrNull { it.second?.viewer }
         reviewRequested =
             lists
                 .firstOrNull { it.first == PullRequestList.ReviewRequested }
@@ -203,8 +208,10 @@ internal class GitHubModel(
         when (view) {
             is ExternalView.Fresh -> {
                 problem = null
-                val items = view.saved.value.items
+                val page = view.saved.value
+                val items = page.items
                 rows = rows + items.associateBy { it.ref.id }
+                page.viewer?.let { viewer = it }
                 if (list == PullRequestList.ReviewRequested) reviewRequested = items.map { it.ref }
             }
             is ExternalView.SavedCopy -> note(view.problem)

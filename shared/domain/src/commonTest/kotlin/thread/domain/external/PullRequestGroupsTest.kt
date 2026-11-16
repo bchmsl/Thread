@@ -10,7 +10,14 @@ class PullRequestGroupsTest {
     private fun pull(
         id: String,
         updatedAtMillis: Long?,
-    ) = PullRequestSummary(requireNotNull(PullRequestRef.parse(id)), "SYNTHETIC $id", "synthetic-me", false, updatedAtMillis, null)
+    ) = PullRequestSummary(
+        requireNotNull(PullRequestRef.parse(id)),
+        "SYNTHETIC $id",
+        GitHubPerson("synthetic-me", null),
+        false,
+        updatedAtMillis,
+        null,
+    )
 
     private fun List<RepositoryPullRequests>.shape() = map { group -> group.repo to group.pulls.map { it.ref.number } }
 

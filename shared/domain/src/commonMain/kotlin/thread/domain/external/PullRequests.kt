@@ -40,7 +40,8 @@ enum class PullRequestList {
 data class PullRequestSummary(
     val ref: PullRequestRef,
     val title: String,
-    val author: String?,
+    /** Who opened the pull request (owner change #13). Null when GitHub sent no account Thread can show. */
+    val author: GitHubPerson?,
     val isDraft: Boolean,
     val updatedAtMillis: Long?,
     val webUrl: LinkHref?,
@@ -51,7 +52,10 @@ data class PullRequestSummary(
     val assignees: List<GitHubPerson>? = null,
 )
 
-/** A GitHub account on a list row. [avatarUrl] is built by Thread from the account id, never taken from an answer. */
+/**
+ * A GitHub account: an author, assignee or reviewer. [avatarUrl] is built by Thread from the account id, never taken
+ * from an answer, and is null when the id is not known (a copy saved before Thread kept it).
+ */
 data class GitHubPerson(
     val login: String,
     val avatarUrl: LinkHref?,
@@ -136,7 +140,7 @@ interface PullRequestSource : ExternalRecordSource<PullRequestRef, PullRequestDe
 data class PullRequestDetail(
     val ref: PullRequestRef,
     val title: String,
-    val author: String?,
+    val author: GitHubPerson?,
     val isDraft: Boolean,
     val headBranch: String,
     val baseBranch: String,
@@ -149,14 +153,32 @@ data class PullRequestDetail(
     val reviewers: List<Reviewer>,
     val review: ReviewState,
     val ci: CiSummary,
+    /** The GitHub assignees (owner change #13). Null in a copy saved before Thread kept them. */
+    val assignees: List<GitHubPerson>? = null,
+    /** Commits and changed files and lines (owner change #13). Null in a copy saved before Thread kept them. */
+    val changes: PullRequestChanges? = null,
+)
+
+/** What a pull request changes, as GitHub counts it for the whole pull request. */
+data class PullRequestChanges(
+    val commits: Int,
+    val changedFiles: Int,
+    val additions: Int,
+    val deletions: Int,
 )
 
 /** The list row of a saved pull request. */
-fun PullRequestDetail.summary(): PullRequestSummary = PullRequestSummary(ref, title, author, isDraft, updatedAtMillis, webUrl)
+fun PullRequestDetail.summary(): PullRequestSummary = PullRequestSummary(ref, title, author, isDraft, updatedAtMillis, webUrl, assignees)
 
+/**
+ * A reviewer: a person, or a team whose review is requested ([isTeam]). [avatarUrl] is the person's, when Thread knows
+ * the account id; a team has none.
+ */
 data class Reviewer(
     val name: String,
     val state: ReviewerState,
+    val avatarUrl: LinkHref? = null,
+    val isTeam: Boolean = false,
 )
 
 enum class ReviewerState {
@@ -210,12 +232,13 @@ enum class CiState {
 object PullRequestStates {
     /**
      * One entry per person. A person's newest approval, change request or dismissal counts; a later comment does not
-     * undo it. A person whose review is requested again shows as [ReviewerState.Requested]. Requested teams are
-     * listed by name.
+     * undo it. A person whose review is requested again shows as [ReviewerState.Requested]. [requestedTeams] are
+     * listed by name after the people, marked as teams.
      */
     fun reviewers(
         requested: List<String>,
         reviews: List<SubmittedReview>,
+        requestedTeams: List<String> = emptyList(),
     ): List<Reviewer> {
         val states = LinkedHashMap<String, ReviewerState>()
         for (review in reviews) {
@@ -226,7 +249,9 @@ object PullRequestStates {
             }
         }
         for (name in requested) states[name] = ReviewerState.Requested
-        return states.map { (name, state) -> Reviewer(name, state) }
+        val people = states.map { (name, state) -> Reviewer(name, state) }
+        val teams = requestedTeams.filter { it !in states }.distinct().map { Reviewer(it, ReviewerState.Requested, isTeam = true) }
+        return people + teams
     }
 
     fun reviewState(reviewers: List<Reviewer>): ReviewState =

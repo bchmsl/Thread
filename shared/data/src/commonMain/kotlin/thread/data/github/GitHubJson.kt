@@ -21,6 +21,7 @@ import thread.data.external.str
 import thread.domain.external.CheckOutcome
 import thread.domain.external.GitHubPerson
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.PullRequestChanges
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestListPage
 import thread.domain.external.PullRequestMention
@@ -52,7 +53,8 @@ internal object GitHubJson {
                     buildJsonObject {
                         copy(item, "number")
                         copy(item, "title")
-                        putIfNotNull("user", item.obj("user")?.pick("login"))
+                        // The id builds the author's avatar address (owner change #13).
+                        putIfNotNull("user", item.obj("user")?.pick("login", "id"))
                         copy(item, "draft")
                         copy(item, "updated_at")
                         copy(item, "repository_url")
@@ -81,7 +83,10 @@ internal object GitHubJson {
     /** The login in a `GET /user` answer, or null. */
     fun viewerLogin(user: JsonElement): String? = user.asObject()?.str("login")?.takeIf { LOGIN.matches(it) }
 
-    /** A saved or fresh assignee: a login Thread can show, and the avatar address built from the numeric account id. */
+    /**
+     * A saved or fresh account (author, assignee, reviewer): a login Thread can show, and the avatar address built from
+     * the numeric account id. A copy saved without the id has no avatar address.
+     */
     private fun person(raw: JsonObject): GitHubPerson? {
         val login = raw.str("login")?.takeIf { LOGIN.matches(it) } ?: return null
         val avatar = raw.long("id")?.takeIf { it > 0 }?.let { LinkHref.parse("$AVATARS/u/$it?s=$AVATAR_PIXELS&v=4") }
@@ -95,7 +100,7 @@ internal object GitHubJson {
         return PullRequestSummary(
             ref = ref,
             title = item.str("title") ?: return null,
-            author = item.obj("user")?.str("login"),
+            author = item.obj("user")?.let(::person),
             isDraft = item.bool("draft") ?: false,
             updatedAtMillis = ExternalTime.parseMillis(item.str("updated_at")),
             webUrl = webUrl(ref),
@@ -121,6 +126,7 @@ internal object GitHubJson {
             buildJsonObject {
                 copy(item, "number")
                 copy(item, "title")
+                // No id: a mention never shows the author's avatar, so the Topic's saved copy keeps the login only.
                 putIfNotNull("user", item.obj("user")?.pick("login"))
                 copy(item, "draft")
                 copy(item, "updated_at")
@@ -181,20 +187,28 @@ internal object GitHubJson {
                 "pull",
                 buildJsonObject {
                     copy(raw, "title")
-                    putIfNotNull("user", raw.obj("user")?.pick("login"))
+                    // Account ids build avatar addresses (owner change #13).
+                    putIfNotNull("user", raw.obj("user")?.pick("login", "id"))
                     copy(raw, "draft")
                     putIfNotNull("head", raw.obj("head")?.pick("ref"))
                     putIfNotNull("base", raw.obj("base")?.pick("ref"))
                     copy(raw, "body")
                     copy(raw, "updated_at")
-                    put("requested_reviewers", JsonArray(raw.objects("requested_reviewers").map { it.pick("login") }))
+                    put("requested_reviewers", JsonArray(raw.objects("requested_reviewers").map { it.pick("login", "id") }))
                     put("requested_teams", JsonArray(raw.objects("requested_teams").map { it.pick("name") }))
+                    // Always an array, so a copy saved before owner change #13 (no key) reads as "not known".
+                    put("assignees", JsonArray(raw.objects("assignees").map { it.pick("login", "id") }))
+                    // Part of the same pull request answer, so the counts cost no extra request.
+                    copy(raw, "commits")
+                    copy(raw, "changed_files")
+                    copy(raw, "additions")
+                    copy(raw, "deletions")
                 },
             )
             val keptReviews =
                 reviewList.mapNotNull { it.asObject() }.map { review ->
                     buildJsonObject {
-                        putIfNotNull("user", review.obj("user")?.pick("login"))
+                        putIfNotNull("user", review.obj("user")?.pick("login", "id"))
                         copy(review, "state")
                     }
                 }
@@ -215,18 +229,26 @@ internal object GitHubJson {
     ): PullRequestDetail? {
         val pull = bundle.obj("pull") ?: return null
         val title = pull.str("title") ?: return null
-        val author = pull.obj("user")?.str("login")
+        val authorLogin = pull.obj("user")?.str("login")
         val reviews =
             bundle
                 .objects("reviews")
                 .mapNotNull { review ->
                     val state = reviewerState(review.str("state")) ?: return@mapNotNull null
                     SubmittedReview(review.obj("user")?.str("login") ?: GHOST, state)
-                }.filter { it.login != author }
-        val requested =
-            pull.objects("requested_reviewers").mapNotNull { it.str("login") } +
-                pull.objects("requested_teams").mapNotNull { it.str("name") }
-        val reviewers = PullRequestStates.reviewers(requested, reviews)
+                }.filter { it.login != authorLogin }
+        val requestedPeople = pull.objects("requested_reviewers").mapNotNull(::person)
+        val requested = pull.objects("requested_reviewers").mapNotNull { it.str("login") }
+        val teams = pull.objects("requested_teams").mapNotNull { it.str("name") }
+        // Avatars by login, from every account the bundle names; a team has none.
+        val avatars =
+            (requestedPeople + bundle.objects("reviews").mapNotNull { review -> review.obj("user")?.let(::person) })
+                .mapNotNull { person -> person.avatarUrl?.let { person.login to it } }
+                .toMap()
+        val reviewers =
+            PullRequestStates.reviewers(requested, reviews, teams).map { reviewer ->
+                if (reviewer.isTeam) reviewer else reviewer.copy(avatarUrl = avatars[reviewer.name])
+            }
         val statuses = bundle.arr("statuses")
         val checks = bundle.arr("check_runs")
         val outcomes =
@@ -235,7 +257,7 @@ internal object GitHubJson {
         return PullRequestDetail(
             ref = ref,
             title = title,
-            author = author,
+            author = pull.obj("user")?.let(::person),
             isDraft = pull.bool("draft") ?: false,
             headBranch = pull.obj("head")?.str("ref").orEmpty(),
             baseBranch = pull.obj("base")?.str("ref").orEmpty(),
@@ -246,7 +268,18 @@ internal object GitHubJson {
             reviewers = reviewers,
             review = PullRequestStates.reviewState(reviewers),
             ci = PullRequestStates.ci(outcomes, statusesReadable = statuses != null, checksReadable = checks != null),
+            assignees = pull.arr("assignees")?.mapNotNull { it.asObject()?.let(::person) },
+            changes = changes(pull),
         )
+    }
+
+    /** The counts, when the bundle has all four as non-negative numbers; a copy saved before owner change #13 has none. */
+    private fun changes(pull: JsonObject): PullRequestChanges? {
+        val commits = pull.int("commits")?.takeIf { it >= 0 } ?: return null
+        val files = pull.int("changed_files")?.takeIf { it >= 0 } ?: return null
+        val additions = pull.int("additions")?.takeIf { it >= 0 } ?: return null
+        val deletions = pull.int("deletions")?.takeIf { it >= 0 } ?: return null
+        return PullRequestChanges(commits, files, additions, deletions)
     }
 
     /** Built from the parsed ref, never taken from the answer. */
