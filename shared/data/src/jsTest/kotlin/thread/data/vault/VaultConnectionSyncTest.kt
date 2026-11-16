@@ -1,5 +1,9 @@
 package thread.data.vault
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import thread.data.synthetic.SyntheticConnections
 import thread.domain.account.AccountId
@@ -253,6 +257,88 @@ class VaultConnectionSyncTest {
             remote.failing = VaultRemoteException.Kind.Refused
             assertEquals(ConnectionSyncProblem.Refused, problemOf { first.sync.check() })
             remote.failing = null
+        }
+
+    @Test
+    fun connectionsMadeAfterTurningOnReachAnotherDevice() =
+        runTest {
+            first.sync.turnOn(PASSPHRASE)
+            first.connections.saveJira(SyntheticConnections.jira)
+            assertEquals(ConnectionSyncState.On(waiting = false), first.sync.connectionsChanged())
+            first.connections.saveGitHub(SyntheticConnections.gitHub)
+            assertEquals(ConnectionSyncState.On(waiting = false), first.sync.connectionsChanged())
+
+            second.sync.unlock(PASSPHRASE)
+
+            assertEquals(SyntheticConnections.jira, second.connections.jira())
+            assertEquals(SyntheticConnections.gitHub, second.connections.gitHub())
+        }
+
+    @Test
+    fun aFailedReadWhileOnlineIsReportedAndAChangeHereKeepsWaiting() =
+        runTest {
+            connectFirst()
+            first.sync.turnOn(PASSPHRASE)
+
+            remote.failing = VaultRemoteException.Kind.Failed
+            assertEquals(ConnectionSyncProblem.Failed, problemOf { first.sync.check() })
+            // Without a key this used to read as offline ("Unknown").
+            assertEquals(ConnectionSyncProblem.Failed, problemOf { second.sync.check() })
+            first.connections.clearGitHub()
+            assertEquals(ConnectionSyncProblem.Failed, problemOf { first.sync.connectionsChanged() })
+            assertEquals(true, first.device.vault?.waiting)
+
+            first.online = false
+            assertEquals(ConnectionSyncState.On(waiting = true), first.sync.check().state)
+
+            first.online = true
+            remote.failing = null
+            assertEquals(ConnectionSyncState.On(waiting = false), first.sync.check().state)
+            second.sync.unlock(PASSPHRASE)
+            assertNull(second.connections.gitHub())
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theServerTellsOfEachNewRecordOnceAndTheNextCheckActsOnIt() =
+        runTest {
+            connectFirst()
+            var changes = 0
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                second.sync.serverChanges().collect { changes++ }
+            }
+            assertEquals(1, changes, "the first answer")
+
+            remote.sendSnapshot()
+            assertEquals(1, changes, "the same record again is not a change")
+
+            first.sync.turnOn(PASSPHRASE)
+            assertEquals(2, changes)
+            assertEquals(ConnectionSyncState.Locked(passphraseChanged = false), second.sync.check().state)
+
+            second.sync.unlock(PASSPHRASE)
+            assertEquals(2, changes, "unlocking reads only")
+
+            first.connections.clearJira()
+            first.sync.connectionsChanged()
+            assertEquals(3, changes)
+            assertTrue(second.sync.check().replacedHere)
+            assertNull(second.connections.jira())
+
+            first.sync.changePassphrase(PASSPHRASE, OTHER_PASSPHRASE)
+            assertEquals(4, changes)
+            assertEquals(ConnectionSyncState.Locked(passphraseChanged = true), second.sync.check().state)
+
+            first.sync.turnOff()
+            assertEquals(5, changes)
+            assertEquals(ConnectionSyncState.Off, second.sync.check().state)
+        }
+
+    @Test
+    fun aListeningErrorEndsTheChangesQuietly() =
+        runTest {
+            remote.listenFailing = VaultRemoteException.Kind.Refused
+            assertEquals(emptyList(), first.sync.serverChanges().toList())
         }
 
     @Test

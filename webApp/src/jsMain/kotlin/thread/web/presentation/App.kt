@@ -177,7 +177,7 @@ private fun Workspace(
         }
     val connectionSync =
         remember {
-            ConnectionSyncModel(services.connectionSync?.invoke(signedIn.accountId)) {
+            ConnectionSyncModel(services.connectionSync?.invoke(signedIn.accountId), workspaceScope) {
                 jira.connectionChanged()
                 gitHub.connectionChanged()
             }
@@ -252,6 +252,9 @@ private fun Workspace(
     LaunchedEffect(gitHub) { gitHub.reload() }
     // On sign-in and each time the network comes or goes: save a change waiting here, or take another device's.
     LaunchedEffect(connectionSync, online) { connectionSync.check() }
+    // Another device's change to the encrypted copy shows here within seconds, without a reload (D60). After a
+    // listening error this waits for the next network change.
+    LaunchedEffect(connectionSync, online) { connectionSync.followServer() }
     SweepPurgedNotes(workspace, services.notes, signedIn.accountId, online)
     // Jira's assigned list and both pull request lists stay current while Thread is open (D51).
     BackgroundRefresher(jira, gitHub, services.backgroundProbe)

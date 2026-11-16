@@ -1,5 +1,8 @@
 package thread.data.firebase
 
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import thread.data.synthetic.SyntheticConnections
 import thread.data.vault.OTHER_PASSPHRASE
 import thread.data.vault.PASSPHRASE
@@ -16,6 +19,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * [FirestoreVaultRemote] and [VaultConnectionSync] against the Firestore emulator and its rules, with the real WebCrypto
@@ -116,4 +120,38 @@ class FirestoreVaultEmulatorTest {
                 assertEquals(SyntheticConnections.jira, first.connections.jira())
             }
         }
+
+    @Test
+    fun aListenerOnOneDeviceSeesAnotherDevicesWriteAndItsCheckAppliesIt() =
+        emulatorTest {
+            withDevices(syntheticSubject(), count = 2) { (firstDevice, secondDevice) ->
+                val first = firstDevice.test
+                val second = secondDevice.test
+                first.connections.saveJira(SyntheticConnections.jira)
+                first.connections.saveGitHub(SyntheticConnections.gitHub)
+                val changes = Channel<Unit>(Channel.UNLIMITED)
+                val listening = launch { second.sync.serverChanges().collect { changes.send(it) } }
+                try {
+                    withTimeout(LISTEN_TIMEOUT) { changes.receive() }
+
+                    first.sync.turnOn(PASSPHRASE)
+                    withTimeout(LISTEN_TIMEOUT) { changes.receive() }
+                    assertEquals(ConnectionSyncState.Locked(passphraseChanged = false), second.sync.check().state)
+                    second.sync.unlock(PASSPHRASE)
+
+                    first.connections.clearGitHub()
+                    first.sync.connectionsChanged()
+                    withTimeout(LISTEN_TIMEOUT) { changes.receive() }
+                    assertTrue(second.sync.check().replacedHere)
+                    assertNull(second.connections.gitHub())
+                    assertEquals(SyntheticConnections.jira, second.connections.jira())
+                } finally {
+                    listening.cancel()
+                }
+            }
+        }
+
+    private companion object {
+        val LISTEN_TIMEOUT = 5.seconds
+    }
 }

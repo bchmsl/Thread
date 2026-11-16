@@ -1,5 +1,6 @@
 package thread.data.vault
 
+import kotlinx.coroutines.flow.Flow
 import thread.domain.external.SecretText
 
 /*
@@ -68,7 +69,19 @@ interface VaultRemote {
     ): Boolean
 
     suspend fun delete()
+
+    /**
+     * While collected: what the server holds each time it changes, or null when there is no record. Only answers from
+     * the server count, never the device's cached copy. Fails with [VaultRemoteException] when listening stops.
+     */
+    fun watch(): Flow<VaultStamp?>
 }
+
+/** Tells one saved record from another without its content: a new passphrase changes the salt, every write the IV. */
+data class VaultStamp(
+    val salt: String,
+    val iv: String,
+)
 
 class VaultRemoteException(
     val kind: Kind,

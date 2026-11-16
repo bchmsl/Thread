@@ -1,6 +1,10 @@
 package thread.data.vault
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -106,6 +110,17 @@ class VaultConnectionSync(
             checkLocked(retries = 1).state
         }
 
+    /**
+     * Only the salt and IV the server holds, so a repeat of the same record is not a change. Listening errors end the
+     * flow quietly: the checks on sign-in, on a network change and on opening Settings still run.
+     */
+    override fun serverChanges(): Flow<Unit> =
+        remote
+            .watch()
+            .distinctUntilChanged()
+            .map { }
+            .catch { }
+
     private suspend fun checkLocked(retries: Int): ConnectionSyncCheck {
         val held = readDevice()
         val offline = ConnectionSyncCheck(held?.let { ConnectionSyncState.On(it.waiting) } ?: ConnectionSyncState.Unknown, false)
@@ -115,7 +130,9 @@ class VaultConnectionSync(
                 remote.read()
             } catch (e: VaultRemoteException) {
                 when (e.kind) {
-                    VaultRemoteException.Kind.Offline, VaultRemoteException.Kind.Failed -> return offline
+                    VaultRemoteException.Kind.Offline -> return offline
+                    // Online, a failed read is not "offline": it says so, and a change waiting here stays waiting.
+                    VaultRemoteException.Kind.Failed -> if (isOnline()) fail(ConnectionSyncProblem.Failed) else return offline
                     VaultRemoteException.Kind.Refused -> fail(ConnectionSyncProblem.Refused)
                     VaultRemoteException.Kind.Damaged -> fail(ConnectionSyncProblem.Damaged)
                 }

@@ -3,11 +3,16 @@ package thread.data.firebase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.await
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.withTimeout
 import thread.data.local.newJsObject
 import thread.data.vault.VaultRecord
 import thread.data.vault.VaultRemote
 import thread.data.vault.VaultRemoteException
+import thread.data.vault.VaultStamp
 import thread.domain.account.AccountId
 import kotlin.js.Promise
 import kotlin.time.Duration.Companion.seconds
@@ -64,6 +69,30 @@ class FirestoreVaultRemote(
         }
     }
 
+    /**
+     * One document listener. Snapshots from the offline cache are skipped, so only what the server holds counts. A
+     * damaged record still gives a stamp, so the check that follows reports it.
+     */
+    override fun watch(): Flow<VaultStamp?> =
+        callbackFlow {
+            val options = newJsObject()
+            // A cached snapshot followed by the same data from the server must still reach the server answer.
+            options.includeMetadataChanges = true
+            val stop =
+                onDocumentSnapshot(reference(), options, { snapshot ->
+                    if (!snapshot.metadata.fromCache) trySend(stampOf(snapshot))
+                }, { error ->
+                    close(VaultRemoteException(kindOf(error)))
+                })
+            awaitClose { stop() }
+        }.conflate()
+
+    private fun stampOf(snapshot: DocumentSnapshot): VaultStamp? {
+        if (!snapshot.exists()) return null
+        val data: dynamic = snapshot.data(undefined)
+        return VaultStamp(salt = textOf(data.salt), iv = textOf(data.iv))
+    }
+
     private fun reference(): DocumentReference = doc(firestore, USERS, accountId.value, VAULT, CONNECTIONS)
 
     /** Firestore errors are JS errors; they become [VaultRemoteException] by their code and keep nothing else. */
@@ -80,7 +109,7 @@ class FirestoreVaultRemote(
             throw VaultRemoteException(kindOf(e))
         }
 
-    private fun kindOf(error: Throwable): VaultRemoteException.Kind {
+    private fun kindOf(error: Any): VaultRemoteException.Kind {
         val code: dynamic = error.asDynamic().code
         return when (if (jsTypeOf(code) == "string") code.unsafeCast<String>() else null) {
             "permission-denied", "unauthenticated" -> VaultRemoteException.Kind.Refused
@@ -126,3 +155,5 @@ class FirestoreVaultRemote(
 }
 
 private fun isWholeNumber(value: dynamic): Boolean = js("Number.isSafeInteger(value)") as Boolean
+
+private fun textOf(value: dynamic): String = if (jsTypeOf(value) == "string") value.unsafeCast<String>() else ""

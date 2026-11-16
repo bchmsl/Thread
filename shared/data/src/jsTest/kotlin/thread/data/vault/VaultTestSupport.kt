@@ -1,5 +1,8 @@
 package thread.data.vault
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
 import thread.data.external.InMemoryKeyValueStore
 import thread.data.external.KeyValueConnectionStore
 import thread.domain.account.AccountId
@@ -8,10 +11,33 @@ import thread.domain.external.SecretText
 
 /** A server record in memory with the same match-then-write rule as the Firestore transaction. */
 internal class MemoryVaultRemote : VaultRemote {
+    /** What a listener gets: the first answer, then one per change, like Firestore's server snapshots. */
+    private val snapshots = MutableSharedFlow<VaultStamp?>(replay = 1, extraBufferCapacity = 64).apply { tryEmit(null) }
+
     var record: VaultRecord? = null
+        set(value) {
+            field = value
+            sendSnapshot()
+        }
 
     /** When set, every call fails like this. */
     var failing: VaultRemoteException.Kind? = null
+
+    /** When set, listening stops with this error at the next snapshot. */
+    var listenFailing: VaultRemoteException.Kind? = null
+
+    /** The same record again, as when only the snapshot's metadata changed. */
+    fun sendSnapshot() {
+        snapshots.tryEmit(record?.let { VaultStamp(it.salt, it.iv) })
+    }
+
+    override fun watch(): Flow<VaultStamp?> =
+        flow {
+            snapshots.collect { stamp ->
+                listenFailing?.let { throw VaultRemoteException(it) }
+                emit(stamp)
+            }
+        }
 
     override suspend fun read(): VaultRecord? {
         failing?.let { throw VaultRemoteException(it) }

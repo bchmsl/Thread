@@ -8,8 +8,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.web.attributes.ATarget
 import org.jetbrains.compose.web.attributes.AttrsScope
 import org.jetbrains.compose.web.attributes.ButtonType
@@ -96,6 +98,8 @@ private fun JiraRow(
     val online by rememberOnline()
     var formOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
+    // Kept here, so the toggle cannot close the form while a save runs.
+    var saving by remember { mutableStateOf(false) }
     val site = jira.site
     val problem = jira.problem
     val expired = site != null && problem == ExternalProblem.Unauthorized
@@ -137,6 +141,7 @@ private fun JiraRow(
             id("jira-connect")
             attr("aria-expanded", formOpen.toString())
             attr("aria-controls", "jira-form")
+            if (saving) disabled()
             onClick {
                 formOpen = !formOpen
                 if (formOpen) scope.launch { focusById("jira-site") }
@@ -160,7 +165,7 @@ private fun JiraRow(
         }
     }
     if (formOpen) {
-        JiraForm(jira, sync, replacing = site != null) {
+        JiraForm(jira, sync, replacing = site != null, saving = saving, onSaving = { saving = it }) {
             formOpen = false
             scope.launch {
                 delay(16)
@@ -179,10 +184,15 @@ private fun JiraRow(
             if (!ok) return@ConfirmDialog
             scope.launch {
                 try {
-                    jira.services.connections.clearJira()
-                    formOpen = false
-                    jira.connectionChanged()
-                    toasts.show("${jira.name} disconnected${disconnectedWhere(sync, sync.connectionsChanged())}")
+                    val synced =
+                        withContext(NonCancellable) {
+                            jira.services.connections.clearJira()
+                            sync.connectionsChanged().also {
+                                formOpen = false
+                                jira.connectionChanged()
+                            }
+                        }
+                    toasts.show("${jira.name} disconnected${disconnectedWhere(sync, synced.await())}")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
@@ -198,6 +208,8 @@ private fun JiraForm(
     jira: JiraModel,
     sync: ConnectionSyncModel,
     replacing: Boolean,
+    saving: Boolean,
+    onSaving: (Boolean) -> Unit,
     onDone: () -> Unit,
 ) {
     val toasts = LocalToasts.current
@@ -207,7 +219,6 @@ private fun JiraForm(
     var email by remember { mutableStateOf("") }
     var token by remember { mutableStateOf("") }
     var errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var saving by remember { mutableStateOf(false) }
     // A new token for the same site: the site, Cloud ID and e-mail stay as saved. The token is never read back.
     LaunchedEffect(Unit) {
         orFallback(null) { jira.services.connections.jira() }?.let {
@@ -239,12 +250,17 @@ private fun JiraForm(
             }
             val connection = JiraConnection(parsedSite, parsedCloud, email.trim(), SecretText(token.trim()))
             token = ""
-            saving = true
+            onSaving(true)
             scope.launch {
                 try {
-                    jira.services.connections.saveJira(connection)
-                    jira.connectionChanged()
-                    toasts.show("${jira.name} connected, read-only. ${savedWhere(sync, sync.connectionsChanged())}")
+                    // Leaving the form or Settings cannot split this: the change is saved here, its sync started (in the
+                    // workspace scope) and the Jira views told. Only the toast below needs the form.
+                    val synced =
+                        withContext(NonCancellable) {
+                            jira.services.connections.saveJira(connection)
+                            sync.connectionsChanged().also { jira.connectionChanged() }
+                        }
+                    toasts.show("${jira.name} connected, read-only. ${savedWhere(sync, synced.await())}")
                     onDone()
                 } catch (e: CancellationException) {
                     throw e
@@ -253,7 +269,7 @@ private fun JiraForm(
                 } catch (e: Throwable) {
                     toasts.show("Something went wrong on this device. Nothing changed.")
                 } finally {
-                    saving = false
+                    onSaving(false)
                 }
             }
         }
@@ -320,6 +336,7 @@ private fun JiraForm(
             Button({
                 classes("btn", "btn--text")
                 type(ButtonType.Button)
+                if (saving) disabled()
                 onClick {
                     token = ""
                     onDone()
@@ -340,6 +357,8 @@ private fun GitHubRow(
     val online by rememberOnline()
     var formOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
+    // Kept here, so the toggle cannot close the form while a save runs.
+    var saving by remember { mutableStateOf(false) }
     val connected = gitHub.connected
     val problem = gitHub.problem
     val expired = connected && problem == ExternalProblem.Unauthorized
@@ -377,6 +396,7 @@ private fun GitHubRow(
             id("github-connect")
             attr("aria-expanded", formOpen.toString())
             attr("aria-controls", "github-form")
+            if (saving) disabled()
             onClick {
                 formOpen = !formOpen
                 if (formOpen) scope.launch { focusById("github-token") }
@@ -400,7 +420,7 @@ private fun GitHubRow(
         }
     }
     if (formOpen) {
-        GitHubForm(gitHub, sync, replacing = connected) {
+        GitHubForm(gitHub, sync, replacing = connected, saving = saving, onSaving = { saving = it }) {
             formOpen = false
             scope.launch {
                 delay(16)
@@ -419,10 +439,15 @@ private fun GitHubRow(
             if (!ok) return@ConfirmDialog
             scope.launch {
                 try {
-                    gitHub.services.connections.clearGitHub()
-                    formOpen = false
-                    gitHub.connectionChanged()
-                    toasts.show("${gitHub.name} disconnected${disconnectedWhere(sync, sync.connectionsChanged())}")
+                    val synced =
+                        withContext(NonCancellable) {
+                            gitHub.services.connections.clearGitHub()
+                            sync.connectionsChanged().also {
+                                formOpen = false
+                                gitHub.connectionChanged()
+                            }
+                        }
+                    toasts.show("${gitHub.name} disconnected${disconnectedWhere(sync, synced.await())}")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
@@ -438,13 +463,14 @@ private fun GitHubForm(
     gitHub: GitHubModel,
     sync: ConnectionSyncModel,
     replacing: Boolean,
+    saving: Boolean,
+    onSaving: (Boolean) -> Unit,
     onDone: () -> Unit,
 ) {
     val toasts = LocalToasts.current
     val scope = rememberCoroutineScope()
     var token by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var saving by remember { mutableStateOf(false) }
     Form(attrs = {
         classes("cform")
         id("github-form")
@@ -461,12 +487,16 @@ private fun GitHubForm(
             error = null
             val connection = GitHubConnection(SecretText(token.trim()))
             token = ""
-            saving = true
+            onSaving(true)
             scope.launch {
                 try {
-                    gitHub.services.connections.saveGitHub(connection)
-                    gitHub.connectionChanged()
-                    toasts.show("${gitHub.name} connected, read-only. ${savedWhere(sync, sync.connectionsChanged())}")
+                    val synced =
+                        withContext(NonCancellable) {
+                            // As for Jira: leaving the form or Settings cannot split this.
+                            gitHub.services.connections.saveGitHub(connection)
+                            sync.connectionsChanged().also { gitHub.connectionChanged() }
+                        }
+                    toasts.show("${gitHub.name} connected, read-only. ${savedWhere(sync, synced.await())}")
                     onDone()
                 } catch (e: CancellationException) {
                     throw e
@@ -475,7 +505,7 @@ private fun GitHubForm(
                 } catch (e: Throwable) {
                     toasts.show("Something went wrong on this device. Nothing changed.")
                 } finally {
-                    saving = false
+                    onSaving(false)
                 }
             }
         }
@@ -508,6 +538,7 @@ private fun GitHubForm(
             Button({
                 classes("btn", "btn--text")
                 type(ButtonType.Button)
+                if (saving) disabled()
                 onClick {
                     token = ""
                     onDone()

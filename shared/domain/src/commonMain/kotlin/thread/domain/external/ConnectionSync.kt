@@ -1,5 +1,7 @@
 package thread.domain.external
 
+import kotlinx.coroutines.flow.Flow
+
 /**
  * Sync of one account's Jira and GitHub connections across devices (adr/ADR-016-encrypted-connection-sync.md).
  *
@@ -37,6 +39,13 @@ interface ConnectionSync {
      * has the key. Offline, the change waits for the next [check]. Never throws for a missing network.
      */
     suspend fun connectionsChanged(): ConnectionSyncState
+
+    /**
+     * Tells, while collected, that the saved record may have changed on the server: created, deleted, written again
+     * or saved with a new passphrase, also by this device. It carries no data; the caller runs [check], which reads
+     * and decides. It ends quietly when the server stops answering, so the caller may collect it again later.
+     */
+    fun serverChanges(): Flow<Unit>
 }
 
 sealed interface ConnectionSyncState {
