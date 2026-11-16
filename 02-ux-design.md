@@ -196,7 +196,7 @@ Direction D, "Band + Object", picked by the orchestrator while the owner was awa
 - Marks are Thread-drawn, in the provider colors. No official Jira or GitHub logos (Q5).
 - Each accent is at least 6.7:1 on the surface color. Kind never depends on color alone: each has its own mark, shape and label.
 - A suggestion is the same card with a dashed edge and a quieter title. The "Suggested N" heading still folds them away (D65).
-- A Jira card's mark says Jira; the issue type icon (D63) sits before the key, as on the Jira page. A Topic's tickets under a linked parent (D64) are cards in the nested lists, one card gap apart.
+- A Jira card's stub holds the issue type icon (D63) in place of the Jira mark, so a ticket shows one mark. The stub, the tear line and the blue still say Jira, and the stub keeps the Jira mark when the type is not known. The type shows on hover, and screen readers hear it in the card's link. A Topic's tickets under a linked parent (D64) are cards in the nested lists, one card gap apart.
 - ⌘K results are small cards of their kind. Settings' Jira and GitHub connections use the kinds' marks and accents.
 - A dialog card (an item opened large) starts with the kind's band: the mark and kind name, a back button on the left and the actions on the right. Below 600 px the button labels hide and the card fills the screen. A Topic's dialog card sits on the page color, like the Topic page.
 - In the Topic side panel (380 px) the band shows the mark only; the kind's name stays for screen readers.

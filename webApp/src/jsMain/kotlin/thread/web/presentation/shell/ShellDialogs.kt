@@ -294,10 +294,11 @@ internal fun SearchPalette(
                                     attr("aria-selected", (optionIndex == active).toString())
                                     onClick { option.onPick() }
                                 }) {
-                                    if (kind != null && kind != CardKind.Topic) {
-                                        KindMark(kind)
-                                    } else {
-                                        Span({ classes("pal__lead") }) { option.lead() }
+                                    when {
+                                        // A ticket's stub holds its lead, the issue type icon (D63), so it shows one mark.
+                                        kind == CardKind.Jira -> Span({ classes("kmark") }) { option.lead() }
+                                        kind != null && kind != CardKind.Topic -> KindMark(kind)
+                                        else -> Span({ classes("pal__lead") }) { option.lead() }
                                     }
                                     Span({ classes("pal__label") }) { Text(option.label) }
                                     Span({ classes("pal__sub", *option.subClasses.toTypedArray()) }) { Text(option.sub) }

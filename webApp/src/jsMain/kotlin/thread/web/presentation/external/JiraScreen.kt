@@ -44,11 +44,12 @@ import thread.web.platform.mediaMatches
 import thread.web.platform.nowMillis
 import thread.web.platform.observeMedia
 import thread.web.presentation.CardKind
+import thread.web.presentation.CardMark
 import thread.web.presentation.CheckBox
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
-import thread.web.presentation.KindMark
+import thread.web.presentation.JiraTypeName
 import thread.web.presentation.PageHeader
 import thread.web.presentation.Place
 import thread.web.presentation.Router
@@ -487,7 +488,7 @@ private fun JiraRow(
         itemCard(CardKind.Jira)
         if (current) classes("is-current")
     }) {
-        KindMark(CardKind.Jira)
+        CardMark(CardKind.Jira, issue.type)
         A(to.hash, {
             classes("icard__main")
             attr("data-key", issue.key.value)
@@ -498,8 +499,8 @@ private fun JiraRow(
             }
         }) {
             Span({ classes("xi__top") }) {
-                // The type is the icon's name for screen readers and on hover (D63).
-                issue.type?.let { JiraTypeIcon(it) }
+                // The card's stub shows the type's icon (D63, D68); screen readers hear the type here, in the link.
+                JiraTypeName(issue.type)
                 Span({ classes("xi__key") }) { Text(issue.key.value) }
                 issue.status?.let { JiraStatusLozenge(it) }
             }

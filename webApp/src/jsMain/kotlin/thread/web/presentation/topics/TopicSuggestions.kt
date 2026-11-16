@@ -71,17 +71,17 @@ import thread.web.platform.nowMillis
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
 import thread.web.presentation.CardKind
+import thread.web.presentation.CardMark
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
-import thread.web.presentation.KindMark
+import thread.web.presentation.JiraTypeName
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
-import thread.web.presentation.external.JiraTypeIcon
 import thread.web.presentation.external.orFallback
 import thread.web.presentation.itemCard
 import thread.web.presentation.rememberOnline
@@ -525,15 +525,15 @@ internal fun SuggestedGroup(
                                 itemCard(card)
                                 classes("icard--sugg")
                             }) {
-                                KindMark(card)
+                                CardMark(card, row.type)
                                 A(href(row), {
                                     classes("xrow__main")
                                     attr("data-suggested", row.reference.id)
                                     onClick { if (onOpen(row)) it.preventDefault() }
                                 }) {
                                     Span({ classes("xrow__key") }) {
-                                        // The type is the icon's name for screen readers and on hover (D63).
-                                        if (row.jiraKey != null && row.type != null) JiraTypeIcon(row.type)
+                                        // The card's stub shows the type's icon (D63, D68); screen readers hear it here.
+                                        if (row.jiraKey != null) JiraTypeName(row.type)
                                         B { Text(row.label) }
                                         if (row.status != null) JiraStatusLozenge(row.status)
                                         if (row.repo != null) Span { Text(row.repo) }
@@ -644,10 +644,10 @@ private fun NotSuggestedDialog(
                                 itemCard(card)
                                 attr("data-dismissed", reference.id)
                             }) {
-                                KindMark(card)
+                                CardMark(card, row.type)
                                 Div({ classes("xrow__main") }) {
                                     Span({ classes("xrow__key") }) {
-                                        if (reference.provider == ExternalProvider.Jira && row.type != null) JiraTypeIcon(row.type)
+                                        if (reference.provider == ExternalProvider.Jira) JiraTypeName(row.type)
                                         B { Text(label) }
                                     }
                                     Span({ classes("xrow__title") }) { Text(title ?: "Not on this device") }

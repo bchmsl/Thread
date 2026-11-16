@@ -30,10 +30,11 @@ import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
 import thread.web.presentation.CardBand
 import thread.web.presentation.CardKind
+import thread.web.presentation.CardMark
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
-import thread.web.presentation.KindMark
+import thread.web.presentation.JiraTypeName
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
@@ -43,7 +44,6 @@ import thread.web.presentation.external.GoneBadge
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
 import thread.web.presentation.external.JiraTicket
-import thread.web.presentation.external.JiraTypeIcon
 import thread.web.presentation.external.RefreshJiraOnShow
 import thread.web.presentation.external.ViewBanner
 import thread.web.presentation.external.XD_TITLE_ID
@@ -211,7 +211,7 @@ private fun LinkedTicket(
                 itemCard(CardKind.Jira)
                 if (isOpen) classes("is-current")
             }) {
-                KindMark(CardKind.Jira)
+                CardMark(CardKind.Jira, summary?.type)
                 if (here && issueKey != null) {
                     A(jiraItemPlace(issueKey, topic.id.value).hash, {
                         classes("xrow__main")
@@ -264,8 +264,8 @@ private fun RowText(
     type: String? = null,
 ) {
     Span({ classes("xrow__key") }) {
-        // The type is the icon's name for screen readers and on hover (D63).
-        if (type != null) JiraTypeIcon(type)
+        // The card's stub shows the type's icon (D63, D68); screen readers hear the type here, in the link.
+        JiraTypeName(type)
         B { Text(key) }
         // Jira did not show the ticket now: the saved status may be out of date, so it is not shown (D67).
         if (gone) {

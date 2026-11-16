@@ -13,6 +13,7 @@ import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import thread.web.presentation.external.JiraTypeIcon
 
 /*
  * The card language (owner changes #12 and #13, D68): every section and every item is a card, and each kind of thing
@@ -61,6 +62,33 @@ internal fun KindMark(
         classes("kmark")
         attr("aria-hidden", "true")
     }) { IconView(icon, size) }
+}
+
+/**
+ * An item card's mark. A Jira ticket's stub holds its issue type icon (D63) instead of the Jira mark, so a ticket shows
+ * one mark; the stub, the tear line and the blue still say Jira. Decorative: the type shows on hover, and [JiraTypeName]
+ * names it inside the card's link. With no type known, the stub keeps the Jira mark.
+ */
+@Composable
+internal fun CardMark(
+    kind: CardKind,
+    jiraType: String? = null,
+) {
+    if (kind != CardKind.Jira || jiraType.isNullOrBlank()) {
+        KindMark(kind)
+        return
+    }
+    Span({
+        classes("kmark")
+        attr("aria-hidden", "true")
+        title(jiraType)
+    }) { JiraTypeIcon(jiraType, decorative = true) }
+}
+
+/** A Jira ticket's issue type for screen readers, first in the card's link; the stub shows it as an icon ([CardMark]). */
+@Composable
+internal fun JiraTypeName(type: String?) {
+    if (!type.isNullOrBlank()) Span({ classes("vh") }) { Text("$type ") }
 }
 
 /**
