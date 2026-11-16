@@ -12,7 +12,8 @@ import kotlin.coroutines.resumeWithException
 /**
  * An IndexedDB database of simple string stores, for connections and saved copies of Jira and GitHub records
  * (adr/ADR-006, ADR-007, ADR-008), each account's record of workspace changes on their way to the server
- * (adr/ADR-009) and each account's local copy of automatic changes (D54). Each store holds records `{key, value}` with key path `key`. The connection sync key is the one
+ * (adr/ADR-009), each account's local copy of automatic changes (D54) and each account's Focus timer on this device
+ * (adr/ADR-019). Each store holds records `{key, value}` with key path `key`. The connection sync key is the one
  * value that is not a string ([getObject], adr/ADR-016).
  *
  * It is separate from the Note drafts database (thread-local and thread-drafts-*), so clearing saved copies can
@@ -55,6 +56,70 @@ class IndexedDbKeyValueDatabase(
         record[KEY] = key
         record[VALUE] = value
         request(storeName, READWRITE) { it.put(record) }
+    }
+
+    /**
+     * Reads the string value of [key] in [storeName], passes it to [change] and stores what [change] returns, in one
+     * read-write transaction. IndexedDB runs read-write transactions on one store one after another, also from other
+     * tabs, so no other update comes between this read and this write. Null from [change] leaves the record as it is.
+     * [change] runs inside the transaction and must not suspend; if it throws, nothing is written and this throws it.
+     */
+    internal suspend fun update(
+        storeName: String,
+        key: String,
+        change: (String?) -> String?,
+    ) {
+        require(storeName in storeNames) { "Unknown store" }
+        val db = database()
+        suspendCancellableCoroutine<Unit> { continuation ->
+            val transaction =
+                try {
+                    db.transaction(arrayOf(storeName), READWRITE, writeOptions())
+                } catch (e: Throwable) {
+                    continuation.failOnce(KeyValueStoreException("Could not use device storage: ${e.message}", e))
+                    return@suspendCancellableCoroutine
+                }
+            var failure: Throwable? = null
+            transaction.oncomplete = { continuation.resumeOnce(Unit) }
+            transaction.onabort = {
+                continuation.failOnce(
+                    failure ?: KeyValueStoreException("Device storage failed: ${transaction.error?.name ?: "AbortError"}"),
+                )
+            }
+            try {
+                val store = transaction.objectStore(storeName)
+                val read = store.get(key)
+                read.onsuccess = {
+                    try {
+                        val record: dynamic = read.result
+                        val value: dynamic = if (record == null || record == undefined) null else record[VALUE]
+                        val next = change(if (jsTypeOf(value) == "string") value.unsafeCast<String>() else null)
+                        if (next != null) {
+                            val updated = newJsObject()
+                            updated[KEY] = key
+                            updated[VALUE] = next
+                            store.put(updated)
+                        }
+                    } catch (e: Throwable) {
+                        failure = e
+                        transaction.abort()
+                    }
+                }
+            } catch (e: Throwable) {
+                failure = e
+                try {
+                    transaction.abort()
+                } catch (alreadyFinished: Throwable) {
+                    continuation.failOnce(KeyValueStoreException("Device storage failed: ${e.message}", e))
+                }
+            }
+        }
+    }
+
+    private fun writeOptions(): dynamic {
+        val options = newJsObject()
+        if (strictDurability) options.durability = "strict"
+        return options
     }
 
     private inner class Store(
@@ -219,6 +284,11 @@ class IndexedDbKeyValueDatabase(
         fun workspaceBackupFor(accountId: AccountId): String = "thread-backup-${accountId.value}"
 
         const val WORKSPACE_BACKUP_STORE: String = "conversions"
+
+        /** One account's Focus timer on this device (adr/ADR-019-focus-timer.md, F2 A). */
+        fun focusFor(accountId: AccountId): String = "thread-focus-${accountId.value}"
+
+        const val FOCUS_STORE: String = "timer"
     }
 }
 

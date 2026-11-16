@@ -1,5 +1,7 @@
 package thread.domain.workspace
 
+import thread.domain.focus.FOCUS_HISTORY_LIMIT
+import thread.domain.focus.FocusSession
 import thread.domain.note.NoteSummary
 import thread.domain.reminder.Reminder
 import thread.domain.task.Task
@@ -60,6 +62,7 @@ private fun documentOf(write: WorkspaceWrite): String =
         is WorkspaceWrite.PutNoteLink -> "noteLinks/${write.link.id}"
         is WorkspaceWrite.PutExternalRef -> "externalRefs/${write.reference.id}"
         is WorkspaceWrite.PutExternalLink -> "externalLinks/${write.link.id}"
+        is WorkspaceWrite.PutFocusSession -> "focusSessions/${write.session.id}"
         is WorkspaceWrite.DeleteForever ->
             when (write.kind) {
                 TrashKind.Topic -> "topics/${write.id}"
@@ -85,6 +88,7 @@ private fun writtenFields(write: WorkspaceWrite): Map<String, Any?> =
                 put(LINKED, write.link.linked)
                 write.link.dismissed?.let { put(DISMISSED, it) }
             }
+        is WorkspaceWrite.PutFocusSession -> write.session.fields()
         is WorkspaceWrite.DeleteForever -> emptyMap()
     }
 
@@ -104,6 +108,8 @@ private fun storedFields(
         is WorkspaceWrite.PutExternalRef -> data.externalRefs.firstOrNull { it.id == write.reference.id }?.let { mapOf(URL to it.url) }
         is WorkspaceWrite.PutExternalLink ->
             data.externalLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked, DISMISSED to it.dismissed) }
+        is WorkspaceWrite.PutFocusSession ->
+            (data.focusSessions.firstOrNull { it.id == write.session.id } ?: write.session.takeIf { beyondHistory(it, data) })?.fields()
         is WorkspaceWrite.DeleteForever ->
             when (write.kind) {
                 TrashKind.Topic -> data.topics.firstOrNull { it.id.value == write.id }?.fields()
@@ -112,6 +118,17 @@ private fun storedFields(
                 TrashKind.Note -> data.notes.firstOrNull { it.id.value == write.id }?.filing()
             }
     }
+
+/**
+ * True when [session] is older than every session [data] holds while it holds the most it can: the bounded history
+ * leaves it out, so it may well be stored. It counts as shown rather than as a false refusal.
+ */
+private fun beyondHistory(
+    session: FocusSession,
+    data: WorkspaceData,
+): Boolean =
+    data.focusSessions.size >= FOCUS_HISTORY_LIMIT &&
+        session.endedAtMillis <= data.focusSessions.minOf { it.endedAtMillis }
 
 private fun changed(
     after: Map<String, Any?>,
@@ -141,7 +158,14 @@ private fun TopicStatus.fields(): Map<String, Any?> =
     )
 
 private fun WorkspacePrefs.fields(): Map<String, Any?> =
-    mapOf("topicsView" to topicsView, "captureType" to captureType, "keepCompleted" to keepCompleted, "timeZone" to timeZone)
+    mapOf(
+        "topicsView" to topicsView,
+        "captureType" to captureType,
+        "keepCompleted" to keepCompleted,
+        "timeZone" to timeZone,
+        "focusMin" to focusWorkMinutes,
+        "breakMin" to focusBreakMinutes,
+    )
 
 private fun Task.fields(): Map<String, Any?> =
     mapOf(
@@ -158,6 +182,17 @@ private fun Task.fields(): Map<String, Any?> =
 
 private fun Reminder.fields(): Map<String, Any?> =
     mapOf("at" to at, "zone" to zone, "text" to text, "target" to target, "dismissed" to dismissed, "deleted" to deleted)
+
+/** Every field: a session never changes once made. */
+private fun FocusSession.fields(): Map<String, Any?> =
+    mapOf(
+        "startedAt" to startedAtMillis,
+        "endedAt" to endedAtMillis,
+        "focusedMs" to focusedMillis,
+        "plannedMin" to plannedMinutes,
+        "outcome" to outcome,
+        "target" to target,
+    )
 
 /** Only the filing fields: the title, preview and Trash state belong to Note sync. */
 private fun NoteSummary.filing(): Map<String, Any?> = mapOf("inbox" to inbox, "discarded" to discarded)

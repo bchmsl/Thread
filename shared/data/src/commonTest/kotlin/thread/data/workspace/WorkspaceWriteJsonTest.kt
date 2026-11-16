@@ -5,6 +5,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import thread.domain.focus.FocusOutcome
+import thread.domain.focus.FocusSession
+import thread.domain.focus.FocusTarget
+import thread.domain.focus.FocusTargetKind
 import thread.domain.note.LinkHref
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
@@ -74,6 +78,17 @@ class WorkspaceWriteJsonTest {
     private val reference =
         ExternalReference(ExternalProvider.GitHub, "synthetic/repo", "7", LinkHref.parse("https://github.com/synthetic/repo/pull/7")!!)
 
+    private val focusSession =
+        FocusSession(
+            id = "f-run-1",
+            startedAtMillis = 1_794_820_800_000,
+            endedAtMillis = 1_794_822_300_000,
+            focusedMillis = 1_500_000,
+            plannedMinutes = 25,
+            outcome = FocusOutcome.Completed,
+            target = FocusTarget(FocusTargetKind.Topic, topic.id.value),
+        )
+
     private val everyWrite =
         listOf(
             WorkspaceWrite.PutTopic(topic, isNew = true),
@@ -85,6 +100,9 @@ class WorkspaceWriteJsonTest {
                 before = TopicStatus(StatusId("s-1"), "Active", StatusCategory.Active, 1),
             ),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")),
+            WorkspaceWrite.PutPrefs(WorkspacePrefs(focusWorkMinutes = 50, focusBreakMinutes = 10)),
+            WorkspaceWrite.PutFocusSession(focusSession),
+            WorkspaceWrite.PutFocusSession(focusSession.copy(id = "f-run-2", outcome = FocusOutcome.Stopped, target = null)),
             WorkspaceWrite.PutTask(task, isNew = true),
             WorkspaceWrite.PutTask(Task(TaskId("k-2"), "Date-only deadline", deadline = Deadline(LocalDay(2026, 1, 2))), before = task),
             WorkspaceWrite.PutReminder(reminder, isNew = true, before = reminder.copy(text = "Old")),
@@ -112,6 +130,16 @@ class WorkspaceWriteJsonTest {
         val value = stored.getValue("value").jsonObject
         val older = JsonObject(stored + ("value" to JsonObject(value - "info")))
         assertEquals(listOf(WorkspaceWrite.PutTopic(topic, isNew = true)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+    }
+
+    @Test
+    fun preferencesSavedBeforeTheFocusTimerReadAsTheDefaultDurations() {
+        val prefs = WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")
+        val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(focusWorkMinutes = 50)))).single().jsonObject
+        val value = stored.getValue("value").jsonObject
+        val older = JsonObject(stored + ("value" to JsonObject(value - "focusMin" - "breakMin")))
+
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
     }
 
     @Test

@@ -166,6 +166,7 @@ One page with collapsible sections, not a primary tab layout:
 - Start, pause, stop, and remaining time.
 - Continue across navigation; save completed sessions to history.
 - No dependency on closed-app notification delivery in v1.
+- Decided 2026-11-16 (D56): the timer keeps running across a reload or a closed tab, and a period that ended meanwhile counts at its real end time. Each device has its own timer; the durations and the history sync. The panel shows the last 4 sessions; all are kept. A focus period stopped after 1 minute or more is saved as stopped.
 
 ## Acceptance examples
 

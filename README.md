@@ -74,8 +74,7 @@ After an approved decision changes, update its authoritative document and add a 
 
 The [v3 prototype](design/claude-pilot-prototype-v3/README.md) is the approved design reference for all pilot surfaces (D33). It replaces the v0.5 baseline. The pilot boundary is confirmed (D34): read-only Jira and GitHub are in the pilot, and the Focus timer comes after it.
 
-Done: the M1 feasibility slice, the pilot build (Phases 0 to 12) and the owner's changes D47 to D54. The pilot (Phase 13) is closed with no fixes (D55).
+Done: the M1 feasibility slice, the pilot build (Phases 0 to 12) and the owner's changes D47 to D54. The pilot (Phase 13) is closed with no fixes (D55). Phase 14 adds the Focus timer (D56, [ADR-019](adr/ADR-019-focus-timer.md)); its Firestore rules must be live before its build.
 
 Next steps:
-1. The Focus timer (Pomodoro), the v1 feature placed after the pilot (D25, D34, D45). Its phase plan needs the owner's approval before any code.
-2. Use Prompt 3 with the v3 prototype for UI work, one named set of screens at a time.
+1. Use Prompt 3 with the v3 prototype for UI work, one named set of screens at a time.

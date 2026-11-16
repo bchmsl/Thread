@@ -27,6 +27,7 @@ import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
 import thread.domain.external.ConnectionSync
 import thread.domain.external.summary
+import thread.domain.focus.FocusRunStore
 import thread.domain.note.NewRevision
 import thread.domain.note.NoteId
 import thread.domain.note.RichTextDocument
@@ -61,6 +62,11 @@ import thread.web.presentation.external.jiraPlace
 import thread.web.presentation.external.jiraSearchPlace
 import thread.web.presentation.external.jiraStatusClasses
 import thread.web.presentation.external.prPlace
+import thread.web.presentation.focus.FOCUS_PARAM
+import thread.web.presentation.focus.FocusClock
+import thread.web.presentation.focus.FocusModel
+import thread.web.presentation.focus.FocusPanel
+import thread.web.presentation.focus.FocusTool
 import thread.web.presentation.notes.NOTE_PARAM
 import thread.web.presentation.notes.NoteServices
 import thread.web.presentation.notes.NotesScreen
@@ -101,6 +107,8 @@ class AppServices(
     val workspaceStore: (AccountId) -> WorkspaceStore,
     /** Where one account keeps, on this device, a copy of what the Topic reminder conversion changes (D54). */
     val conversionBackup: (AccountId) -> ConversionBackup,
+    /** One account's Focus timer on this device (adr/ADR-019-focus-timer.md, F2 A). */
+    val focusStore: (AccountId) -> FocusRunStore,
     /** A new random id with this prefix, for entities made on this device. */
     val newId: (prefix: String) -> String,
     /** Note drafts on this device and Note sync with the server. */
@@ -161,6 +169,12 @@ private fun Workspace(
     val workspaceScope = rememberCoroutineScope()
     val jira = remember { JiraModel(services.jira, workspaceScope) }
     val gitHub = remember { GitHubModel(services.gitHub, workspaceScope) }
+    val focus =
+        remember {
+            FocusModel(services.focusStore(signedIn.accountId), workspace, workspaceScope, { services.newId("") }) { text ->
+                toasts.show(text)
+            }
+        }
     val connectionSync =
         remember {
             ConnectionSyncModel(services.connectionSync?.invoke(signedIn.accountId)) {
@@ -192,8 +206,9 @@ private fun Workspace(
         SideEffect { router.replace(View.Today.place) }
     }
     val view = View.of(place)
-    // The Task sheet rides on any page as `?task=`, so the page under it is the place without that parameter.
-    val page = place.with(TASK_PARAM, null)
+    // The Task sheet and the Focus panel ride on any page as `?task=` and `?focus=`, so the page under them is the place
+    // without those parameters.
+    val page = place.with(TASK_PARAM, null).with(FOCUS_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
     val jiraItem = place.head == "item" && place.segment(1) == "jira"
     val prItem = place.head == "item" && place.segment(1) == "pr"
@@ -225,6 +240,7 @@ private fun Workspace(
         }
     }
     LaunchedEffect(workspace) { workspace.run() }
+    FocusClock(focus, workspace.loaded)
     // Reminders an older build put on a Topic move onto Tasks once the server's data is here (D54). One run at a time.
     LaunchedEffect(workspace) {
         snapshotFlow { workspace.stored to online }.collect {
@@ -371,6 +387,7 @@ private fun Workspace(
             onOpenViews = { viewsOpen = true },
             onOpenSearch = { searchOpen = true },
             onOpenSync = { syncOpen = true },
+            focusTool = { FocusTool(focus) { router.replace(router.place.with(FOCUS_PARAM, "1")) } },
         )
         if (dialogs.isEmpty) ToastHost(toasts)
 
@@ -388,6 +405,9 @@ private fun Workspace(
                     TaskSheet(workspace, sheetTask, placeTopicId) { router.replace(router.place.with(TASK_PARAM, null)) }
                 }
             }
+        }
+        if (place.param(FOCUS_PARAM) != null && workspace.loaded && focus.loaded) {
+            FocusPanel(focus, workspace) { router.replace(router.place.with(FOCUS_PARAM, null)) }
         }
         if (viewsOpen) {
             ViewsSheet(

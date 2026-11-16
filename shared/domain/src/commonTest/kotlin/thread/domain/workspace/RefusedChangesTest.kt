@@ -1,5 +1,10 @@
 package thread.domain.workspace
 
+import thread.domain.focus.FOCUS_HISTORY_LIMIT
+import thread.domain.focus.FocusOutcome
+import thread.domain.focus.FocusSession
+import thread.domain.focus.FocusTarget
+import thread.domain.focus.FocusTargetKind
 import thread.domain.note.NoteId
 import thread.domain.note.NoteTopicLink
 import thread.domain.task.Task
@@ -168,5 +173,47 @@ class RefusedChangesTest {
         // A link write without the field checks only linked.
         val linkOnly = listOf(change("c2", WorkspaceWrite.PutExternalLink(link.copy(linked = true, dismissed = null))))
         assertEquals(emptyList(), unconfirmedChanges(linkOnly, emptyList(), data().copy(externalLinks = listOf(link.copy(linked = true)))))
+    }
+
+    private fun session(
+        runId: String,
+        endedAt: Long,
+    ) = FocusSession(
+        id = FocusSession.idFor(runId),
+        startedAtMillis = endedAt - 25 * 60_000,
+        endedAtMillis = endedAt,
+        focusedMillis = 25 * 60_000,
+        plannedMinutes = 25,
+        outcome = FocusOutcome.Completed,
+        target = FocusTarget(FocusTargetKind.Task, task.id.value),
+    )
+
+    @Test
+    fun aFocusSessionIsShownOnceTheHistoryHasIt() {
+        val recorded = session("run-1", 1_794_822_300_000)
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutFocusSession(recorded)))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data().copy(focusSessions = listOf(recorded))))
+        assertEquals(listOf("c1"), unconfirmedChanges(leftovers, emptyList(), data()).map { it.id })
+    }
+
+    @Test
+    fun aFocusSessionOlderThanTheWholeHistoryCountsAsShown() {
+        val newer = (1..FOCUS_HISTORY_LIMIT).map { session("run-new-$it", 1_794_900_000_000 + it * 60_000L) }
+        val old = WorkspaceWrite.PutFocusSession(session("run-old", 1_794_822_300_000))
+        val recent = WorkspaceWrite.PutFocusSession(session("run-recent", 1_794_999_000_000))
+
+        assertEquals(emptyList(), unconfirmedChanges(listOf(change("c1", old)), emptyList(), data().copy(focusSessions = newer)))
+        assertEquals(1, unconfirmedChanges(listOf(change("c2", recent)), emptyList(), data().copy(focusSessions = newer)).size)
+        assertEquals(1, unconfirmedChanges(listOf(change("c3", old)), emptyList(), data().copy(focusSessions = newer.drop(1))).size)
+    }
+
+    @Test
+    fun focusDurationsAreComparedLikeOtherPreferences() {
+        val stored = WorkspacePrefs(focusWorkMinutes = 50, focusBreakMinutes = 10)
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutPrefs(stored, before = WorkspacePrefs())))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
     }
 }

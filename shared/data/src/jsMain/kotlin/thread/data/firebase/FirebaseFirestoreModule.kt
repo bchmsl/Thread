@@ -53,10 +53,25 @@ internal external fun onDocumentSnapshot(
     onError: (FirestoreError) -> Unit,
 ): () -> Unit
 
-/** Listens to a collection. [options] holds `includeMetadataChanges`. Returns the unsubscribe function. */
+/** [base] narrowed by [constraints], applied in order. */
+internal external fun query(
+    base: Query,
+    vararg constraints: QueryConstraint,
+): Query
+
+/** Orders by [field]; [direction] is `asc` or `desc`. */
+internal external fun orderBy(
+    field: String,
+    direction: String,
+): QueryConstraint
+
+/** At most [count] documents. */
+internal external fun limit(count: Int): QueryConstraint
+
+/** Listens to a collection or a query. [options] holds `includeMetadataChanges`. Returns the unsubscribe function. */
 @JsName("onSnapshot")
 internal external fun onCollectionSnapshot(
-    reference: CollectionReference,
+    reference: Query,
     options: dynamic,
     onNext: (QuerySnapshot) -> Unit,
     onError: (FirestoreError) -> Unit,

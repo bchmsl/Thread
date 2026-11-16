@@ -12,6 +12,11 @@ import thread.data.external.int
 import thread.data.external.long
 import thread.data.external.obj
 import thread.data.external.str
+import thread.domain.focus.FocusOutcome
+import thread.domain.focus.FocusSession
+import thread.domain.focus.FocusSettings
+import thread.domain.focus.FocusTarget
+import thread.domain.focus.FocusTargetKind
 import thread.domain.note.LinkHref
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
@@ -65,6 +70,7 @@ internal object WorkspaceWriteJson {
             is WorkspaceWrite.PutNoteLink -> put("noteLink", noteLink(write.link))
             is WorkspaceWrite.PutExternalRef -> put("externalRef", externalRef(write.reference))
             is WorkspaceWrite.PutExternalLink -> put("externalLink", externalLink(write.link))
+            is WorkspaceWrite.PutFocusSession -> put("focusSession", focusSession(write.session))
             is WorkspaceWrite.DeleteForever ->
                 put(
                     "deleteForever",
@@ -103,6 +109,7 @@ internal object WorkspaceWriteJson {
             "noteLink" -> WorkspaceWrite.PutNoteLink(noteLink(value) ?: return null)
             "externalRef" -> WorkspaceWrite.PutExternalRef(externalRef(value) ?: return null)
             "externalLink" -> WorkspaceWrite.PutExternalLink(externalLink(value) ?: return null)
+            "focusSession" -> WorkspaceWrite.PutFocusSession(focusSession(value) ?: return null)
             "deleteForever" -> {
                 val kind = TrashKind.entries.firstOrNull { it.name == value.str("kind") } ?: return null
                 WorkspaceWrite.DeleteForever(kind, value.str("id") ?: return null, value.str("title") ?: return null)
@@ -166,6 +173,8 @@ internal object WorkspaceWriteJson {
             put("captureType", prefs.captureType.id)
             put("keepCompleted", prefs.keepCompleted)
             put("timeZone", prefs.timeZone)
+            put("focusMin", prefs.focusWorkMinutes)
+            put("breakMin", prefs.focusBreakMinutes)
         }
 
     private fun prefs(json: JsonObject): WorkspacePrefs? =
@@ -174,6 +183,9 @@ internal object WorkspaceWriteJson {
             captureType = CaptureKind.fromId(json.str("captureType")) ?: return null,
             keepCompleted = json.bool("keepCompleted") ?: return null,
             timeZone = json.str("timeZone") ?: return null,
+            // Absent in changes saved by builds before the Focus timer: the defaults.
+            focusWorkMinutes = json.int("focusMin") ?: FocusSettings.DEFAULT_WORK_MINUTES,
+            focusBreakMinutes = json.int("breakMin") ?: FocusSettings.DEFAULT_BREAK_MINUTES,
         )
 
     private fun task(task: Task): JsonObject =
@@ -312,6 +324,42 @@ internal object WorkspaceWriteJson {
             linked = json.bool("linked") ?: return null,
             dismissed = json.bool("dismissed"),
         )
+
+    private fun focusSession(session: FocusSession): JsonObject =
+        buildJsonObject {
+            put("id", session.id)
+            put("startedAt", session.startedAtMillis)
+            put("endedAt", session.endedAtMillis)
+            put("focusedMs", session.focusedMillis)
+            put("plannedMin", session.plannedMinutes)
+            put("outcome", session.outcome.id)
+            session.target?.let { target ->
+                put("targetKind", target.kind.id)
+                put("targetId", target.id)
+            }
+        }
+
+    private fun focusSession(json: JsonObject): FocusSession? {
+        val kind = json.str("targetKind")
+        val target =
+            if (kind == null) {
+                null
+            } else {
+                FocusTarget(
+                    FocusTargetKind.fromId(kind) ?: return null,
+                    json.str("targetId")?.takeIf { it.isNotBlank() && it.length <= FocusTarget.MAX_ID_LENGTH } ?: return null,
+                )
+            }
+        return FocusSession(
+            id = json.str("id") ?: return null,
+            startedAtMillis = json.long("startedAt") ?: return null,
+            endedAtMillis = json.long("endedAt") ?: return null,
+            focusedMillis = json.long("focusedMs") ?: return null,
+            plannedMinutes = json.int("plannedMin") ?: return null,
+            outcome = FocusOutcome.fromId(json.str("outcome")) ?: return null,
+            target = target,
+        )
+    }
 
     /** A nullable day or deadline: [Field] of null when absent, null when present but unreadable. */
     private class Field<T>(

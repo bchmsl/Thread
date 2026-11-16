@@ -9,6 +9,7 @@ import thread.data.firebase.FirebaseProjectConfig
 import thread.data.firebase.FirestoreNoteSyncRemote
 import thread.data.firebase.FirestoreVaultRemote
 import thread.data.firebase.FirestoreWorkspaceStore
+import thread.data.focus.IndexedDbFocusRunStore
 import thread.data.github.GitHubPullRequestDetails
 import thread.data.github.GitHubPullRequestLists
 import thread.data.github.GitHubPullRequestMentions
@@ -70,6 +71,7 @@ fun main() {
                 FirestoreWorkspaceStore(backend, accountId, workspaceOutbox(accountId)) { testFlags.failServerWrites }
             },
             conversionBackup = ::conversionBackup,
+            focusStore = { accountId -> IndexedDbFocusRunStore(accountId) },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
             jira = jiraServices(synthetic, connections, cache, transport(synthetic) { testFlags.jiraScenario }),

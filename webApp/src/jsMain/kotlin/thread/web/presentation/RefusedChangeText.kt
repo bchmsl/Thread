@@ -1,10 +1,14 @@
 package thread.web.presentation
 
+import thread.domain.focus.FocusOutcome
+import thread.domain.focus.FocusSession
+import thread.domain.focus.focusTargetLabel
 import thread.domain.note.NoteSaveState
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.topic.topicInfo
 import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.WorkspaceWrite
+import thread.web.platform.WallClock
 import thread.web.presentation.notes.notePlace
 import thread.web.presentation.topics.categoryLabel
 import thread.web.presentation.topics.topicPlace
@@ -62,6 +66,8 @@ private fun WorkspaceModel.subjectOf(write: WorkspaceWrite): Pair<String, Place?
             what to topic?.let(::topicPlace)
         }
         is WorkspaceWrite.DeleteForever -> "“${write.title}”" to View.Trash.place
+        // A refused session is not in the Focus panel's list, so there is nothing to open.
+        is WorkspaceWrite.PutFocusSession -> "the focus session that ended ${endedText(write.session)}" to null
     }
 
 /** The panel text, then what each write would have stored, one fact per line. */
@@ -87,7 +93,8 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
         is WorkspaceWrite.PutPrefs ->
             listOf(
                 "Preferences: Topics opens as ${write.prefs.topicsView.id}, capture makes a ${write.prefs.captureType.id}, " +
-                    "keep completed tasks ${if (write.prefs.keepCompleted) "on" else "off"}, time zone ${write.prefs.timeZone}",
+                    "keep completed tasks ${if (write.prefs.keepCompleted) "on" else "off"}, time zone ${write.prefs.timeZone}, " +
+                    "focus ${write.prefs.focusWorkMinutes} min, break ${write.prefs.focusBreakMinutes} min",
             )
         is WorkspaceWrite.PutTask ->
             listOfNotNull(
@@ -122,7 +129,19 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
             listOf(line)
         }
         is WorkspaceWrite.DeleteForever -> listOf("Delete forever: ${write.title}")
+        is WorkspaceWrite.PutFocusSession -> {
+            val session = write.session
+            val stopped = if (session.outcome == FocusOutcome.Stopped) " (stopped)" else ""
+            val label = focusTargetLabel(session.target, stored?.tasks.orEmpty(), stored?.topics.orEmpty())
+            listOf("Focus session: ${session.shownMinutes} min$stopped, ended ${endedText(session)}, for $label")
+        }
     }
+
+/** "today 14:25", in the workspace zone. */
+private fun WorkspaceModel.endedText(session: FocusSession): String {
+    val zone = prefs.timeZone
+    return whenText(WallClock.wallTimeAt(session.endedAtMillis.toDouble(), zone), WallClock.now(zone).day, mid = true)
+}
 
 /** "Label: value", or null for an empty value. */
 private fun lineOf(

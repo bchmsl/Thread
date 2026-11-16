@@ -121,9 +121,12 @@ Do not require scheduling, priority, or a Topic just to capture an idea.
 
 Focus button in the status line; show remaining time while active.
 It opens a small panel for configuration and actions, with no dashboard block (D45).
-Delivered after the pilot; still in v1 (D34, D25).
+Delivered after the pilot; still in v1 (D34, D25). Built in Phase 14 (D56, ADR-019).
 Task/Topic context visible within the popover.
 Use persisted timestamps, not only a decrementing UI counter, to survive background throttling.
+Built as v3 (D56): the tool shows "Focus" when Ready and the time left while a period runs or is paused, with v3's filled running style; its screen reader name carries the time. The panel (`?focus=1` on any page) has the time and phase (Ready, Focusing, Paused, Break, Break paused), "For:", Start focus, Pause or Resume, Stop, Focus min and Break min (editable only while Ready), "Attach to (optional)", the last 4 sessions (F3 A) and v3's timestamp note. It drops v3's concept badge and demo note.
+End messages are in-app toasts (D27): "Focus session done. Break: 5 min." and "Break over.". An end noticed late (a hidden tab, a closed Thread) gives one message with the real times, such as "Focus session done at 14:25. Break ended at 14:30."
+Each device has its own timer (F2 A); the lengths and the history are the same everywhere.
 
 ## Required interface states
 

@@ -6,8 +6,8 @@ rules_version = '2';
 // deleted forever, and the encrypted connections when sync is turned off, can be deleted.
 // Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes), adr/ADR-009-workspace-entities-and-sync.md
 // (statuses, Topics, preferences), adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders),
-// adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links) and adr/ADR-012-trash-and-search.md
-// (Topics in Trash, Delete forever).
+// adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links), adr/ADR-012-trash-and-search.md
+// (Topics in Trash, Delete forever) and adr/ADR-019-focus-timer.md (Focus timer lengths and history).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(uid) {
@@ -166,17 +166,38 @@ service cloud.firestore {
       return text is string && text.size() <= 10000;
     }
 
-    // users/{uid}/prefs/main: the workspace preferences. keepCompleted and timeZone arrived in Phase 7, so a document
-    // saved before may lack them.
+    // users/{uid}/prefs/main: the workspace preferences. keepCompleted and timeZone arrived in Phase 7, and the Focus
+    // timer lengths in minutes (focusMin, breakMin) in Phase 14, so a document saved before may lack them.
     function validPrefs(prefs) {
-      return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'updatedAt', 'schemaVersion'])
+      return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'focusMin', 'breakMin', 'updatedAt',
+          'schemaVersion'])
         && prefs.keys().hasAll(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
         && prefs.schemaVersion == 1
         && prefs.updatedAt == request.time
         && prefs.topicsView in ['list', 'board']
         && prefs.captureType in ['task', 'note', 'topic']
         && (!('keepCompleted' in prefs) || prefs.keepCompleted is bool)
-        && (!('timeZone' in prefs) || (prefs.timeZone is string && prefs.timeZone.size() > 0 && prefs.timeZone.size() <= 64));
+        && (!('timeZone' in prefs) || (prefs.timeZone is string && prefs.timeZone.size() > 0 && prefs.timeZone.size() <= 64))
+        && (!('focusMin' in prefs) || (prefs.focusMin is int && prefs.focusMin >= 1 && prefs.focusMin <= 90))
+        && (!('breakMin' in prefs) || (prefs.breakMin is int && prefs.breakMin >= 1 && prefs.breakMin <= 30));
+    }
+
+    // users/{uid}/focusSessions/f-{runId}: one focus period that ended, or that was stopped after a minute or more.
+    // Times are the device's epoch milliseconds, not request.time: a session is written once with fixed values, so the
+    // same write again (Retry, or two tabs settling one end) is an update that changes nothing.
+    function validFocusSession(session) {
+      return session.keys().hasOnly(['startedAt', 'endedAt', 'focusedMs', 'plannedMin', 'outcome', 'targetKind', 'targetId',
+          'schemaVersion'])
+        && session.keys().hasAll(['startedAt', 'endedAt', 'focusedMs', 'plannedMin', 'outcome', 'targetKind', 'targetId',
+          'schemaVersion'])
+        && session.schemaVersion == 1
+        && session.startedAt is int && session.endedAt is int && session.startedAt <= session.endedAt
+        && session.plannedMin is int && session.plannedMin >= 1 && session.plannedMin <= 90
+        && session.focusedMs is int && session.focusedMs >= 60000 && session.focusedMs <= session.plannedMin * 60000
+        && session.outcome in ['completed', 'stopped']
+        && ((session.targetKind == null && session.targetId == null)
+          || (session.targetKind in ['task', 'topic']
+            && session.targetId is string && session.targetId.size() > 0 && session.targetId.size() <= 128));
     }
 
     // A calendar day, YYYY-MM-DD, and a deadline, a day with an optional HH:MM. Never instants, so they never shift.
@@ -304,6 +325,15 @@ service cloud.firestore {
       allow update: if signedInAs(uid)
         && (isTombstone(request.resource.data)
           || (notPurged() && validReminder(request.resource.data) && request.resource.data.createdAt == resource.data.createdAt));
+    }
+
+    // The history is never edited or deleted in this phase. An update must change nothing (see validFocusSession).
+    match /users/{uid}/focusSessions/{sessionId} {
+      allow read: if signedInAs(uid);
+      allow create: if signedInAs(uid)
+        && sessionId.matches('f-[A-Za-z0-9_-]{1,64}')
+        && validFocusSession(request.resource.data);
+      allow update: if signedInAs(uid) && request.resource.data.diff(resource.data).affectedKeys().size() == 0;
     }
 
     match /users/{uid}/prefs/{prefsId} {

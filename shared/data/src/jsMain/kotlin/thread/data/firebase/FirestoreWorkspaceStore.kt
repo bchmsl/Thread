@@ -16,6 +16,12 @@ import thread.data.external.KeyValueStore
 import thread.data.local.newJsObject
 import thread.data.workspace.WorkspaceOutbox
 import thread.domain.account.AccountId
+import thread.domain.focus.FOCUS_HISTORY_LIMIT
+import thread.domain.focus.FocusOutcome
+import thread.domain.focus.FocusSession
+import thread.domain.focus.FocusSettings
+import thread.domain.focus.FocusTarget
+import thread.domain.focus.FocusTargetKind
 import thread.domain.note.LinkHref
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSummary
@@ -69,7 +75,8 @@ class WorkspaceReadException(
  *   deletedAt, schemaVersion: 1}`. `targetKind` is `task` or `note` since D54; `topic` is still read, for reminders an
  *   older build made, and [TopicReminderConverter][thread.domain.workspace.TopicReminderConverter] moves those onto a
  *   Task by changing `targetKind` and `targetId` only.
- * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, updatedAt, schemaVersion: 1}`.
+ * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, focusMin?, breakMin?, updatedAt,
+ *   schemaVersion: 1}`. The Focus timer lengths are optional; a document without them reads as 25 and 5.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -82,6 +89,11 @@ class WorkspaceReadException(
  *   schemaVersion: 1}`. Unlinking writes `linked: false`; nothing is deleted and the external record is never
  *   changed. `dismissed` is optional and written only when set: true means "not suggested in this Topic"
  *   (adr/ADR-017-topic-suggestions.md). A document without it reads as not dismissed.
+ * - `users/{uid}/focusSessions/f-{runId}`: `{startedAt, endedAt, focusedMs, plannedMin, outcome, targetKind,
+ *   targetId, schemaVersion: 1}` (adr/ADR-019-focus-timer.md). Times are epoch milliseconds from the device, never a
+ *   server timestamp: a session is written whole, once, with fixed values, so a second identical write (Retry, or two
+ *   tabs settling one end) changes nothing and the rules accept it. Only the newest [FOCUS_HISTORY_LIMIT] by `endedAt`
+ *   are listened to.
  * - Delete forever replaces a Topic, Task, Reminder or Note document with the tombstone `{purgedAt, schemaVersion: 1}`.
  *   The rules refuse every later write to it, so a stale edit from another device cannot bring it back. Tombstones
  *   are left out of [WorkspaceData]; purged Notes are listed in [WorkspaceData.purgedNotes] so their versions can be
@@ -159,13 +171,25 @@ class FirestoreWorkspaceStore internal constructor(
             var links: QuerySnapshot? = null
             var externalRefs: QuerySnapshot? = null
             var externalLinks: QuerySnapshot? = null
+            var focusSessions: QuerySnapshot? = null
             var prefs: DocumentSnapshot? = null
             val emitWhenComplete = {
-                val collections = listOf(statuses, topics, tasks, reminders, notes, links, externalRefs, externalLinks)
+                val collections = listOf(statuses, topics, tasks, reminders, notes, links, externalRefs, externalLinks, focusSessions)
                 val p = prefs
                 if (p != null && collections.all { it != null }) {
                     val snapshots =
-                        Snapshots(statuses!!, topics!!, tasks!!, reminders!!, notes!!, links!!, externalRefs!!, externalLinks!!, p)
+                        Snapshots(
+                            statuses!!,
+                            topics!!,
+                            tasks!!,
+                            reminders!!,
+                            notes!!,
+                            links!!,
+                            externalRefs!!,
+                            externalLinks!!,
+                            focusSessions!!,
+                            p,
+                        )
                     trySend(toWorkspaceData(snapshots))
                 }
             }
@@ -215,6 +239,18 @@ class FirestoreWorkspaceStore internal constructor(
                     externalLinks = it
                     emitWhenComplete()
                 }, stop)
+            // The newest sessions only: the history grows without end, and the panel shows a few (F3 A).
+            val recentSessions =
+                query(
+                    collection(firestore, USERS, accountId.value, FOCUS_SESSIONS),
+                    orderBy("endedAt", "desc"),
+                    limit(FOCUS_HISTORY_LIMIT),
+                )
+            val stopFocusSessions =
+                onCollectionSnapshot(recentSessions, options, {
+                    focusSessions = it
+                    emitWhenComplete()
+                }, stop)
             val stopPrefs =
                 onDocumentSnapshot(prefsRef(), options, {
                     prefs = it
@@ -229,6 +265,7 @@ class FirestoreWorkspaceStore internal constructor(
                 stopLinks()
                 stopExternalRefs()
                 stopExternalLinks()
+                stopFocusSessions()
                 stopPrefs()
             }
         }.conflate()
@@ -249,11 +286,16 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutNoteLink -> linkData(write.link)
                     is WorkspaceWrite.PutExternalRef -> externalRefData(write.reference)
                     is WorkspaceWrite.PutExternalLink -> externalLinkData(write.link)
+                    is WorkspaceWrite.PutFocusSession -> focusSessionData(write.session)
                     is WorkspaceWrite.DeleteForever -> tombstone()
                 }
             if (reject) data.rejectedForTesting = true
-            // A tombstone replaces the whole document, so none of its content stays.
-            if (write is WorkspaceWrite.DeleteForever) batch.set(reference(write), data) else batch.set(reference(write), data, merge())
+            // A tombstone replaces the whole document, so none of its content stays. A session is always written whole.
+            if (write is WorkspaceWrite.DeleteForever || write is WorkspaceWrite.PutFocusSession) {
+                batch.set(reference(write), data)
+            } else {
+                batch.set(reference(write), data, merge())
+            }
         }
         // The cache has the writes now. The promise settles when the server answers, which waits while offline.
         val id = outbox.sent(writes)
@@ -271,6 +313,7 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutNoteLink -> doc(firestore, USERS, accountId.value, LINKS, write.link.id)
             is WorkspaceWrite.PutExternalRef -> doc(firestore, USERS, accountId.value, EXTERNAL_REFS, write.reference.id)
             is WorkspaceWrite.PutExternalLink -> doc(firestore, USERS, accountId.value, EXTERNAL_LINKS, write.link.id)
+            is WorkspaceWrite.PutFocusSession -> doc(firestore, USERS, accountId.value, FOCUS_SESSIONS, write.session.id)
             is WorkspaceWrite.DeleteForever -> {
                 val collection =
                     when (write.kind) {
@@ -334,6 +377,8 @@ class FirestoreWorkspaceStore internal constructor(
         if (before == null || before.captureType != prefs.captureType) data.captureType = prefs.captureType.id
         if (before == null || before.keepCompleted != prefs.keepCompleted) data.keepCompleted = prefs.keepCompleted
         if (before == null || before.timeZone != prefs.timeZone) data.timeZone = prefs.timeZone
+        if (before == null || before.focusWorkMinutes != prefs.focusWorkMinutes) data.focusMin = prefs.focusWorkMinutes
+        if (before == null || before.focusBreakMinutes != prefs.focusBreakMinutes) data.breakMin = prefs.focusBreakMinutes
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -440,6 +485,23 @@ class FirestoreWorkspaceStore internal constructor(
         return data
     }
 
+    /**
+     * The whole session with no server timestamp, so writing it again stores the same document (see the class comment).
+     * Times are whole milliseconds, which Firestore keeps as integers.
+     */
+    private fun focusSessionData(session: FocusSession): dynamic {
+        val data = newJsObject()
+        data.startedAt = session.startedAtMillis.toDouble()
+        data.endedAt = session.endedAtMillis.toDouble()
+        data.focusedMs = session.focusedMillis.toDouble()
+        data.plannedMin = session.plannedMinutes
+        data.outcome = session.outcome.id
+        data.targetKind = session.target?.kind?.id
+        data.targetId = session.target?.id
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
     private fun merge(): dynamic {
         val options = newJsObject()
         options.merge = true
@@ -457,6 +519,7 @@ class FirestoreWorkspaceStore internal constructor(
         const val LINKS = "topicNoteLinks"
         const val EXTERNAL_REFS = "externalRefs"
         const val EXTERNAL_LINKS = "topicExternalLinks"
+        const val FOCUS_SESSIONS = "focusSessions"
         const val PREFS_ID = "main"
         const val SCHEMA_VERSION = 1
     }
@@ -471,6 +534,7 @@ private class Snapshots(
     val links: QuerySnapshot,
     val externalRefs: QuerySnapshot,
     val externalLinks: QuerySnapshot,
+    val focusSessions: QuerySnapshot,
     val prefs: DocumentSnapshot,
 )
 
@@ -485,6 +549,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
     val decodedLinks = snapshots.links.docs.map(::decodeLink)
     val decodedRefs = snapshots.externalRefs.docs.map(::decodeExternalRef)
     val decodedExternalLinks = snapshots.externalLinks.docs.map(::decodeExternalLink)
+    val decodedFocusSessions = snapshots.focusSessions.docs.map(::decodeFocusSession)
     val all =
         listOf(
             statuses,
@@ -495,6 +560,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             snapshots.links,
             snapshots.externalRefs,
             snapshots.externalLinks,
+            snapshots.focusSessions,
         )
     val decoded =
         listOf(
@@ -506,6 +572,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             decodedLinks,
             decodedRefs,
             decodedExternalLinks,
+            decodedFocusSessions,
         )
     return WorkspaceData(
         statuses = decodedStatuses.filterNotNull(),
@@ -520,6 +587,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             snapshots.notes.docs
                 .filter(::isTombstone)
                 .map { NoteId(it.id) },
+        focusSessions = decodedFocusSessions.filterNotNull(),
         prefs = decodePrefs(prefs),
         prefsStored = prefs.exists(),
         // Only the server can say that an account has no status at all. The cache may just not have them yet.
@@ -681,6 +749,30 @@ private fun decodeExternalLink(snapshot: DocumentSnapshot): TopicExternalLink? {
     return TopicExternalLink(TopicId(topicId), refId, linked, booleanOrNull(data.dismissed)).takeIf { it.id == snapshot.id }
 }
 
+/** The Focus session in [snapshot], or null when this app cannot read it. The query orders sessions newest first. */
+private fun decodeFocusSession(snapshot: DocumentSnapshot): FocusSession? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1 || !snapshot.id.startsWith("f-")) return null
+    val startedAt = wholeOrNull(data.startedAt) ?: return null
+    val endedAt = wholeOrNull(data.endedAt) ?: return null
+    val focused = wholeOrNull(data.focusedMs) ?: return null
+    // Compared as a whole number first, so a huge value never wraps into the range.
+    val planned =
+        wholeOrNull(data.plannedMin)
+            ?.takeIf { it >= FocusSettings.WORK_MINUTES.first && it <= FocusSettings.WORK_MINUTES.last }
+            ?: return null
+    val outcome = FocusOutcome.fromId(stringOrNull(data.outcome)) ?: return null
+    val target =
+        if (data.targetKind == null && data.targetId == null) {
+            null
+        } else {
+            val kind = FocusTargetKind.fromId(stringOrNull(data.targetKind)) ?: return null
+            val id = stringOrNull(data.targetId)?.takeIf { it.isNotBlank() && it.length <= FocusTarget.MAX_ID_LENGTH } ?: return null
+            FocusTarget(kind, id)
+        }
+    return FocusSession(snapshot.id, startedAt, endedAt, focused, planned.toInt(), outcome, target)
+}
+
 /** Missing or unknown values fall back to the defaults, field by field. */
 private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
     val data: dynamic = if (snapshot.exists()) snapshot.data(estimatedTimestamps()) else null
@@ -690,8 +782,24 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         captureType = CaptureKind.fromId(stringOrNull(data.captureType)) ?: CaptureKind.Task,
         keepCompleted = booleanOrNull(data.keepCompleted) ?: true,
         timeZone = stringOrNull(data.timeZone)?.takeIf { it.isNotBlank() } ?: DEFAULT_WORKSPACE_ZONE,
+        focusWorkMinutes = minutesOrNull(data.focusMin, FocusSettings.WORK_MINUTES) ?: FocusSettings.DEFAULT_WORK_MINUTES,
+        focusBreakMinutes = minutesOrNull(data.breakMin, FocusSettings.BREAK_MINUTES) ?: FocusSettings.DEFAULT_BREAK_MINUTES,
     )
 }
+
+private fun minutesOrNull(
+    value: dynamic,
+    range: IntRange,
+): Int? = wholeOrNull(value)?.takeIf { it in range.first..range.last }?.toInt()
+
+/** A whole number that a Long holds exactly, or null for anything else. */
+private fun wholeOrNull(value: dynamic): Long? {
+    if (jsTypeOf(value) != "number") return null
+    val number = value.unsafeCast<Double>()
+    return if (number % 1.0 == 0.0 && number in -MAX_SAFE_INTEGER..MAX_SAFE_INTEGER) number.toLong() else null
+}
+
+private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991.0
 
 /** A nullable stored value: [Optional] of null when absent or null, null when present but unreadable. */
 private class Optional<T>(

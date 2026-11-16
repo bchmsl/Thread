@@ -16,8 +16,8 @@ Names are illustrative, not existing classes.
 | TopicExternalLink | topicId, externalReferenceId; unique pair |
 | Reminder | id, ownerId, targetType, targetId, scheduledAt, timezone, state |
 | InboxEntry | itemType, itemId, capturedAt, triagedAt nullable |
-| FocusSession | id, ownerId, optional target, configured durations, start/pause/end information |
-| Preferences | timezone, last Topics view, future density |
+| FocusSession | id `f-<runId>`, startedAt, endedAt, time focused, planned minutes, outcome (completed or stopped), optional target (D56) |
+| Preferences | timezone, last Topics view, focus and break minutes (D56), future density |
 | ExternalSnapshot | device-local payload, field/completeness metadata, refreshedAt |
 | SyncOperation | proposed only if custom outbox selected: operationId, target, baseRevision, payload, retry state |
 
@@ -40,6 +40,7 @@ Names are illustrative, not existing classes.
 | --- | --- | --- |
 | Topics, Tasks, Notes, statuses, links | Firebase | Durable working copy/cache |
 | Reminder definitions, focus history, preferences | Firebase | Local usable copy |
+| The running Focus timer (D56) | Never | This device only: IndexedDB `thread-focus-<uid>`, shared by its tabs |
 | External identifiers and canonical links | Proposed minimal Firebase references | Yes |
 | Jira descriptions, comments, detailed fields | Do not mirror into Firebase | API-derived cache |
 | GitHub detailed payloads | Proposed: same API + local-cache model | Yes |
@@ -129,7 +130,7 @@ Use timestamps and pause accounting, not a UI tick count as the source of truth.
 Persist enough state to restore after reload.
 No promise that a browser process executes while fully closed.
 Closed-app notification delivery is deferred.
-Cross-device simultaneous timers and timer takeover semantics remain open.
+Resolved 2026-11-16 (D56): a running timer keeps its end time across a reload or a closed tab, and a period that ended meanwhile counts at its real end time (F1 A). Each device has its own timer, so there is no takeover; the lengths and the history sync (F2 A). See "Focus timer" below and ADR-019.
 
 ## Verification scenarios
 
@@ -262,3 +263,16 @@ Details: ADR-018 part A (Proposed). Checked with the emulator tests and headless
 - **Deploy the rules before the build ships.** Until then the server refuses edits of the box, their Undo and Topics created from a ticket or PR. They stay in the sync panel (Phase 12); nothing is lost.
 - The outbox JSON carries `info`; changes saved by older builds have none and read as null.
 - Search matches `info`, or the old text while `info` is not saved.
+
+## Focus timer (D56, proposed, 2026-11-16)
+
+Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and headless Chrome on the emulators, with SYNTHETIC data only.
+
+- **This device's timer** stays on the device: one JSON record (`v` 1) in IndexedDB `thread-focus-<uid>`, store `timer`, key `device`. It holds the run (id, phase, end time while running, time left while paused, planned lengths, start, target) and the last picked Task or Topic. Each action is one read-write transaction (read, settle, act, write), and other tabs hear of a change on `BroadcastChannel("thread-focus-<uid>")`. It never goes to Firestore.
+- **Settle** applies every end that passed, each at its real time: the focus end records a Completed session with `endedAt` = the end time, and the break starts then. A hidden page does not settle; it does on return, with the real times in the message.
+- **Sessions:** `users/{uid}/focusSessions/f-<runId>` with `startedAt`, `endedAt`, `focusedMs`, `plannedMin`, `outcome` (`completed` or `stopped`), `targetKind`, `targetId` and `schemaVersion` 1. One per focus period; a Stop under 1 minute and a Stop in the break save none. The times come from the device, not the server, so a repeat of the same write changes nothing.
+- Sessions go through `WorkspaceStore.write` (`PutFocusSession`), so the outbox, the sync status and the refused-change list cover them. A Retry or a second tab writes the same document again, which is accepted and stays one session.
+- **Read:** one listener, the newest 50 by `endedAt`. The panel shows the newest 4.
+- **Lengths:** `users/{uid}/prefs/main` gets `focusMin` (1 to 90) and `breakMin` (1 to 30). Absent reads as 25 and 5.
+- **Rules:** `validPrefs` allows the two fields. `focusSessions` can be created with a valid shape and an id matching `f-[A-Za-z0-9_-]{1,64}`, updated only when nothing changes, and never deleted.
+- **Deploy the rules before the build ships.** Until then the server refuses every session, and any preferences save that stores a Focus or Break length (a changed length, or the first preferences save of a new account). They stay in the sync panel with Retry; nothing is lost.

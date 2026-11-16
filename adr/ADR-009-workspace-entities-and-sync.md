@@ -16,7 +16,7 @@ Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Buil
 |---|---|---|
 | `users/{uid}/statuses/{statusId}` | `name` (1 to 24), `category` (`planned`, `active`, `paused`, `done`), `sortOrder` (int), `deletedAt` (timestamp or absent), `updatedAt`, `schemaVersion: 1` | Delete is a `deletedAt` write, so Undo works and nothing is removed. |
 | `users/{uid}/topics/{topicId}` | `name` (1 to 200), `color` (5 ids), `statusId`, `goal`, `leftOff`, `nextStep` (each up to 10,000), `info` (optional, up to 20,100, added by ADR-018), `createdAt`, `updatedAt`, `schemaVersion: 1` | `createdAt` is set by the first write (`request.time`) and the rules keep it unchanged after that. |
-| `users/{uid}/prefs/main` | `topicsView` (`list`, `board`), `captureType` (`task`, `note`, `topic`), `updatedAt`, `schemaVersion: 1` | One document per account. |
+| `users/{uid}/prefs/main` | `topicsView` (`list`, `board`), `captureType` (`task`, `note`, `topic`), `focusMin` (optional, 1 to 90) and `breakMin` (optional, 1 to 30, both added by ADR-019), `updatedAt`, `schemaVersion: 1` | One document per account. |
 
 - Ids are made on the client: `t-` or `s-` plus a random id. A Topic shows at once, also offline.
 - The seed statuses have fixed ids: `s-planned`, `s-active`, `s-paused`, `s-done`. Two devices that seed at the same time write the same four documents, not eight.

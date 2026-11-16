@@ -2,6 +2,8 @@ package thread.domain.workspace
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import thread.domain.focus.FocusSession
+import thread.domain.focus.FocusSettings
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
 import thread.domain.note.NoteSummary
@@ -47,7 +49,19 @@ data class WorkspacePrefs(
     val keepCompleted: Boolean = true,
     /** The IANA time zone that defines today, overdue and reminder times. No screen changes it in the pilot. */
     val timeZone: String = DEFAULT_WORKSPACE_ZONE,
-)
+    /** The Focus timer's focus length in minutes, 1 to 90 (FD1). */
+    val focusWorkMinutes: Int = FocusSettings.DEFAULT_WORK_MINUTES,
+    /** The Focus timer's break length in minutes, 1 to 30 (FD1). */
+    val focusBreakMinutes: Int = FocusSettings.DEFAULT_BREAK_MINUTES,
+) {
+    /** The Focus timer's durations. A value outside its limits reads as kept inside them. */
+    val focusSettings: FocusSettings
+        get() =
+            FocusSettings(
+                focusWorkMinutes.coerceIn(FocusSettings.WORK_MINUTES),
+                focusBreakMinutes.coerceIn(FocusSettings.BREAK_MINUTES),
+            )
+}
 
 /**
  * One document change. A [WorkspaceStore] applies a list of them together or not at all.
@@ -116,6 +130,14 @@ sealed interface WorkspaceWrite {
     ) : WorkspaceWrite
 
     /**
+     * Records one Focus session in the account's history (adr/ADR-019-focus-timer.md). A session never changes once
+     * made, and its id comes from its run, so sending it again (Retry, or two tabs) stores it once.
+     */
+    data class PutFocusSession(
+        val session: FocusSession,
+    ) : WorkspaceWrite
+
+    /**
      * Deletes one Topic, Task, Reminder or Note forever (D43, adr/ADR-012-trash-and-search.md). The document stays
      * as a tombstone that no later write can change, so a stale offline edit from another device cannot bring it back.
      * The store leaves tombstones out of [WorkspaceData].
@@ -155,6 +177,8 @@ data class WorkspaceData(
     val externalLinks: List<TopicExternalLink> = emptyList(),
     /** Notes deleted forever. Their documents are tombstones; their saved versions may still need deleting. */
     val purgedNotes: List<NoteId> = emptyList(),
+    /** The newest Focus sessions, newest first, at most [FOCUS_HISTORY_LIMIT][thread.domain.focus.FOCUS_HISTORY_LIMIT]. */
+    val focusSessions: List<FocusSession> = emptyList(),
     val prefs: WorkspacePrefs = WorkspacePrefs(),
     /** True when the account has a stored preferences document. Until then [prefs] are the defaults. */
     val prefsStored: Boolean = false,

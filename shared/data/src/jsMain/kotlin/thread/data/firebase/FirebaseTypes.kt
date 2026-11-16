@@ -36,7 +36,13 @@ internal external interface Firestore
 
 internal external interface DocumentReference
 
-internal external interface CollectionReference
+/** A collection, or a collection narrowed by [query] constraints. */
+internal external interface Query
+
+internal external interface CollectionReference : Query
+
+/** One part of a [query], such as [orderBy] or [limit]. */
+internal external interface QueryConstraint
 
 internal external interface SnapshotMetadata {
     /** True while this device's own write to the document is not acknowledged by the server. */

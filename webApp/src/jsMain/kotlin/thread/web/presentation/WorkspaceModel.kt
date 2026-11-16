@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import thread.domain.focus.FocusSession
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
 import thread.domain.note.NoteSummary
@@ -496,6 +497,14 @@ internal class WorkspaceModel(
 
     fun setPrefs(next: WorkspacePrefs) {
         savePrefs(data, next)?.let { store.write(listOf(it)) }
+    }
+
+    /**
+     * Adds Focus timer sessions to the account's history (adr/ADR-019-focus-timer.md), each as a change of its own, so
+     * one the server refuses is listed alone. Writing the same session again stores it once.
+     */
+    fun recordFocus(sessions: List<FocusSession>) {
+        sessions.forEach { store.write(listOf(WorkspaceWrite.PutFocusSession(it))) }
     }
 
     /** Sync panel Retry: sends a refused change again. */
