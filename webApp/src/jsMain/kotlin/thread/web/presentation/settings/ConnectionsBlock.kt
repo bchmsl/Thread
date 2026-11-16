@@ -39,10 +39,12 @@ import thread.domain.external.JiraConnection
 import thread.domain.external.JiraSite
 import thread.domain.external.SecretText
 import thread.web.platform.nowMillis
+import thread.web.presentation.CardKind
 import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalToasts
+import thread.web.presentation.cardKind
 import thread.web.presentation.external.ConnectionSyncModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
@@ -121,7 +123,10 @@ private fun JiraRow(
                 )
             else -> Triple(true, Icon.Check, "Connected to ${site.site.host}, read-only")
         }
-    Div({ classes("conn") }) {
+    Div({
+        classes("conn")
+        cardKind(CardKind.Jira)
+    }) {
         Span({ classes("conn__icon") }) { IconView(Icon.Jira, 20) }
         Div({ classes("conn__body") }) {
             P({ classes("conn__name") }) { Text(jira.name) }
@@ -376,7 +381,10 @@ private fun GitHubRow(
                 Triple(true, Icon.Lock, "Connected, but GitHub refused a request. Check the token's permissions.")
             else -> Triple(true, Icon.Check, "Connected, read-only")
         }
-    Div({ classes("conn") }) {
+    Div({
+        classes("conn")
+        cardKind(CardKind.PullRequest)
+    }) {
         Span({ classes("conn__icon") }) { IconView(Icon.Pr, 20) }
         Div({ classes("conn__body") }) {
             P({ classes("conn__name") }) { Text(gitHub.name) }

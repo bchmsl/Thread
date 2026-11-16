@@ -43,15 +43,18 @@ import thread.web.platform.isOnline
 import thread.web.platform.mediaMatches
 import thread.web.platform.nowMillis
 import thread.web.platform.observeMedia
+import thread.web.presentation.CardKind
 import thread.web.presentation.CheckBox
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.PageHeader
 import thread.web.presentation.Place
 import thread.web.presentation.Router
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.itemCard
 import thread.web.presentation.topics.PlainTopicTag
 import thread.web.presentation.topics.topicPlace
 import kotlin.math.ceil
@@ -201,7 +204,7 @@ internal fun JiraScreen(
         previousOpen = openKey
         if (was != null && openKey == null) {
             delay(16)
-            (document.querySelector(".xi[data-key=\"${was.value}\"]") as? HTMLElement)?.focus()
+            (document.querySelector(".icard__main[data-key=\"${was.value}\"]") as? HTMLElement)?.focus()
         }
     }
 
@@ -230,7 +233,7 @@ internal fun JiraScreen(
             ?: ticketView?.takeIf { it.savedOrNull != null }
             ?: listView?.takeIf { it.savedOrNull != null }
     ViewBanner(bannerView, jira.name, "tickets") { router.go(CONNECTIONS_PLACE) }
-    Div({ classes("md", *(if (openKey != null) arrayOf("has-open") else emptyArray())) }) {
+    Div({ classes("md", "md--wide", *(if (openKey != null) arrayOf("has-open") else emptyArray())) }) {
         Div({ classes("md__list") }) {
             Tabs(searchTab, assigned?.issues?.size) { toSearch ->
                 router.replace(listPlace(toSearch))
@@ -375,7 +378,7 @@ private fun AssignedPanel(
             } else if (list.issues.isEmpty()) {
                 EmptyState(Icon.Jira, "Nothing assigned to you", "Open tickets assigned to you show here.")
             } else {
-                Ul({ classes("md__scroll") }) {
+                Ul({ classes("md__scroll", "tlist") }) {
                     list.issues.forEach { JiraRow(it, rowPlace(it.key), it.key == shownKey, jira, workspace, onOpen) }
                 }
                 if (!list.complete) {
@@ -455,7 +458,7 @@ private fun SearchPanel(
         results.isEmpty() -> EmptyState(Icon.Search, "No tickets match", "Try a ticket key such as ABC-123, or fewer words.")
         else ->
             Ul(
-                { classes("md__scroll") },
+                { classes("md__scroll", "tlist") },
             ) { results.forEach { JiraRow(it, rowPlace(it.key), it.key == shownKey, jira, workspace, onOpen) } }
     }
 }
@@ -480,9 +483,13 @@ private fun JiraRow(
     onOpen: (JiraIssueKey) -> Unit,
 ) {
     val topics = jira.reference(issue.key)?.let { workspace.topicsLinkedTo(it.id) }.orEmpty()
-    Li {
+    Li({
+        itemCard(CardKind.Jira)
+        if (current) classes("is-current")
+    }) {
+        KindMark(CardKind.Jira)
         A(to.hash, {
-            classes("xi")
+            classes("icard__main")
             attr("data-key", issue.key.value)
             if (current) attr("aria-current", "true")
             onClick {

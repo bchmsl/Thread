@@ -15,16 +15,12 @@ import org.jetbrains.compose.web.attributes.onSubmit
 import org.jetbrains.compose.web.attributes.placeholder
 import org.jetbrains.compose.web.attributes.required
 import org.jetbrains.compose.web.attributes.type
-import org.jetbrains.compose.web.css.fontSize
-import org.jetbrains.compose.web.css.padding
-import org.jetbrains.compose.web.css.px
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Aside
 import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Form
-import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Li
@@ -52,19 +48,23 @@ import thread.domain.topic.todayStatuses
 import thread.domain.topic.todayTopicGroups
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
+import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
+import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.TaskCreation
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.cardKind
 import thread.web.presentation.dayText
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.ReviewRequestedRail
+import thread.web.presentation.itemCard
 import thread.web.presentation.longDate
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.topics.HexSize
@@ -126,28 +126,26 @@ internal fun TodayScreen(
     }
     Div({ classes("today") }) {
         Div({ classes("today__main") }) {
-            TaskGroup("overdue", "Overdue", groups.overdue, "Deadline passed", openByDefault = true) {
+            TaskGroup("overdue", "Overdue", Icon.Alert, groups.overdue, "Deadline passed", openByDefault = true) {
                 TaskList(groups.overdue, workspace, onOpenTask)
             }
             // D54: a reminder day counts as a date, so the hints name reminders too.
-            TaskGroup("today", "Today", groups.today, "Planned, due or reminded today", openByDefault = true) {
+            TaskGroup("today", "Today", Icon.Today, groups.today, "Planned, due or reminded today", openByDefault = true) {
                 if (groups.today.isEmpty()) {
-                    P({
-                        classes("muted")
-                        style { padding(12.px, 4.px) }
-                    }) { Text("Nothing planned for today yet.") }
+                    P({ classes("scard__empty") }) { Text("Nothing planned for today yet.") }
                 } else {
                     TaskList(groups.today, workspace, onOpenTask)
                 }
             }
-            TaskGroup("earlier", "Earlier planned", groups.earlier, "Planned before today, still open", openByDefault = true) {
+            TaskGroup("earlier", "Earlier planned", Icon.Clock, groups.earlier, "Planned before today, still open", openByDefault = true) {
                 TaskList(groups.earlier, workspace, onOpenTask)
             }
             // D53: the open Tasks the groups above leave out. They start closed.
-            TaskGroup("upcoming", "Upcoming", groups.upcoming, "Planned, due or reminded after today", openByDefault = false) {
+            val upcomingHint = "Planned, due or reminded after today"
+            TaskGroup("upcoming", "Upcoming", Icon.ArrowRight, groups.upcoming, upcomingHint, openByDefault = false) {
                 UpcomingList(groups.upcoming, workspace, onOpenTask)
             }
-            TaskGroup("nodate", "No date", groups.noDate, "No planned day, deadline or reminder", openByDefault = false) {
+            TaskGroup("nodate", "No date", Icon.Task, groups.noDate, "No planned day, deadline or reminder", openByDefault = false) {
                 ShortenedList(groups.noDate) { shown -> TaskList(shown, workspace, onOpenTask) }
             }
         }
@@ -224,13 +222,15 @@ private fun AddForTodayForm(
 }
 
 /**
- * One group of Today's main column. Its heading is a button that opens and closes it (D53), like a Topic page
- * section; the open count stays in the heading when it is closed. An empty group is not shown, except Today.
+ * One group of Today's main column: a Task section card (D68) whose [mark] says which group it is. Its heading is a
+ * button that opens and closes it (D53), like a Topic page section; the open count stays in the heading when it is
+ * closed. An empty group is not shown, except Today.
  */
 @Composable
 private fun TaskGroup(
     key: String,
     title: String,
+    mark: Icon,
     tasks: List<Task>,
     hint: String,
     openByDefault: Boolean,
@@ -238,38 +238,25 @@ private fun TaskGroup(
 ) {
     if (tasks.isEmpty() && key != "today") return
     var open by remember { mutableStateOf(isGroupOpen(key, openByDefault)) }
-    Section({
-        classes("tgroup", "tgroup--$key")
-        if (!open) classes("is-closed")
-        attr("aria-labelledby", "g-$key")
-    }) {
-        H2({
-            classes("tgroup__head")
-            id("g-$key")
-        }) {
-            Button({
-                type(ButtonType.Button)
-                classes("tgroup__toggle")
-                attr("aria-expanded", open.toString())
-                attr("aria-controls", "gb-$key")
-                onClick {
-                    open = !open
-                    keepGroupOpen(key, open)
-                }
-            }) {
-                Span({ classes("chev") }) { IconView(Icon.ChevDown, 18) }
-                if (key == "overdue") IconView(Icon.Alert, 17)
-                Text("$title ")
-                Span({ classes("n") }) { Text(tasks.count { !it.done }.toString()) }
-                Span({ classes("tgroup__hint") }) { Text(hint) }
-            }
-        }
-        Div({
-            classes("tgroup__body")
-            id("gb-$key")
-            if (!open) attr("hidden", "")
-        }) { if (open) body() }
-    }
+    SectionCard(
+        kind = CardKind.Task,
+        headingId = "g-$key",
+        bodyId = "gb-$key",
+        title = title,
+        count = tasks.count { !it.done }.toString(),
+        open = open,
+        onToggle = {
+            open = !open
+            keepGroupOpen(key, open)
+        },
+        hint = hint,
+        mark = mark,
+        attrs = {
+            classes("tgroup--$key")
+            if (key == "overdue") classes("scard--overdue")
+        },
+        body = body,
+    )
 }
 
 @Composable
@@ -348,21 +335,18 @@ private fun RemindersRail(
 ) {
     val now = LocalNow.current
     val list = todayReminders(workspace.reminders, now)
-    Section({ attr("aria-labelledby", "rem-h") }) {
-        Div({ classes("railsec__head") }) {
-            H2({
-                classes("h2")
-                id("rem-h")
-            }) {
-                Text("Reminders ")
-                Span({ classes("n") }) { Text(list.size.toString()) }
-            }
-        }
+    SectionCard(
+        kind = CardKind.Reminder,
+        headingId = "rem-h",
+        bodyId = "rem-b",
+        title = "Reminders",
+        count = list.size.toString(),
+    ) {
         if (list.isEmpty()) {
-            P({ classes("muted") }) { Text("No reminders today. Add one from a Task or Note.") }
-            return@Section
+            P({ classes("scard__empty") }) { Text("No reminders today. Add one from a Task or Note.") }
+            return@SectionCard
         }
-        Ul({ classes("rems") }) {
+        Ul({ classes("tlist") }) {
             list.forEach { entry ->
                 val reminder = entry.reminder
                 val info = targetInfo(workspace, reminder.target) ?: return@forEach
@@ -370,6 +354,7 @@ private fun RemindersRail(
                     Li {
                         Button({
                             type(ButtonType.Button)
+                            itemCard(CardKind.Reminder)
                             classes("rem")
                             if (entry.past) classes("is-past")
                             onClick { onOpenTarget(reminder.target) }
@@ -426,44 +411,40 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
     val count = groups.sumOf { it.topics.size }
     val grouped = shownStatuses.size > 1
     var layout by remember { mutableStateOf(activeLayout()) }
-    Section({
-        classes("atopics")
-        attr("aria-labelledby", "at-h")
-    }) {
-        Div({ classes("atopics__head") }) {
-            H2({
-                classes("h2")
-                id("at-h")
-            }) {
-                Text("Active and paused Topics ")
-                Span({ classes("n") }) { Text(count.toString()) }
-            }
-            // Grouped, the headings name the statuses, so the hint would only repeat them.
-            if (!grouped) {
-                val names = shownStatuses.joinToString(" and ") { it.name }
-                val hint =
-                    when {
-                        names.isEmpty() -> "No status uses the Active or Paused category"
-                        else -> "Statuses in the Active or Paused category: $names"
-                    }
-                Span({
-                    classes("muted")
-                    style { fontSize(13.px) }
-                }) { Text(hint) }
-            }
-            if (count > 0) {
-                LayoutSwitch(layout) { picked ->
-                    layout = picked
-                    keepActiveLayout(picked)
-                }
-            }
+    // Grouped, the headings name the statuses, so the hint would only repeat them.
+    val hint =
+        if (grouped) {
+            null
+        } else {
+            val names = shownStatuses.joinToString(" and ") { it.name }
+            if (names.isEmpty()) "No status uses the Active or Paused category" else "Statuses in the Active or Paused category: $names"
         }
+    SectionCard(
+        kind = CardKind.Topic,
+        headingId = "at-h",
+        bodyId = "at-b",
+        title = "Active and paused Topics",
+        count = count.toString(),
+        hint = hint,
+        attrs = { classes("atopics") },
+        actions =
+            if (count > 0) {
+                {
+                    LayoutSwitch(layout) { picked ->
+                        layout = picked
+                        keepActiveLayout(picked)
+                    }
+                }
+            } else {
+                null
+            },
+    ) {
         if (count == 0) {
             val why = "Topics show here when their status is in the Active or Paused category."
             EmptyState(Icon.Topics, "No active or paused Topics", why) {
                 A(View.Topics.place.hash, { classes("btn", "btn--line") }) { Text("Open Topics") }
             }
-            return@Section
+            return@SectionCard
         }
         when {
             layout == ActiveLayout.List && grouped ->
@@ -508,17 +489,17 @@ private fun ActiveGroup(
     val key = "at-${group.status.id.value}"
     var open by remember(key) { mutableStateOf(isGroupOpen(key, true)) }
     Section({
-        classes("tgroup", "tgroup--status")
+        classes("csub")
         if (!open) classes("is-closed")
         attr("aria-labelledby", "g-$key")
     }) {
         H3({
-            classes("tgroup__head")
+            classes("csub__h")
             id("g-$key")
         }) {
             Button({
                 type(ButtonType.Button)
-                classes("tgroup__toggle")
+                classes("csub__toggle")
                 attr("aria-expanded", open.toString())
                 attr("aria-controls", "gb-$key")
                 onClick {
@@ -532,7 +513,6 @@ private fun ActiveGroup(
             }
         }
         Div({
-            classes("tgroup__body")
             id("gb-$key")
             if (!open) attr("hidden", "")
         }) { if (open) ActiveRows(group.topics, workspace) }
@@ -545,11 +525,12 @@ private fun ActiveRows(
     topics: List<Topic>,
     workspace: WorkspaceModel,
 ) {
-    Ul({ classes("tl-list") }) {
+    Ul({ classes("tlist") }) {
         topics.forEach { topic ->
             key(topic.id.value) {
                 Li {
                     A(topicPlace(topic).hash, {
+                        itemCard(CardKind.Topic)
                         classes("trow2")
                         topicColor(topic.color)
                     }) {
@@ -620,6 +601,7 @@ private fun ActiveCards(
                 Li {
                     A(topicPlace(topic).hash, {
                         classes("acard")
+                        cardKind(CardKind.Topic)
                         topicColor(topic.color)
                     }) {
                         Span({ classes("acard__top") }) {

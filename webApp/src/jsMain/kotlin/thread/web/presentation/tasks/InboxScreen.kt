@@ -27,16 +27,19 @@ import thread.domain.task.Task
 import thread.domain.topic.TopicId
 import thread.domain.workspace.triageInbox
 import thread.web.platform.WallClock
+import thread.web.presentation.CardKind
 import thread.web.presentation.CheckBox
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
 import thread.web.presentation.Router
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.agoText
+import thread.web.presentation.itemCard
 import thread.web.presentation.shell.CaptureState
 import thread.web.presentation.topics.TopicPickerDialog
 import thread.web.presentation.topics.topicPlace
@@ -117,20 +120,22 @@ internal fun InboxScreen(
             Span({ classes("n") }) { Text(items.size.toString()) }
         }
     }
-    Ul({ classes("ibx") }) {
+    Ul({ classes("ibx", "tlist") }) {
         items.forEach { item ->
             val picked = item.key in selection
             val captured = item.createdAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), zone) } ?: now
             val kind = if (item.task != null) "Task" else "Note"
+            val cardKind = if (item.task != null) CardKind.Task else CardKind.Note
             key(item.key) {
                 Li({
+                    itemCard(cardKind)
                     classes("irow")
                     if (picked) classes("is-sel")
                 }) {
                     CheckBox(picked, label = "Select ${kind.lowercase()}: ${item.title}") { checked ->
                         if (checked) selection.add(item.key) else selection.remove(item.key)
                     }
-                    Span({ classes("irow__icon") }) { IconView(if (item.task != null) Icon.Task else Icon.Notes, 18) }
+                    KindMark(cardKind)
                     Div({ classes("irow__body") }) {
                         Button({
                             type(ButtonType.Button)

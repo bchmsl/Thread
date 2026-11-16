@@ -28,12 +28,16 @@ import thread.domain.external.nestUnderParents
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.web.presentation.CardBand
+import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.cardKind
 import thread.web.presentation.external.CONNECTIONS_PLACE
 import thread.web.presentation.external.GoneBadge
 import thread.web.presentation.external.JiraModel
@@ -46,6 +50,7 @@ import thread.web.presentation.external.XD_TITLE_ID
 import thread.web.presentation.external.jiraItemPlace
 import thread.web.presentation.external.rememberJiraTicket
 import thread.web.presentation.external.savedOrNull
+import thread.web.presentation.itemCard
 
 /**
  * The Jira tickets linked to the Topic (v3 topic.js `extSection('jira')`). Each row opens the ticket in the side panel
@@ -67,7 +72,7 @@ internal fun TopicJiraSection(
     var linking by remember(topic.id) { mutableStateOf(false) }
     val references = workspace.externalsOf(topic.id, ExternalProvider.Jira)
     if (!jira.connected) {
-        TopicSection("jira", "Jira", references.size.toString(), open, onToggle) {
+        TopicSection("jira", CardKind.Jira, "Jira", references.size.toString(), open, onToggle) {
             P({ classes("sect__empty") }) {
                 Text("Jira is not connected. ")
                 A(CONNECTIONS_PLACE.hash, { classes("lnk") }) { Text("Connect in Settings") }
@@ -77,6 +82,7 @@ internal fun TopicJiraSection(
     }
     TopicSection(
         "jira",
+        CardKind.Jira,
         "Jira",
         references.size.toString(),
         open,
@@ -108,7 +114,7 @@ internal fun TopicJiraSection(
         }
         SuggestedGroup(
             sectionKey = "jira",
-            icon = Icon.Jira,
+            card = CardKind.Jira,
             kind = "tickets",
             workspace = workspace,
             topic = topic,
@@ -200,8 +206,12 @@ private fun LinkedTicket(
     val isOpen = here && openKey == reference.key
     key(reference.id) {
         Li({ classes("jnode") }) {
-            Div({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
-                Span({ classes("xrow__icon") }) { JiraTypeIcon(summary?.type, 18) }
+            // Each ticket is a Jira card (D68); the tickets under it follow in their own nested list (D64).
+            Div({
+                itemCard(CardKind.Jira)
+                if (isOpen) classes("is-current")
+            }) {
+                KindMark(CardKind.Jira)
                 if (here && issueKey != null) {
                     A(jiraItemPlace(issueKey, topic.id.value).hash, {
                         classes("xrow__main")
@@ -216,6 +226,7 @@ private fun LinkedTicket(
                             here = true,
                             parentNotLinked = node.row.parentNotLinked,
                             gone = jira.isGone(reference.key),
+                            type = summary?.type,
                         )
                     }
                 } else {
@@ -238,7 +249,10 @@ private fun LinkedTicket(
     }
 }
 
-/** [parentNotLinked]: the ticket's parent when the Topic does not link it, named so the row says where it belongs. */
+/**
+ * [parentNotLinked]: the ticket's parent when the Topic does not link it, named so the row says where it belongs.
+ * [type]: the saved issue type, shown as its icon before the key (D63); the card's mark already says it is Jira.
+ */
 @Composable
 private fun RowText(
     key: String,
@@ -247,8 +261,11 @@ private fun RowText(
     here: Boolean,
     parentNotLinked: JiraIssueKey?,
     gone: Boolean = false,
+    type: String? = null,
 ) {
     Span({ classes("xrow__key") }) {
+        // The type is the icon's name for screen readers and on hover (D63).
+        if (type != null) JiraTypeIcon(type)
         B { Text(key) }
         // Jira did not show the ticket now: the saved status may be out of date, so it is not shown (D67).
         if (gone) {
@@ -296,26 +313,12 @@ internal fun TopicSidePanel(
             (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
         }
     }
-    Div({
-        classes("side-panel")
-        attr("role", "region")
-        attr("aria-label", "Linked item")
-    }) {
-        Div({ classes("side-panel__bar") }) {
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--text", "btn--sm")
-                id("td-panel-close")
-                onClick { onClose() }
-            }) {
-                IconView(Icon.ChevLeft, 15)
-                Text(" Back to sections")
-            }
-            A(jiraItemPlace(key, topic.id.value).hash, { classes("btn", "btn--text", "btn--sm") }) {
-                Text("Open as page ")
-                IconView(Icon.External, 14)
-            }
-        }
+    SidePanelCard(
+        kind = CardKind.Jira,
+        label = "Jira",
+        pageHref = jiraItemPlace(key, topic.id.value).hash,
+        onClose = onClose,
+    ) {
         if (view != null) ViewBanner(view, jira.name, "tickets") { onGo(CONNECTIONS_PLACE) }
         JiraTicket(
             jira = jira,
@@ -330,5 +333,47 @@ internal fun TopicSidePanel(
             onRefresh = { refresh++ },
             onGo = onGo,
         )
+    }
+}
+
+/**
+ * The side panel's card (D68): the linked item's kind band with "Back to sections" and "Open as page", then the item.
+ * The band stays at the top while the panel scrolls.
+ */
+@Composable
+internal fun SidePanelCard(
+    kind: CardKind,
+    label: String,
+    pageHref: String,
+    onClose: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Div({
+        classes("side-panel", "dcard--panel")
+        cardKind(kind)
+        attr("role", "region")
+        attr("aria-label", "Linked item")
+    }) {
+        CardBand(
+            kind = kind,
+            label = label,
+            lead = {
+                Button({
+                    type(ButtonType.Button)
+                    classes("btn", "btn--text", "btn--sm", "dcard__back")
+                    id("td-panel-close")
+                    onClick { onClose() }
+                }) {
+                    IconView(Icon.ChevLeft, 15)
+                    Text(" Back to sections")
+                }
+            },
+        ) {
+            A(pageHref, { classes("btn", "btn--text", "btn--sm") }) {
+                Text("Open as page ")
+                IconView(Icon.External, 14)
+            }
+        }
+        Div({ classes("side-panel__body") }) { content() }
     }
 }

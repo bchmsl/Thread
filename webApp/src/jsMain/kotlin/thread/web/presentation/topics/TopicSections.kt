@@ -15,13 +15,10 @@ import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Button
-import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Form
-import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
-import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
@@ -38,23 +35,28 @@ import thread.domain.topic.Topic
 import thread.domain.workspace.linkNote
 import thread.domain.workspace.trashReminder
 import thread.domain.workspace.unlinkNote
+import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
+import thread.web.presentation.SectionCard
 import thread.web.presentation.TaskCreation
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.itemCard
 import thread.web.presentation.notes.notePlace
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.tasks.TaskRow
 import thread.web.presentation.tasks.focusNow
 import thread.web.presentation.whenText
 
-/** A Topic page section that opens and closes (v3 section()). */
+/** A Topic page section that opens and closes: a section card of its [kind] (D68). */
 @Composable
 internal fun TopicSection(
     key: String,
+    kind: CardKind,
     title: String,
     count: String,
     open: Boolean,
@@ -62,32 +64,17 @@ internal fun TopicSection(
     actions: (@Composable () -> Unit)? = null,
     body: @Composable () -> Unit,
 ) {
-    Section({
-        classes("sect")
-        attr("aria-labelledby", "sh-$key")
-    }) {
-        Div({ classes("sect__head") }) {
-            H2({ id("sh-$key") }) {
-                Button({
-                    type(ButtonType.Button)
-                    classes("sect__toggle")
-                    attr("aria-expanded", open.toString())
-                    attr("aria-controls", "sb-$key")
-                    onClick { onToggle() }
-                }) {
-                    Span({ classes("chev") }) { IconView(Icon.ChevDown, 18) }
-                    Text("$title ")
-                    Span({ classes("n") }) { Text(count) }
-                }
-            }
-            if (actions != null) Div({ classes("sect__acts") }) { actions() }
-        }
-        Div({
-            classes("sect__body")
-            id("sb-$key")
-            if (!open) attr("hidden", "")
-        }) { if (open) body() }
-    }
+    SectionCard(
+        kind = kind,
+        headingId = "sh-$key",
+        bodyId = "sb-$key",
+        title = title,
+        count = count,
+        open = open,
+        onToggle = onToggle,
+        actions = actions,
+        body = body,
+    )
 }
 
 /** The Topic's own Tasks: an add line, the open ones, and the completed ones behind a toggle. */
@@ -105,7 +92,7 @@ internal fun TopicTasksSection(
     val doneTasks = tasks.filter { it.done }
     var showDone by remember(topic.id) { mutableStateOf(false) }
     var title by remember(topic.id) { mutableStateOf("") }
-    TopicSection("tasks", "Tasks", "${openTasks.size} open", open, onToggle) {
+    TopicSection("tasks", CardKind.Task, "Tasks", "${openTasks.size} open", open, onToggle) {
         Form(attrs = {
             classes("addtask")
             attr("autocomplete", "off")
@@ -181,6 +168,7 @@ internal fun TopicNotesSection(
     val notes = workspace.notesFor(topic.id)
     TopicSection(
         "notes",
+        CardKind.Note,
         "Notes",
         notes.size.toString(),
         open,
@@ -218,8 +206,8 @@ internal fun TopicNotesSection(
                 val title = note.title.ifBlank { UNTITLED_NOTE }
                 val others = workspace.topicsOf(note.id).filter { it.id != topic.id }
                 key(note.id.value) {
-                    Li({ classes("xrow") }) {
-                        Span({ classes("xrow__icon") }) { IconView(Icon.Notes, 18) }
+                    Li({ itemCard(CardKind.Note) }) {
+                        KindMark(CardKind.Note)
                         A(notePlace(note.id).hash, { classes("xrow__main") }) {
                             Span({ classes("xrow__title") }) { Text(title) }
                             Span({ classes("xrow__snip") }) { Text(note.preview.ifBlank { "Empty note" }) }
@@ -286,13 +274,13 @@ internal fun TopicRemindersSection(
     val today = LocalNow.current.day
     val reminders = remindersFor(ReminderTarget(TargetKind.Topic, topic.id.value), workspace.reminders).filter { !it.dismissed }
     if (reminders.isEmpty()) return
-    TopicSection("reminders", "Topic reminders", reminders.size.toString(), open, onToggle) {
+    TopicSection("reminders", CardKind.Reminder, "Topic reminders", reminders.size.toString(), open, onToggle) {
         Ul({ classes("tlist") }) {
             reminders.forEach { reminder ->
                 val time = whenText(reminder.at, today)
                 key(reminder.id.value) {
-                    Li({ classes("xrow") }) {
-                        Span({ classes("xrow__icon") }) { IconView(Icon.Bell, 18) }
+                    Li({ itemCard(CardKind.Reminder) }) {
+                        KindMark(CardKind.Reminder)
                         Button({
                             type(ButtonType.Button)
                             classes("xrow__main")

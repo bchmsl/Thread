@@ -47,6 +47,9 @@ internal enum class Icon(
             """<path d="M12 16.2v-4.6M9.9 13.6l2.1-2.1 2.1 2.1"/>""",
     ),
     Comment("""<path d="M4.5 5.5h15v10.5H10l-5.5 4z"/>"""),
+
+    /** A commit on its line (owner change #13). Drawn by Thread. */
+    Commit("""<circle cx="12" cy="12" r="3.6"/><path d="M3 12h5.4M15.6 12H21"/>"""),
     Compare(
         """<rect x="3.5" y="4.5" width="7.5" height="15" rx="1.5"/>""" +
             """<rect x="13" y="4.5" width="7.5" height="15" rx="1.5"/>""" +
@@ -57,6 +60,9 @@ internal enum class Icon(
             """<path d="M15.5 8.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v9.5a1 1 0 0 0 1 1h3.5"/>""",
     ),
     Device("""<rect x="4.5" y="5" width="15" height="10" rx="1.5"/><path d="M2.8 19h18.4"/>"""),
+
+    /** Lines added and removed (owner change #13). Drawn by Thread. */
+    Diff("""<path d="M12 4.5v7M8.5 8h7M8.5 18.5h7"/>"""),
     Doc("""<path d="M6 3h8.5L19 7.5V21H6z"/><path d="M14 3v5h5M9 12.5h7M9 16h7"/>"""),
     Edit("""<path d="M4.5 19.5h4L19 9l-4-4L4.5 15.5z"/><path d="M13.5 6.5l4 4"/>"""),
     External("""<path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>"""),
@@ -77,6 +83,9 @@ internal enum class Icon(
             """<circle cx="15" cy="17.5" r="1.1" fill="currentColor"/>""",
     ),
     Heading("""<path d="M6 5v14M15 5v14M6 12h9M18.5 19v-6l-1.8 1.2"/>"""),
+
+    /** A Topic's hex, the kind mark of a Topic card (owner change #12). */
+    Hex("""<polygon points="12,3 19.8,7.5 19.8,16.5 12,21 4.2,16.5 4.2,7.5"/>"""),
     Inbox(
         """<path d="M3.5 13.5L6.5 5h11l3 8.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19z"/>""" +
             """<path d="M3.5 13.5h4.5l1.5 2.5h5l1.5-2.5h4.5"/>""",
@@ -124,6 +133,12 @@ internal enum class Icon(
         """<path d="M19.5 10.5a7.8 7.8 0 0 0-14.2-3.4L4 8.6M4 4v4.6h4.6M4.5 13.5a7.8 7.8 0 0 0 14.2""" +
             """ 3.4l1.3-1.5M20 20v-4.6h-4.6"/>""",
     ),
+
+    /** A repository (owner change #13). Drawn by Thread. */
+    Repo(
+        """<path d="M5.5 19.5V5A1.5 1.5 0 0 1 7 3.5h11.5v13H7a1.5 1.5 0 0 0-1.5 1.5v1A1.5 1.5 0 0 0 7 20.5h11.5"/>""" +
+            """<path d="M9 7.5h6"/>""",
+    ),
     Restore("""<path d="M8.5 13.5L4 9l4.5-4.5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>"""),
     Search("""<circle cx="10.8" cy="10.8" r="6.3"/><path d="M15.6 15.6l4.6 4.6"/>"""),
     Settings(
@@ -134,6 +149,12 @@ internal enum class Icon(
     Sparkle("""<path d="M12 4v4M12 16v4M4 12h4M16 12h4M7 7l2 2M15 15l2 2M17 7l-2 2M9 15l-2 2"/>"""),
     Stop("""<rect x="6.5" y="6.5" width="11" height="11" rx="1.8" fill="currentColor" stroke="none"/>"""),
     Task("""<rect x="4" y="4" width="16" height="16" rx="4.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.9"/>"""),
+
+    /** A GitHub team asked to review (owner change #13). Drawn by Thread. */
+    Team(
+        """<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="16.5" cy="9.5" r="2.4"/>""" +
+            """<path d="M15.5 14.2a4.6 4.6 0 0 1 5.5 4.8"/>""",
+    ),
     Timer("""<circle cx="12" cy="13.5" r="7.2"/><path d="M12 13.5V10M9.5 2.8h5M18.4 6.6l1.3-1.3"/>"""),
     Today(
         """<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>""" +

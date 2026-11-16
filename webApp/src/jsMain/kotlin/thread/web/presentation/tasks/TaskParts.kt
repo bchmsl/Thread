@@ -13,6 +13,7 @@ import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
 import thread.domain.time.clockText
 import thread.domain.workspace.toggleTask
+import thread.web.presentation.CardKind
 import thread.web.presentation.CheckBox
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
@@ -21,10 +22,14 @@ import thread.web.presentation.ToastState
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.dayText
 import thread.web.presentation.deadlineText
+import thread.web.presentation.itemCard
 import thread.web.presentation.topics.TopicTag
 import thread.web.presentation.whenText
 
-/** A Task in a list (v3 T.taskRow): its checkbox, its title that opens the Task sheet, and its meta line. */
+/**
+ * A Task in a list (v3 T.taskRow): its checkbox, its title that opens the Task sheet, and its meta line. It is a Task
+ * card (D68); the checkbox is its mark.
+ */
 @Composable
 internal fun TaskRow(
     task: Task,
@@ -36,7 +41,7 @@ internal fun TaskRow(
 ) {
     val now = LocalNow.current
     Li({
-        classes("trow")
+        itemCard(CardKind.Task)
         if (task.done) classes("is-done")
     }) {
         CheckBox(task.done, label = "${if (task.done) "Reopen" else "Complete"}: ${task.title}") {

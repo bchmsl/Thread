@@ -1,0 +1,434 @@
+/* The card language (owner changes #12 and #13, D68 and D69), direction D "Band + Object" (the orchestrator's pick while
+   the owner was away). Every section is a card with a tinted head band, and the band of some kinds carries a pattern
+   drawn by Thread. Every item is a card shaped like its object: a Note a page with a folded corner, a Jira item a ticket
+   with a stub, a pull request a commit on a rail, a Task a plain card with its box, a Topic its colored edge.
+   Each kind keeps one accent, one mark (Cards.kt) and one shape everywhere. Loaded after thread.css, so these rules
+   replace the older list and detail rules where both apply. Contrast: each accent is at least 6.7:1 on --bg-surface. */
+
+/* ---------- Kinds: accent per kind of thing ---------- */
+:root {
+  --k-task: #c3cce0;   /* 10.8:1. Thread's own work: neutral, the baseline every other kind is read against. */
+  --k-note: #e8c46a;   /* 10.4:1. Paper and pencil yellow. */
+  --k-jira: #6aa8ff;   /* 7.2:1. Jira's blue family, lighter so it reads on navy. */
+  --k-pr: #b48cff;     /* 6.7:1. GitHub's pull request violet family, lifted for navy. */
+  --k-time: #ced5e6;   /* Reminders. */
+  --under: var(--bg-app); /* What a card sits on: notches and folded corners are cut in this color. */
+}
+.scard, .icard, .dcard, .dcard--panel { --k: var(--fog-500); }
+[data-k="task"] { --k: var(--k-task); }
+[data-k="note"] { --k: var(--k-note); }
+[data-k="jira"] { --k: var(--k-jira); }
+[data-k="pr"] { --k: var(--k-pr); }
+[data-k="time"] { --k: var(--k-time); }
+/* A part of one item (a pull request's Description, Reviewers): the item's head carries the kind. */
+[data-k="part"] { --k: var(--fog-500); }
+[data-k="topic"], [data-k="info"] { --k: var(--tc, var(--fog-300)); }
+/* A card that lists several Topics has no one Topic color. */
+.scard--topics, .atopics { --k: var(--fog-300); }
+.scard--overdue { --k: var(--danger); }
+.dlg { --under: var(--bg-raised); }
+
+/* ---------- Section card: every section and block ---------- */
+.scard {
+  --under-card: var(--under);
+  position: relative; min-width: 0; margin-bottom: 20px;
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-surface);
+}
+.scard__head {
+  position: relative; isolation: isolate; display: flex; align-items: center; gap: 6px; padding: 8px 10px 8px 12px;
+  border-radius: 13px 13px 0 0;
+  background: color-mix(in srgb, var(--k) 9%, var(--bg-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--k) 26%, var(--border));
+}
+.scard.is-closed > .scard__head { border-radius: 13px; border-bottom-color: transparent; }
+.scard__head > * { position: relative; }
+.scard__h { flex: 1; min-width: 0; font-size: inherit; font-weight: inherit; }
+.scard__toggle {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; width: 100%; min-height: 44px; padding: 4px 6px 4px 2px;
+  background: none; border: 0; border-radius: 8px; color: var(--text); text-align: left; cursor: pointer;
+  font: 500 var(--fs-17)/1.2 var(--font-display);
+}
+.scard__toggle--static { cursor: default; }
+.scard__toggle .chev { display: inline-flex; color: var(--text-3); transition: transform var(--t-fast); }
+.scard__toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.scard__title { min-width: 0; overflow-wrap: anywhere; }
+.scard__hint { flex-basis: 100%; padding-left: 38px; font: 400 var(--fs-13)/1.3 var(--font-text); color: var(--text-3); }
+.scard__acts { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+.scard__body { --under: var(--bg-surface); padding: 12px 16px 16px; }
+.scard__empty, .scard__body > .sect__empty { padding: 2px 2px 4px; font-size: var(--fs-14); color: var(--text-3); }
+.scard--overdue .scard__title { color: var(--danger); }
+
+/* The kind mark: solid in a head, a tinted chip on an item. */
+.kmark {
+  display: inline-grid; place-items: center; flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
+  color: var(--k); background: color-mix(in srgb, var(--k) 15%, transparent);
+}
+.scard__head .kmark { background: var(--k); color: var(--ink-900); }
+
+/* Bands: Tasks, Reminders and parts stay quiet; the others carry their pattern through a mask colored by --k. */
+:is([data-k="task"], [data-k="time"], [data-k="part"]) > .scard__head { background: color-mix(in srgb, var(--k) 5%, var(--bg-surface)); }
+.scard--overdue > .scard__head { background: color-mix(in srgb, var(--danger) 9%, var(--bg-surface)); }
+.scard__head::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: var(--k); opacity: 0.22;
+  -webkit-mask-image: var(--pat, none), linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.6) 30%, transparent 78%);
+  mask-image: var(--pat, none), linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.6) 30%, transparent 78%);
+  -webkit-mask-repeat: repeat, no-repeat; mask-repeat: repeat, no-repeat;
+  -webkit-mask-position: var(--pat-pos, 0 0), 0 0; mask-position: var(--pat-pos, 0 0), 0 0;
+  -webkit-mask-size: var(--pat-size, auto), 100% 100%; mask-size: var(--pat-size, auto), 100% 100%;
+  -webkit-mask-composite: source-in; mask-composite: intersect;
+}
+:is([data-k="task"], [data-k="time"], [data-k="part"], [data-k="pr"], [data-k="info"]) > .scard__head::before { display: none; }
+/* Note: the notebook's dot grid. */
+[data-k="note"] { --pat: radial-gradient(circle, #000 1.3px, transparent 1.8px); --pat-size: 13px 13px; --pat-pos: 0 0; }
+/* Topic: a field of small hex outlines. */
+[data-k="topic"] {
+  --pat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='26'%3E%3Cg fill='none' stroke='black' stroke-width='1.4'%3E%3Cpolygon points='8,2 13,4.9 13,10.6 8,13.5 3,10.6 3,4.9'/%3E%3Cpolygon points='23,15 28,17.9 28,23.6 23,26.5 18,23.6 18,17.9'/%3E%3C/g%3E%3C/svg%3E");
+  --pat-size: auto; --pat-pos: 0 0;
+}
+/* Jira: a ticket. A tear line of dots along the bottom of the band and a notch cut at each end. */
+[data-k="jira"] { --pat: radial-gradient(circle, #000 1.6px, transparent 2px); --pat-size: 9px 6px; --pat-pos: 0 100%; }
+[data-k="jira"] > .scard__head { border-bottom-color: transparent; }
+[data-k="jira"] > .scard__head::before {
+  top: auto; bottom: -3px; left: 12px; right: 12px; height: 6px; border-radius: 0; opacity: 0.55;
+  -webkit-mask-image: var(--pat), linear-gradient(#000, #000); mask-image: var(--pat), linear-gradient(#000, #000);
+  -webkit-mask-repeat: repeat-x, no-repeat; mask-repeat: repeat-x, no-repeat;
+}
+[data-k="jira"]:not(.is-closed) > .scard__head::after {
+  content: ''; position: absolute; left: -7px; right: -7px; bottom: -7px; height: 13px; pointer-events: none;
+  background:
+    radial-gradient(circle at 6px 50%, var(--under-card, var(--bg-app)) 6px, transparent 6.5px),
+    radial-gradient(circle at calc(100% - 6px) 50%, var(--under-card, var(--bg-app)) 6px, transparent 6.5px);
+}
+.is-closed > .scard__head::before { display: none; }
+
+/* A Topic's Additional information keeps its look: the Topic's color on the left edge, no band. */
+.scard[data-k="info"] { border-left: 4px solid var(--tc); }
+.scard[data-k="info"] > .scard__head { background: none; border-bottom: 0; }
+.scard[data-k="info"] > .scard__body { padding: 4px 20px 20px; }
+
+/* Lists of item cards. */
+.tlist:has(> .icard, > li > .icard) { display: flex; flex-direction: column; gap: 6px; }
+/* A Topic's Jira tickets nest under their parent (D64): the cards under a ticket start one card gap below it. */
+.jnode > .jtree__kids { margin-top: 6px; }
+
+/* ---------- Item card: compact, one per thing ---------- */
+.icard {
+  position: relative; display: flex; gap: 12px; align-items: flex-start; min-width: 0; padding: 11px 12px;
+  background-color: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-row);
+  color: inherit; text-decoration: none;
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+.icard:hover { border-color: var(--border-strong); background-color: var(--ink-750); }
+.icard.is-current { border-color: var(--fog-500); background-color: var(--ink-750); }
+.icard > .kmark { width: 26px; height: 26px; border-radius: 7px; margin-top: 1px; background: color-mix(in srgb, var(--k) 18%, transparent); }
+.icard > .check { margin-top: 2px; }
+.icard > :is(.trow__body, .xrow__main, .icard__main) { flex: 1; min-width: 0; }
+.icard__main {
+  display: flex; flex-direction: column; gap: 4px; border-radius: 4px; color: inherit; text-decoration: none;
+}
+.icard__main:hover .xi__title { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--fog-500); }
+.icard.is-done .trow__title { color: var(--text-3); text-decoration: line-through; }
+.icard .xi__top { flex-wrap: nowrap; min-width: 0; }
+.icard .xi__top .pill-open { flex: none; }
+.xi__repo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icard > .iconbtn { flex: none; margin: -6px -6px -6px 0; }
+
+/* Note: a page from the notebook with a folded corner. The band keeps the dots. */
+.icard[data-k="note"] { background-color: var(--page-bg); border-color: var(--page-edge); border-top-right-radius: 0; padding-right: 22px; }
+.icard[data-k="note"]:hover { background-color: #142038; border-color: var(--border-strong); }
+.icard[data-k="note"]::after {
+  content: ''; position: absolute; top: -1px; right: -1px; width: 18px; height: 18px; pointer-events: none;
+  background: linear-gradient(225deg, var(--under) 50%, color-mix(in srgb, var(--k) 55%, var(--page-bg)) 50%);
+  border-bottom-left-radius: 4px;
+}
+.icard[data-k="note"] > .kmark { background: none; }
+
+/* Jira: a ticket. A stub holds the Jira mark, then a dotted tear line with a notch top and bottom. */
+.icard[data-k="jira"] { padding-left: 58px; }
+.icard[data-k="jira"] > .kmark {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 44px; height: auto; margin: 0; border-radius: 9px 0 0 9px;
+  background: color-mix(in srgb, var(--k) 17%, var(--bg-raised));
+}
+.icard[data-k="jira"]::before {
+  content: ''; position: absolute; left: 44px; top: 7px; bottom: 7px; pointer-events: none;
+  border-left: 2px dotted color-mix(in srgb, var(--k) 60%, transparent);
+}
+.icard[data-k="jira"]::after {
+  content: ''; position: absolute; left: 38px; top: -7px; bottom: -7px; width: 14px; pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 6px, var(--under) 5.5px, transparent 6px),
+    radial-gradient(circle at 50% calc(100% - 6px), var(--under) 5.5px, transparent 6px);
+}
+
+/* Pull request: a commit on a rail. Cards in one list share the rail. */
+.icard[data-k="pr"] { padding-left: 48px; background-color: #151a26; }
+.icard[data-k="pr"]:hover, .icard[data-k="pr"].is-current { background-color: var(--ink-750); }
+.icard[data-k="pr"] > .kmark {
+  position: absolute; left: 10px; top: 11px; z-index: 1; width: 26px; height: 26px; margin: 0; border-radius: 50%;
+  background: #151a26; border: 2px solid var(--k);
+}
+.icard[data-k="pr"] > .kmark svg { width: 14px; height: 14px; }
+.icard[data-k="pr"]::before {
+  content: ''; position: absolute; left: 22px; top: -8px; bottom: -8px; width: 2px; pointer-events: none;
+  background: color-mix(in srgb, var(--k) 45%, transparent);
+}
+.tlist > .icard[data-k="pr"]:first-child::before { top: 20px; }
+.tlist > .icard[data-k="pr"]:last-child::before { bottom: auto; height: 0; }
+.tlist > .icard[data-k="pr"]:first-child:not(:last-child)::before { bottom: -8px; height: auto; }
+.tlist > .icard[data-k="pr"]:not(:first-child):last-child::before { top: -8px; height: 28px; }
+
+/* Topic: its hex sticker and a top edge in its color. */
+.icard.trow2 {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 16px; align-items: center;
+  padding: 10px 14px 12px; border-top: 3px solid var(--tc);
+}
+.acard[data-k="topic"] { border-top: 3px solid var(--tc); }
+
+/* Reminder: the time leads, like a clock face. */
+.icard.rem {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 2px 10px; align-items: center; width: 100%;
+  padding: 10px 12px; font: inherit; text-align: left; cursor: pointer;
+}
+.icard.rem .rem__time { font-size: 20px; }
+
+/* Suggestions (#11): quieter cards with a dashed edge. */
+.icard--sugg { background-color: transparent; border-style: dashed; border-color: var(--border-strong); }
+.icard--sugg .xrow__title { font-weight: 500; color: var(--text-2); }
+.icard--sugg > .kmark { background: none; outline: 1px dashed color-mix(in srgb, var(--k) 50%, transparent); outline-offset: -1px; }
+.icard--sugg[data-k="jira"] > .kmark { background: transparent; outline: 0; }
+.icard--sugg[data-k="pr"] { background-color: transparent; }
+.icard--sugg[data-k="pr"] > .kmark { background: var(--under); border-style: dashed; outline: 0; }
+.icard--sugg[data-k="note"] { background-color: transparent; }
+/* The ticket stub's notch rises 7px above the card: keep it off the label. */
+.sugg > .sugg__head { margin-bottom: 8px; }
+
+/* A picked card (Inbox) reads like the open one. A Note keeps its page color a step lighter. */
+.icard.is-sel { border-color: var(--fog-500); background-color: var(--ink-750); }
+.icard[data-k="note"]:is(.is-current, .is-sel) { background-color: #142038; border-color: var(--fog-500); }
+
+/* Inbox: checkbox, mark and text on one line. */
+.ibx.tlist { margin-top: 10px; }
+.icard.irow { align-items: center; }
+.icard.irow > .check { margin-top: 0; }
+.icard.irow > .kmark { margin-top: 0; }
+
+/* Topics: a status group's head shows the status name in full size; a board card keeps its column layout. */
+.scard__title .st { font-size: inherit; font-weight: inherit; color: var(--text); gap: 10px; }
+.icard.bcard { align-items: stretch; gap: 10px; padding: 10px 12px 12px; border-top: 3px solid var(--tc); }
+
+/* Trash preview: a card of the deleted item's kind. Its band names the kind and when it was deleted. */
+.tprev.scard { padding: 0; margin-bottom: 0; }
+.tprev__head { gap: 8px; min-height: 52px; padding: 8px 12px; }
+.tprev__head > .md-back { margin: 0; }
+.tprev__head > .md-back:hover { background: color-mix(in srgb, var(--k) 14%, var(--bg-surface)); }
+.tprev__kind { display: flex; gap: 10px; align-items: center; min-width: 0; font-size: var(--fs-14); font-weight: 500; color: var(--text-2); }
+.tprev__main { padding: 18px 24px 24px; }
+.tprev__main > .tprev__title { margin-top: 0; }
+/* "Restore to <Topic name>" can be long: it wraps inside the card instead of running past its edge. */
+.tprev__acts > .btn { max-width: 100%; height: auto; min-height: var(--primary-h); padding-block: 8px; white-space: normal; text-align: center; }
+
+/* Settings: a Jira or GitHub connection shows its kind's mark in its accent, as everywhere else. */
+.conn[data-k] > .conn__icon { color: var(--k); background: color-mix(in srgb, var(--k) 15%, var(--ink-850)); }
+
+/* ---------- Search (Cmd+K): a result is a small card of its kind ---------- */
+.pal__group:has(> .icard) { display: flex; flex-direction: column; gap: 4px; }
+.pal__group:has(> .icard) > .pal__gtitle { padding-bottom: 2px; }
+.pal__opt.icard { align-items: center; padding: 8px 10px; background-color: var(--ink-850); font-size: var(--fs-15); }
+.pal__opt.icard:is(:hover, [aria-selected="true"]) { background-color: var(--ink-750); border-color: var(--fog-500); }
+.pal__opt.icard[data-k="note"]:is(:hover, [aria-selected="true"]) { background-color: #142038; }
+.pal__opt.icard > .kmark { margin-top: 0; }
+.pal__opt.icard[data-k="jira"] { padding-left: 54px; }
+.pal__opt.icard[data-k="jira"] > .kmark { width: 40px; }
+.pal__opt.icard[data-k="jira"]::before { left: 40px; }
+.pal__opt.icard[data-k="jira"]::after { left: 34px; }
+.pal__opt.icard[data-k="pr"] { padding-left: 48px; }
+.pal__opt.icard[data-k="pr"] > .kmark { top: 50%; margin-top: -13px; }
+.pal__group > .icard[data-k="pr"]:first-of-type::before { top: 50%; }
+.pal__group > .icard[data-k="pr"]:last-of-type::before { bottom: 50%; }
+.pal__group > .icard[data-k="pr"]:first-of-type:last-of-type::before { display: none; }
+
+/* ---------- Today ---------- */
+.today__main > .scard { margin-bottom: 16px; }
+.today__rail { gap: 20px; }
+.today__rail > .scard { margin-bottom: 0; }
+.scard.atopics { margin-top: 32px; padding-top: 0; }
+.atopics .lane { background: var(--bg-app); --under: var(--bg-app); }
+.csub + .csub { margin-top: 14px; }
+.csub__toggle {
+  display: flex; align-items: center; gap: 4px 10px; width: 100%; min-height: 40px; padding: 4px 4px 4px 0;
+  background: none; border: 0; border-radius: 6px; color: var(--text); text-align: left; cursor: pointer;
+  font: 500 var(--fs-15)/1.2 var(--font-display);
+}
+.csub__toggle .chev { display: inline-flex; color: var(--text-3); transition: transform var(--t-fast); }
+.csub__toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.csub__toggle .st { font-size: inherit; font-weight: inherit; color: var(--text); gap: 10px; }
+.csub__h + div > .tlist { margin-top: 6px; }
+
+/* ---------- Pull requests page: grouped by repository ---------- */
+main:has(.md--wide) { max-width: 1520px; }
+.md--wide { grid-template-columns: 384px minmax(0, 1fr); gap: 28px 32px; }
+.prgroups { display: flex; flex-direction: column; gap: 12px; }
+.prgroups > .scard { margin-bottom: 0; }
+.prgroup > .scard__head { background: none; border-bottom-color: var(--border); }
+.prgroup.is-closed > .scard__head { border-bottom-color: transparent; }
+.prgroup > .scard__head .kmark { background: none; color: var(--k); }
+.prgroup .scard__toggle { flex-wrap: nowrap; font: 600 var(--fs-15)/1.25 var(--font-text); }
+.prgroup .scard__toggle .n { flex: none; }
+.prgroup__owner { color: var(--text-3); font-weight: 500; }
+.prgroup > .scard__body { padding: 8px; }
+
+/* ---------- An opened Jira ticket or pull request: a head card, then its parts as cards ---------- */
+/* The columns follow the width the detail has (its page, the Topic side panel, a dialog card), not the window's. */
+.xd { container-type: inline-size; min-width: 0; }
+.xd > .xd__grid { display: flex; flex-direction: column; gap: 16px; }
+.xd .scard { margin-bottom: 0; }
+.xd .xd__head { display: block; padding: 0; margin: 0; }
+.xd__band { gap: 10px; min-height: 52px; padding: 10px 14px; }
+.xd__band .xd__kicker { flex: 1; min-width: 0; }
+.xd__head > .scard__body { display: flex; flex-direction: column; gap: 14px; padding: 18px 22px 20px; }
+.xd__head .xd__title { font: 500 28px/1.2 var(--font-display); overflow-wrap: anywhere; }
+.xd__head .xd__note { margin: 0; }
+.xd__head .xd__acts { margin-top: 0; }
+.xd > .xd__grid > .ro-note { margin-top: 0; }
+/* One column: header, Reviewers, then the rest in page order (Description, Assignees, Topics). */
+.xd__main, .xd__side { display: contents; }
+.xd .xd__head { order: -2; }
+.xd .scard--reviewers { order: -1; }
+@container (min-width: 760px) {
+  .xd > .xd__grid { display: grid; grid-template-columns: minmax(0, 1fr) 288px; gap: 16px; align-items: start; }
+  .xd .xd__head, .xd > .xd__grid > .ro-note { grid-column: 1 / -1; }
+  .xd__main, .xd__side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+}
+@container (max-width: 559px) {
+  .xd__head > .scard__body { padding: 14px 14px 16px; }
+  .xd__head .xd__title { font-size: 22px; }
+}
+.xd__by { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; font-size: var(--fs-14); color: var(--text-2); }
+.xd__by .who { margin-left: 0; }
+.xd__status { display: flex; gap: 10px 18px; flex-wrap: wrap; align-items: center; }
+.bchips { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.bchips__into { display: inline-flex; color: var(--text-3); }
+.bchip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; border-radius: 6px;
+  background: var(--ink-800); border: 1px solid var(--border); color: var(--text-2);
+  font: 500 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere;
+}
+.bchip--head { color: var(--text); }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+.stat {
+  display: flex; flex-direction: column; gap: 2px; min-width: 112px; padding: 10px 14px; border-radius: 10px;
+  background: var(--bg-app); border: 1px solid var(--border);
+}
+.stat__n { display: flex; gap: 8px; align-items: center; font: 500 22px/1.15 var(--font-display); font-variant-numeric: tabular-nums; color: var(--text); }
+.stat__n > svg { color: var(--k); }
+.stat__l { font-size: var(--fs-13); color: var(--text-3); }
+.stat--diff .stat__n { gap: 10px; }
+.stat .add { color: #7bd49f; }
+.stat .del { color: #ff8e8e; }
+.dstat { display: inline-flex; gap: 2px; margin-left: 2px; }
+.dstat__b { width: 9px; height: 9px; border-radius: 2px; background: var(--ink-650); }
+.dstat__b--add { background: #3fb96b; }
+.dstat__b--del { background: #f06464; }
+.xd .desc { max-width: 76ch; }
+
+/* People on a pull request's cards: avatar, login, and the review state, like GitHub. */
+.ppl { display: flex; flex-direction: column; list-style: none; margin: 0; padding: 0; }
+.ppl > li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 0; border-top: 1px solid var(--border); }
+.ppl > li:first-child { border-top: 0; }
+.ppl__who { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.ppl__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-14); font-weight: 600; color: var(--text); }
+.ppl__note { font-size: var(--fs-13); color: var(--text-3); }
+.ppl__st { display: inline-flex; gap: 5px; align-items: center; font-size: var(--fs-13); font-weight: 600; white-space: nowrap; }
+.ppl__st--approved { color: var(--cat-done); }
+.ppl__st--changes { color: var(--cat-paused); }
+.ppl__st--requested, .ppl__st--commented { color: var(--text-2); }
+.ppl__st--dismissed { color: var(--text-3); }
+.av--lg { width: 24px; height: 24px; }
+.av--lg .av__in { font-size: 9px; }
+.av--team { border-radius: 7px; background: var(--ink-750); color: var(--text-2); }
+.scard__body .av { box-shadow: 0 0 0 2px var(--bg-surface); }
+.scard__body .av--me { box-shadow: 0 0 0 1.5px var(--bg-surface), 0 0 0 3px var(--action); }
+
+/* ---------- The Topic side panel: the linked item's kind band, then the item ---------- */
+.side-panel.dcard--panel { padding: 0; }
+.dcard--panel > .dcard__head { position: sticky; top: 0; z-index: 2; gap: 8px; padding: 6px 8px; border-radius: 13px 13px 0 0; }
+/* The panel is 380px wide: there the mark names the kind, and the kind's name stays for screen readers. */
+.dcard--panel .dcard__kind > span:not(.kmark) {
+  position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.side-panel__body { --under: var(--bg-app); padding: 14px 14px 18px; background: var(--bg-app); }
+/* The band above already names the kind, so the item's own head card drops its band. */
+:is(.dcard, .dcard--panel) .xd__band { min-height: 0; padding: 12px 16px 0; background: none; border-bottom: 0; }
+:is(.dcard, .dcard--panel) .xd__band::before, :is(.dcard, .dcard--panel) .xd__band::after,
+:is(.dcard, .dcard--panel) .xd__band > .kmark { display: none; }
+
+/* ---------- Dialog card (#2 + #3, lane 1): an item opened large, under its kind's band ---------- */
+/* Put CardBand first inside an element with the `dcard` class and the card's kind (plus `topicColor` for a Topic). */
+.dcard {
+  --under: var(--bg-surface);
+  position: relative; width: min(860px, calc(100vw - 32px)); margin: 6vh auto 0; overflow: hidden;
+  background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow-pop);
+}
+.dcard--task { width: min(560px, calc(100vw - 32px)); }
+.dcard > .dcard__head { flex-wrap: nowrap; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 0; }
+/* The actions sit on the right, so the pattern fades the other way: dense by the mark, clear under the buttons. */
+.dcard__head::before {
+  -webkit-mask-image: var(--pat, none), linear-gradient(to right, #000 0%, rgba(0, 0, 0, 0.6) 22%, transparent 55%);
+  mask-image: var(--pat, none), linear-gradient(to right, #000 0%, rgba(0, 0, 0, 0.6) 22%, transparent 55%);
+}
+.dcard__head::after { display: none; }
+.dcard__kind { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; font: 600 var(--fs-15)/1.2 var(--font-text); }
+.dcard__kind > span:not(.kmark) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcard__acts { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.dcard__back { margin-left: -6px; max-width: 40%; color: var(--text-2); }
+.dcard__lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A Topic card holds the Topic page: its sections sit on the page color, as on the page. */
+.dcard--topic { --under: var(--bg-app); background: var(--bg-app); }
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 1099px) {
+  /* One column: the rail's cards follow the main ones at the rail's card gap. */
+  .today { row-gap: 20px; }
+  .today__main > .scard:last-child { margin-bottom: 0; }
+}
+@media (max-width: 999px) {
+  .md--wide { grid-template-columns: minmax(0, 1fr); }
+  /* One column: the side cards follow the main ones at the same card gap. */
+  .td-grid { row-gap: 20px; }
+  .td-main > .scard:last-child { margin-bottom: 0; }
+}
+@media (max-width: 899px) {
+  .dcard, .dcard--task { width: 100%; min-height: 100vh; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+}
+@media (max-width: 759px) {
+  .scard__head { flex-wrap: wrap; row-gap: 0; padding: 6px 8px 6px 10px; }
+  .scard__h { flex: 1 1 auto; }
+  .scard__acts { margin-left: auto; }
+  .scard__hint { padding-left: 0; }
+  .scard__body { padding: 10px 12px 12px; }
+  .scard[data-k="info"] > .scard__body { padding: 2px 14px 14px; }
+  .stat { flex: 1 1 96px; min-width: 0; padding: 8px 10px; }
+  .stat__n { font-size: 19px; }
+  .stat--diff { flex-basis: 100%; }
+  .xrow__snip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+@media (max-width: 599px) {
+  /* A slimmer ticket stub keeps the title's width. */
+  .icard[data-k="jira"] { padding-left: 48px; }
+  .icard[data-k="jira"] > .kmark { width: 36px; }
+  .icard[data-k="jira"]::before { left: 36px; }
+  .icard[data-k="jira"]::after { left: 30px; }
+  /* Suggestions: Link and × sit in the top corner, next to the key, so the title gets the full width. */
+  .icard--sugg > .sugg__acts { position: absolute; top: 7px; right: 8px; }
+  .icard--sugg .xrow__key { margin-right: 104px; }
+  .dcard > .dcard__head { padding: 6px 6px 6px 12px; }
+  .dcard__lbl { display: none; }
+  /* Search results: the title gets the full row, the context moves under it (app.css), next to the mark. */
+  .pal__opt.icard { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 1px 12px; }
+  .pal__opt.icard > :is(.kmark, .pal__lead) { grid-row: span 2; }
+  .pal__opt.icard:is([data-k="jira"], [data-k="pr"]) { grid-template-columns: minmax(0, 1fr); }
+  /* The status pill and the repository keep their own width on the second line. */
+  .pal__opt.icard { justify-items: start; }
+  .pal__opt.icard > .pal__label { justify-self: stretch; }
+}

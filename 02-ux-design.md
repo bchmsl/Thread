@@ -118,6 +118,7 @@ Jira status shows as a small lozenge colored by status category, like Jira (D50)
 Jira issue types show as Thread's own icons (D63): a white glyph on a colored tile for Epic, Story, Task, Subtask, Bug and Defect, and a gray one for any other type. Rows show the icon only, with the type name in its label and hover title; the ticket header shows the icon and the name. A ticket whose type is not on the device keeps the plain Jira mark, and so do places that mean Jira itself (nav, Settings, empty states, ⌘K "Search Jira", the "Link a Jira ticket" picker).
 The Jira "Assigned to me" tab has a "Current sprint only" checkbox above the list (D50). Off by default, remembered on this device, hidden when the site has no sprints. The label is the 40 px tap target. With it on and nothing in the sprint, the empty state says "Nothing assigned to you in the current sprint".
 Unsupported rich content should degrade to an understandable placeholder/link, not disappear silently.
+A Jira ticket and a pull request open as cards (D68, D69): a head card in the kind's band (key or state, title, people, actions), then each part as its own card. Jira: Description, Comments and Related issues on the left; Details and Topics on the right. A pull request is laid out like GitHub: the head card has the state, repository, title, the author (avatar and login, "You" for the viewer), the branches, CI and review, and three counts (commits, files changed, lines added and removed with GitHub's five blocks); Description on the left; Reviewers (avatar, login and review state, teams marked), Assignees and Topics on the right. The two columns switch on the width the detail has, not the window's, so the same layout fits the page, the Topic side panel and an 860 px dialog. On one column the order is head, Reviewers, Description, Assignees, Topics. The pull request's own "Updated" field and the "CI sources" field are gone; the "Updated 09:41" bar above keeps when the copy was downloaded, and a muted line still says when the token could not read a CI part.
 
 ### Quick capture
 
@@ -174,6 +175,31 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Notes | The editor is a notebook page on a faint dot grid. |
 | Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). A Task's reminder day counts as a date (D54). |
 | Motion | Short transitions (120 and 220 ms) that drop to zero with reduced motion. |
+| Cards (D68) | Every section is a card with a tinted head band; every item is a card shaped like its object. See "Card language" below. |
+
+### Card language (D68, D69)
+
+Direction D, "Band + Object", picked by the orchestrator while the owner was away (D68). Source: `webApp/src/jsMain/resources/css/cards.css` and `Cards.kt`.
+
+- **Section card:** every section and block (Topic sections, Today's sections, Pull requests' repository groups, a detail's parts, Trash's preview) is a card. Its head band is tinted in the kind's accent and carries the kind's mark, the title and the count; Notes, Jira and Topics add a pattern Thread draws in the accent, fading toward the actions.
+- **Item card:** every Task, Note, Jira item, pull request, Topic and reminder is a card shaped like its object, in lists, Today, Inbox, Notes, Jira, Pull requests, Trash and ⌘K results.
+
+| Kind | Accent | Mark and shape | Band pattern |
+| --- | --- | --- | --- |
+| Task | Neutral fog `#c3cce0` | Its checkbox on a plain card | None |
+| Note | Paper yellow `#e8c46a` | A page with a folded corner | Dot grid |
+| Jira item | Jira blue family `#6aa8ff` | A ticket with a stub and a perforated edge | A tear line of dots under the band, a notch at each end |
+| Pull request | GitHub violet family `#b48cff` | A commit on a rail; cards in one list share the rail | None |
+| Topic | The Topic's own pastel | The hex sticker; a colored top edge | Hexagons |
+| Reminder | Fog `#ced5e6` | The time leads, like a clock face | None |
+
+- Marks are Thread-drawn, in the provider colors. No official Jira or GitHub logos (Q5).
+- Each accent is at least 6.7:1 on the surface color. Kind never depends on color alone: each has its own mark, shape and label.
+- A suggestion is the same card with a dashed edge and a quieter title. The "Suggested N" heading still folds them away (D65).
+- A Jira card's mark says Jira; the issue type icon (D63) sits before the key, as on the Jira page. A Topic's tickets under a linked parent (D64) are cards in the nested lists, one card gap apart.
+- ⌘K results are small cards of their kind. Settings' Jira and GitHub connections use the kinds' marks and accents.
+- A dialog card (an item opened large) starts with the kind's band: the mark and kind name, a back button on the left and the actions on the right. Below 600 px the button labels hide and the card fills the screen. A Topic's dialog card sits on the page color, like the Topic page.
+- In the Topic side panel (380 px) the band shows the mark only; the kind's name stays for screen readers.
 
 ## Accessibility and interaction quality
 

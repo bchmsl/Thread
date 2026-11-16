@@ -70,9 +70,11 @@ import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
+import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.WorkspaceModel
@@ -81,6 +83,7 @@ import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
 import thread.web.presentation.external.JiraTypeIcon
 import thread.web.presentation.external.orFallback
+import thread.web.presentation.itemCard
 import thread.web.presentation.rememberOnline
 
 /*
@@ -459,7 +462,7 @@ internal fun keepSuggestionsOpen(
 @Composable
 internal fun SuggestedGroup(
     sectionKey: String,
-    icon: Icon,
+    card: CardKind,
     kind: String,
     workspace: WorkspaceModel,
     topic: Topic,
@@ -518,16 +521,19 @@ internal fun SuggestedGroup(
                 Ul({ classes("tlist") }) {
                     shown.forEachIndexed { index, row ->
                         key(row.reference.id) {
-                            Li({ classes("xrow", "xrow--suggested") }) {
-                                Span({ classes("xrow__icon") }) {
-                                    if (row.jiraKey != null) JiraTypeIcon(row.type, 18) else IconView(icon, 18)
-                                }
+                            Li({
+                                itemCard(card)
+                                classes("icard--sugg")
+                            }) {
+                                KindMark(card)
                                 A(href(row), {
                                     classes("xrow__main")
                                     attr("data-suggested", row.reference.id)
                                     onClick { if (onOpen(row)) it.preventDefault() }
                                 }) {
                                     Span({ classes("xrow__key") }) {
+                                        // The type is the icon's name for screen readers and on hover (D63).
+                                        if (row.jiraKey != null && row.type != null) JiraTypeIcon(row.type)
                                         B { Text(row.label) }
                                         if (row.status != null) JiraStatusLozenge(row.status)
                                         if (row.repo != null) Span { Text(row.repo) }
@@ -594,7 +600,7 @@ internal fun SuggestedGroup(
         }
     }
     if (reviewing) {
-        NotSuggestedDialog(icon, kind, workspace, topic, dismissed) {
+        NotSuggestedDialog(card, kind, workspace, topic, dismissed) {
             reviewing = false
             // Back to "Not suggested here", or the heading when everything was restored.
             scope.launch {
@@ -607,7 +613,7 @@ internal fun SuggestedGroup(
 /** The records not suggested in [topic], each with Restore (D49). */
 @Composable
 private fun NotSuggestedDialog(
-    icon: Icon,
+    card: CardKind,
     kind: String,
     workspace: WorkspaceModel,
     topic: Topic,
@@ -635,14 +641,15 @@ private fun NotSuggestedDialog(
                         val title = row.title
                         key(reference.id) {
                             Li({
-                                classes("xrow")
+                                itemCard(card)
                                 attr("data-dismissed", reference.id)
                             }) {
-                                Span({ classes("xrow__icon") }) {
-                                    if (reference.provider == ExternalProvider.Jira) JiraTypeIcon(row.type, 18) else IconView(icon, 18)
-                                }
+                                KindMark(card)
                                 Div({ classes("xrow__main") }) {
-                                    Span({ classes("xrow__key") }) { B { Text(label) } }
+                                    Span({ classes("xrow__key") }) {
+                                        if (reference.provider == ExternalProvider.Jira && row.type != null) JiraTypeIcon(row.type)
+                                        B { Text(label) }
+                                    }
                                     Span({ classes("xrow__title") }) { Text(title ?: "Not on this device") }
                                 }
                                 Button({

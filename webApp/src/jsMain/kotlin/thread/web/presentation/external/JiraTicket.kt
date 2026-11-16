@@ -8,17 +8,12 @@ import androidx.compose.runtime.setValue
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
-import org.jetbrains.compose.web.dom.Article
 import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.DDescription
 import org.jetbrains.compose.web.dom.DList
 import org.jetbrains.compose.web.dom.DTerm
 import org.jetbrains.compose.web.dom.Div
-import org.jetbrains.compose.web.dom.H1
-import org.jetbrains.compose.web.dom.H2
-import org.jetbrains.compose.web.dom.H3
-import org.jetbrains.compose.web.dom.Header
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
@@ -30,12 +25,14 @@ import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalReference
+import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
+import thread.web.presentation.SectionCard
 import thread.web.presentation.TopicCreation
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.notes.topicsPhrase
@@ -141,69 +138,79 @@ private fun JiraArticle(
     onGo: (Place) -> Unit,
 ) {
     val reference = jira.reference(issue.key)
-    Article({
-        classes("xd")
-        attr("aria-labelledby", XD_TITLE_ID)
-    }) {
-        Header({ classes("xd__head") }) {
-            P({ classes("xd__kicker") }) {
-                Span({ classes("xd__key") }) { Text(issue.key.value) }
-                issue.type?.let {
-                    Span({ classes("xd__type") }) {
-                        JiraTypeIcon(it, decorative = true)
-                        Text(it)
-                    }
-                }
-                issue.status?.let { JiraStatusLozenge(it) }
-                if (onDevice) {
-                    Span({ classes("dl-badge") }) {
-                        IconView(Icon.Device, 13)
-                        Text("Saved on this device")
-                    }
+    val level = partLevel(heading1)
+    // The ticket as cards (D68): the head card, then Description, Comments and Related issues on the left, Details and
+    // Topics on the right.
+    DetailCards(
+        kind = CardKind.Jira,
+        heading1 = heading1,
+        provider = "Jira",
+        kicker = {
+            Span({ classes("xd__key") }) { Text(issue.key.value) }
+            issue.type?.let {
+                Span({ classes("xd__type") }) {
+                    JiraTypeIcon(it, decorative = true)
+                    Text(it)
                 }
             }
-            val titleAttrs: org.jetbrains.compose.web.attributes.AttrsScope<*>.() -> Unit = {
-                classes("xd__title")
-                id(XD_TITLE_ID)
-                tabIndex(-1)
+            issue.status?.let { JiraStatusLozenge(it) }
+            if (onDevice) {
+                Span({ classes("dl-badge") }) {
+                    IconView(Icon.Device, 13)
+                    Text("Saved on this device")
+                }
             }
-            if (heading1) H1(titleAttrs) { Text(issue.title) } else H2(titleAttrs) { Text(issue.title) }
-            if (reference != null) {
-                TopicLinks(reference, workspace, "ticket")
-                TicketActions(issue, reference, jira, workspace, onGo)
-            }
-        }
-        Div({ classes("xd__grid") }) {
-            Div({ classes("xd__main") }) {
-                H3({ classes("xd__h") }) { Text("Description") }
+        },
+        title = { Text(issue.title) },
+        head = { if (reference != null) TicketActions(issue, reference, jira, workspace, onGo) },
+        main = {
+            SectionCard(CardKind.Part, "xd-desc-h", "xd-desc-b", "Description", level = level, attrs = { classes("scard--desc") }) {
                 if (issue.description.blocks.isEmpty()) {
-                    P({ classes("muted") }) { Text("No description.") }
+                    P({ classes("scard__empty") }) { Text("No description.") }
                 } else {
                     Div({ classes("desc") }) { ExternalDocumentView(issue.description, DocumentSource.Jira) }
                 }
-                H3({ classes("xd__h") }) {
-                    Text("Comments ")
-                    Span({ classes("n") }) { Text(issue.commentTotal.toString()) }
+            }
+            SectionCard(
+                kind = CardKind.Part,
+                headingId = "xd-cmt-h",
+                bodyId = "xd-cmt-b",
+                title = "Comments",
+                count = issue.commentTotal.toString(),
+                level = level,
+                mark = Icon.Comment,
+            ) { Comments(issue) }
+            SectionCard(
+                kind = CardKind.Part,
+                headingId = "xd-rel-h",
+                bodyId = "xd-rel-b",
+                title = "Related issues",
+                count = issue.related.size.toString(),
+                level = level,
+                mark = Icon.Link,
+            ) { RelatedIssues(issue, jira, relatedHref, onOpenRelated) }
+        },
+        side = {
+            SectionCard(CardKind.Part, "xd-det-h", "xd-det-b", "Details", level = level, mark = Icon.List) {
+                DList({ classes("fields") }) {
+                    Field("Status", issue.status?.name)
+                    Field("Priority", issue.priority)
+                    Field("Assignee", issue.assignee)
+                    Field("Reporter", issue.reporter)
+                    Field("Sprint", issue.sprint)
+                    Field("Labels", issue.labels.joinToString(", ").ifEmpty { null })
+                    Field("Updated", issue.updatedAtMillis?.let { Times.whenText(it) })
                 }
-                Comments(issue)
-                H3({ classes("xd__h") }) { Text("Related issues") }
-                RelatedIssues(issue, jira, relatedHref, onOpenRelated)
             }
-            DList({ classes("fields") }) {
-                Field("Status", issue.status?.name)
-                Field("Priority", issue.priority)
-                Field("Assignee", issue.assignee)
-                Field("Reporter", issue.reporter)
-                Field("Sprint", issue.sprint)
-                Field("Labels", issue.labels.joinToString(", ").ifEmpty { null })
-                Field("Updated", issue.updatedAtMillis?.let { Times.whenText(it) })
-            }
-        }
-        ReadOnlyNote("Jira")
-    }
+            TopicsCard(reference, workspace, "ticket", heading1)
+        },
+    )
 }
 
-/** v3 `X.links`: the Topics the record belongs to, each with Unlink. Unlinking never changes the [what] itself. */
+/**
+ * v3 `X.links`, as the body of a detail's Topics card (D68): the Topics the record belongs to, each with Unlink.
+ * Unlinking never changes the [what] itself.
+ */
 @Composable
 internal fun TopicLinks(
     reference: ExternalReference,
@@ -212,8 +219,11 @@ internal fun TopicLinks(
 ) {
     val toasts = LocalToasts.current
     val topics = workspace.topicsLinkedTo(reference.id)
+    if (topics.isEmpty()) {
+        P({ classes("scard__empty") }) { Text("Not linked to a Topic yet.") }
+        return
+    }
     Div({ classes("xd__links") }) {
-        Span { Text(if (topics.isEmpty()) "Not linked to a Topic yet." else "Linked to") }
         topics.forEach { topic ->
             Span({ classes("lchip") }) {
                 TopicTag(topic)
@@ -297,7 +307,7 @@ private fun RelatedIssues(
     onOpenRelated: (JiraIssueKey) -> Boolean,
 ) {
     if (issue.related.isEmpty()) {
-        P({ classes("muted") }) { Text("None.") }
+        P({ classes("scard__empty") }) { Text("None.") }
         return
     }
     Ul({ classes("rel") }) {
@@ -333,7 +343,7 @@ private fun RelatedIssues(
 @Composable
 private fun Comments(issue: JiraIssue) {
     if (issue.comments.isEmpty()) {
-        P({ classes("muted") }) { Text("No comments.") }
+        P({ classes("scard__empty") }) { Text("No comments.") }
         return
     }
     if (issue.commentTotal > issue.comments.size) {

@@ -46,10 +46,12 @@ import thread.domain.workspace.TrashKind
 import thread.web.platform.WallClock
 import thread.web.platform.mediaMatches
 import thread.web.platform.observeMedia
+import thread.web.presentation.CardKind
 import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
@@ -57,8 +59,10 @@ import thread.web.presentation.Place
 import thread.web.presentation.Router
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.cardKind
 import thread.web.presentation.dayText
 import thread.web.presentation.deadlineText
+import thread.web.presentation.itemCard
 import thread.web.presentation.notes.NoteServices
 import thread.web.presentation.notes.RichTextView
 import thread.web.presentation.notes.launchNoteWrite
@@ -67,6 +71,7 @@ import thread.web.presentation.tasks.focusById
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.PlainTopicTag
 import thread.web.presentation.topics.TopicHex
+import thread.web.presentation.topics.topicColor
 import thread.web.presentation.topics.topicPlace
 import thread.web.presentation.whenText
 
@@ -168,7 +173,7 @@ internal fun TrashScreen(
         if (picked != null) classes("has-open")
     }) {
         Div({ classes("md__list") }) {
-            Ul({ classes("md__scroll") }) {
+            Ul({ classes("md__scroll", "tlist") }) {
                 entries.forEach { entry -> key(entry.id) { TrashRow(entry, entry.id == shown?.id, workspace.prefs.timeZone) } }
             }
             P({ classes("callout") }) {
@@ -224,14 +229,19 @@ private fun TrashRow(
     zone: String,
 ) {
     val now = LocalNow.current
-    Li {
+    val kind = cardKindOf(entry.kind)
+    Li({
+        itemCard(kind)
+        if (entry is TrashEntry.TopicEntry) topicColor(entry.topic.color)
+        if (current) classes("is-current")
+    }) {
+        KindMark(kind)
         A(trashPlace(entry.id).hash, {
-            classes("xi")
+            classes("icard__main")
             id(rowId(entry.id))
             if (current) attr("aria-current", "true")
         }) {
             Span({ classes("xi__top") }) {
-                IconView(kindIcon(entry.kind), 14)
                 Span { Text(kindLabel(entry.kind)) }
                 Span { Text("Deleted ${deletedText(entry, zone, now)}") }
             }
@@ -286,66 +296,74 @@ private fun TrashPreview(
     val live = links.filter { it.state == TopicState.Live }.mapNotNull { it.topic }
     val parked = links.count { it.state == TopicState.InTrash }
     val lost = links.count { it.state == TopicState.Gone }
+    val kind = cardKindOf(entry.kind)
+    // A card of the entry's kind (D68): its band names the kind, like the row in the list.
     Article({
-        classes("tprev")
+        classes("tprev", "scard")
+        cardKind(kind)
+        if (entry is TrashEntry.TopicEntry) topicColor(entry.topic.color)
         attr("aria-labelledby", TITLE_ID)
     }) {
-        A(View.Trash.place.hash, {
-            classes("back", "md-back")
-            onClick { event ->
-                event.preventDefault()
-                onBack()
-            }
-        }) {
-            IconView(Icon.ChevLeft, 16)
-            Text(" Trash")
-        }
-        P({ classes("tprev__kind") }) {
-            IconView(kindIcon(entry.kind), 15)
-            Text(" ${kindLabel(entry.kind)}, deleted ${deletedText(entry, zone, now)}")
-        }
-        H2({
-            classes("tprev__title")
-            id(TITLE_ID)
-            tabIndex(-1)
-        }) { Text(entry.title) }
-        P({ classes("tprev__ctx") }) {
-            if (entry is TrashEntry.TopicEntry) {
-                TopicHex(entry.topic.name, entry.topic.color, HexSize.Sm)
-                Span { Text(bundlePhrase(entry)) }
-            } else if (live.isNotEmpty()) {
-                Span { Text("Was linked to") }
-                live.forEach { PlainTopicTag(it) }
-            } else {
-                Span { Text("Not linked to a Topic") }
-            }
-        }
-        if (parked > 0) {
-            Callout(Icon.Alert, parkedText(entry, parked))
-        }
-        if (lost > 0) {
-            val what = if (lost == 1) "One of its Topics no longer exists" else "$lost of its Topics no longer exist"
-            Callout(Icon.Alert, "$what, so that link cannot come back.")
-        }
-        when (entry) {
-            is TrashEntry.TopicEntry -> TopicBody(entry, now, externalLabel)
-            is TrashEntry.NoteEntry -> NoteBody(entry, noteBody(entry.note.id), deviceIsThis)
-            is TrashEntry.TaskEntry -> TaskBody(entry, now)
-            is TrashEntry.ReminderEntry -> ReminderBody(entry, now)
-        }
-        Div({ classes("tprev__acts") }) {
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--primary")
-                onClick { onRestore() }
-            }) { Text(restoreLabel(entry, links, live)) }
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--text", "btn--danger-text")
-                onClick { onDeleteForever() }
+        Div({ classes("scard__head", "tprev__head") }) {
+            A(View.Trash.place.hash, {
+                classes("back", "md-back")
+                onClick { event ->
+                    event.preventDefault()
+                    onBack()
+                }
             }) {
-                IconView(Icon.Trash, 16)
-                Text(" Delete forever")
+                IconView(Icon.ChevLeft, 16)
+                Text(" Trash")
+            }
+            P({ classes("tprev__kind") }) {
+                KindMark(kind)
+                Span { Text("${kindLabel(entry.kind)}, deleted ${deletedText(entry, zone, now)}") }
+            }
+        }
+        Div({ classes("scard__body", "tprev__main") }) {
+            H2({
+                classes("tprev__title")
+                id(TITLE_ID)
+                tabIndex(-1)
+            }) { Text(entry.title) }
+            P({ classes("tprev__ctx") }) {
+                if (entry is TrashEntry.TopicEntry) {
+                    TopicHex(entry.topic.name, entry.topic.color, HexSize.Sm)
+                    Span { Text(bundlePhrase(entry)) }
+                } else if (live.isNotEmpty()) {
+                    Span { Text("Was linked to") }
+                    live.forEach { PlainTopicTag(it) }
+                } else {
+                    Span { Text("Not linked to a Topic") }
+                }
+            }
+            if (parked > 0) {
+                Callout(Icon.Alert, parkedText(entry, parked))
+            }
+            if (lost > 0) {
+                val what = if (lost == 1) "One of its Topics no longer exists" else "$lost of its Topics no longer exist"
+                Callout(Icon.Alert, "$what, so that link cannot come back.")
+            }
+            when (entry) {
+                is TrashEntry.TopicEntry -> TopicBody(entry, now, externalLabel)
+                is TrashEntry.NoteEntry -> NoteBody(entry, noteBody(entry.note.id), deviceIsThis)
+                is TrashEntry.TaskEntry -> TaskBody(entry, now)
+                is TrashEntry.ReminderEntry -> ReminderBody(entry, now)
+            }
+            Div({ classes("tprev__acts") }) {
+                Button({
+                    type(ButtonType.Button)
+                    classes("btn", "btn--primary")
+                    onClick { onRestore() }
+                }) { Text(restoreLabel(entry, links, live)) }
+                Button({
+                    type(ButtonType.Button)
+                    classes("btn", "btn--text", "btn--danger-text")
+                    onClick { onDeleteForever() }
+                }) {
+                    IconView(Icon.Trash, 16)
+                    Text(" Delete forever")
+                }
             }
         }
     }
@@ -560,12 +578,13 @@ private fun deletedText(
     now: WallTime,
 ): String = entry.deletedAtMillis?.let { whenText(WallClock.wallTimeAt(it.toDouble(), zone), now.day, mid = true) } ?: "just now"
 
-private fun kindIcon(kind: TrashKind): Icon =
+/** The card kind of a Trash entry: its row and preview look like the item did before it was deleted. */
+private fun cardKindOf(kind: TrashKind): CardKind =
     when (kind) {
-        TrashKind.Topic -> Icon.Topics
-        TrashKind.Note -> Icon.Notes
-        TrashKind.Task -> Icon.Task
-        TrashKind.Reminder -> Icon.Bell
+        TrashKind.Topic -> CardKind.Topic
+        TrashKind.Note -> CardKind.Note
+        TrashKind.Task -> CardKind.Task
+        TrashKind.Reminder -> CardKind.Reminder
     }
 
 private fun kindLabel(kind: TrashKind): String =

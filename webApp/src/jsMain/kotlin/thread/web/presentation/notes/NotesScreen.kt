@@ -40,9 +40,11 @@ import thread.domain.note.NoteSummary
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.note.filterNotes
 import thread.web.platform.WallClock
+import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
@@ -52,6 +54,7 @@ import thread.web.presentation.ToastState
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.agoText
+import thread.web.presentation.itemCard
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.TopicHex
 import thread.web.presentation.topics.TopicHexEmpty
@@ -166,7 +169,7 @@ internal fun NotesScreen(
                 FilterChip("Standalone", filter == NoteFilter.Standalone) { filter = NoteFilter.Standalone }
             }
             Ul({
-                classes("nindex__list")
+                classes("nindex__list", "tlist")
                 id("nlist")
             }) {
                 if (workspace.loaded) {
@@ -257,9 +260,13 @@ private fun NoteRows(
         val topics = workspace.topicsOf(note.id)
         val updated = note.updatedAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), zone) } ?: now
         key(id) {
-            Li {
+            Li({
+                itemCard(CardKind.Note)
+                if (id == openId) classes("is-current")
+            }) {
+                KindMark(CardKind.Note)
                 A(notePlace(note.id).hash, {
-                    classes("nrow")
+                    classes("icard__main")
                     id(rowId(id))
                     if (id == openId) attr("aria-current", "page")
                 }) {

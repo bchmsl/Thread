@@ -25,13 +25,16 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
 import thread.domain.note.NoteSaveState
 import thread.domain.workspace.RefusedChange
+import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
 import thread.web.presentation.Kbd
+import thread.web.presentation.KindMark
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.SyncProblem
 import thread.web.presentation.View
+import thread.web.presentation.itemCard
 import thread.web.presentation.syncText
 
 /**
@@ -176,13 +179,17 @@ internal fun ViewsSheet(
     }
 }
 
-/** One search result. [lead] draws the icon or sticker in front of the label. */
+/**
+ * One search result. [lead] draws the icon or sticker in front of the label. With a [kind] the result is a small card of
+ * that kind (D68), like the item in its list: the kind's mark replaces [lead], except a Topic keeps its sticker.
+ */
 internal class SearchOption(
     val label: String,
     val sub: String,
     val lead: @Composable () -> Unit,
     /** Extra classes for [sub], such as a Jira status lozenge. */
     val subClasses: List<String> = emptyList(),
+    val kind: CardKind? = null,
     val onPick: () -> Unit,
 )
 
@@ -277,15 +284,21 @@ internal fun SearchPalette(
                             H3({ classes("pal__gtitle") }) { Text(group.title) }
                             group.options.forEach { option ->
                                 val optionIndex = index++
+                                val kind = option.kind
                                 Button({
                                     type(ButtonType.Button)
                                     classes("pal__opt")
+                                    kind?.let { itemCard(it) }
                                     attr("role", "option")
                                     id("opt-$optionIndex")
                                     attr("aria-selected", (optionIndex == active).toString())
                                     onClick { option.onPick() }
                                 }) {
-                                    Span({ classes("pal__lead") }) { option.lead() }
+                                    if (kind != null && kind != CardKind.Topic) {
+                                        KindMark(kind)
+                                    } else {
+                                        Span({ classes("pal__lead") }) { option.lead() }
+                                    }
                                     Span({ classes("pal__label") }) { Text(option.label) }
                                     Span({ classes("pal__sub", *option.subClasses.toTypedArray()) }) { Text(option.sub) }
                                 }

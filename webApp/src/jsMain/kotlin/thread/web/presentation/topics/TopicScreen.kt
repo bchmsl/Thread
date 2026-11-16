@@ -61,12 +61,14 @@ import thread.domain.workspace.EditResult
 import thread.domain.workspace.editInfo
 import thread.domain.workspace.editTopic
 import thread.domain.workspace.moveTopic
+import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.Place
+import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
@@ -212,15 +214,13 @@ internal fun TopicScreen(
             }) { Text("Its tasks and reminders go with it. Notes stay in Notes. You can undo or restore it from Trash.") }
         }
     }
-    Section({
-        classes("pickup")
-        topicColor(topic.color)
-        attr("aria-labelledby", "pu-h")
-    }) {
-        H2({
-            classes("pickup__h")
-            id("pu-h")
-        }) { Text("Additional information") }
+    SectionCard(
+        kind = CardKind.Info,
+        headingId = "pu-h",
+        bodyId = "pu-b",
+        title = "Additional information",
+        attrs = { topicColor(topic.color) },
+    ) {
         // D52: one box. A Topic saved before it shows its "Where I left off" and "Next step" text here until edited.
         InfoField("pu-h", topicInfo(topic), "Context, links, decisions: anything worth keeping with this Topic") { text ->
             workspace.topic(topic.id.value)?.let { workspace.apply(editInfo(it, text)) }
@@ -254,7 +254,7 @@ internal fun TopicScreen(
                         topic,
                         shown.key,
                         onOpen = { panel = LinkedPanel.Ticket(it) },
-                        onClose = { closePanel(".xrow__main[data-key=\"${shown.key.value}\"]") },
+                        onClose = { closePanel(".icard .xrow__main[data-key=\"${shown.key.value}\"]") },
                         onGo = onGo,
                     )
                 shown is LinkedPanel.Pull && wide ->
@@ -263,7 +263,7 @@ internal fun TopicScreen(
                         gitHub,
                         topic,
                         shown.ref,
-                        onClose = { closePanel(".xrow__main[data-id=\"${shown.ref.id}\"]") },
+                        onClose = { closePanel(".icard .xrow__main[data-id=\"${shown.ref.id}\"]") },
                         onGo = onGo,
                     )
                 else -> {

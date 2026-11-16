@@ -506,23 +506,28 @@ private fun searchGroups(
         SearchGroup(
             "Topics",
             found.topics.map { topic ->
-                SearchOption(topic.name, statusOf(topic, statuses).name, { TopicHex(topic.name, topic.color, HexSize.Sm) }) {
-                    go(topicPlace(topic))
-                }
+                SearchOption(
+                    topic.name,
+                    statusOf(topic, statuses).name,
+                    { TopicHex(topic.name, topic.color, HexSize.Sm) },
+                    kind = CardKind.Topic,
+                ) { go(topicPlace(topic)) }
             },
         ),
         SearchGroup(
             "Tasks",
             found.tasks.map { task ->
                 val sub = if (task.done) "Completed" else task.topicId?.let { workspace.topic(it.value)?.name } ?: "Standalone"
-                SearchOption(task.title, sub, { IconView(Icon.Task, 18) }) { openTask(task) }
+                SearchOption(task.title, sub, { IconView(Icon.Task, 18) }, kind = CardKind.Task) { openTask(task) }
             },
         ),
         SearchGroup(
             "Notes",
             found.notes.map { note ->
                 val sub = workspace.topicsOf(note.id).joinToString(", ") { it.name }.ifEmpty { "Standalone" }
-                SearchOption(note.title.ifBlank { UNTITLED_NOTE }, sub, { IconView(Icon.Notes, 18) }) { go(notePlace(note.id)) }
+                SearchOption(note.title.ifBlank { UNTITLED_NOTE }, sub, { IconView(Icon.Notes, 18) }, kind = CardKind.Note) {
+                    go(notePlace(note.id))
+                }
             },
         ),
         SearchGroup(
@@ -536,6 +541,7 @@ private fun searchGroups(
                         issue.status?.name.orEmpty(),
                         { JiraTypeIcon(issue.type, 18) },
                         issue.status?.let { jiraStatusClasses(it.category) }.orEmpty(),
+                        kind = CardKind.Jira,
                     ) {
                         go(jiraPlace(issue.key))
                     }
@@ -549,7 +555,7 @@ private fun searchGroups(
             } else {
                 searchPullRequestCopies(query, gitHub.saved.values.map { it.value.summary() }).orEmpty().map { pull ->
                     val repository = "${pull.ref.owner}/${pull.ref.repo}"
-                    SearchOption("${pull.title} #${pull.ref.number}", repository, { IconView(Icon.Pr, 18) }) {
+                    SearchOption("${pull.title} #${pull.ref.number}", repository, { IconView(Icon.Pr, 18) }, kind = CardKind.PullRequest) {
                         go(prPlace(pull.ref, review = pull.ref in gitHub.reviewRequested))
                     }
                 }

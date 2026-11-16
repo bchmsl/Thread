@@ -31,6 +31,7 @@ import thread.domain.topic.categoryOf
 import thread.domain.topic.statusOf
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.moveTopic
+import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
@@ -38,8 +39,10 @@ import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
 import thread.web.presentation.Place
 import thread.web.presentation.Router
+import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.itemCard
 import thread.web.presentation.shell.CaptureState
 import thread.web.presentation.shell.CaptureType
 
@@ -125,23 +128,21 @@ private fun TopicsList(
         val inStatus = topicsIn(status, topics, statuses)
         if (inStatus.isEmpty()) return@forEach
         key(status.id) {
-            Section({
-                classes("tl-group")
-                attr("aria-labelledby", "tl-${status.id}")
-            }) {
-                H2({
-                    classes("tl-head")
-                    id("tl-${status.id}")
-                }) {
-                    StatusLabel(status)
-                    Text(" ")
-                    Span({ classes("n") }) { Text(inStatus.size.toString()) }
-                }
-                Ul({ classes("tl-list") }) {
+            SectionCard(
+                kind = CardKind.Topic,
+                headingId = "tl-${status.id}",
+                bodyId = "tlb-${status.id}",
+                title = status.name,
+                count = inStatus.size.toString(),
+                attrs = { classes("tl-group") },
+                titleContent = { StatusLabel(status) },
+            ) {
+                Ul({ classes("tl-list", "tlist") }) {
                     inStatus.forEach { topic ->
                         key(topic.id) {
                             Li {
                                 A(topicPlace(topic).hash, {
+                                    itemCard(CardKind.Topic)
                                     classes("trow2")
                                     topicColor(topic.color)
                                 }) {
@@ -264,6 +265,7 @@ private fun BoardCard(
     onMove: (StatusId) -> Unit,
 ) {
     Li({
+        itemCard(CardKind.Topic)
         classes("bcard")
         if (dragging) classes("is-dragging")
         attr("draggable", "true")

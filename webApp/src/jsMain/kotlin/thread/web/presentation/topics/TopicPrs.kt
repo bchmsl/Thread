@@ -27,9 +27,11 @@ import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
 import thread.domain.workspace.gitHubReference
 import thread.domain.workspace.pullRequestRefOf
+import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
+import thread.web.presentation.KindMark
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
@@ -45,6 +47,7 @@ import thread.web.presentation.external.XD_TITLE_ID
 import thread.web.presentation.external.prItemPlace
 import thread.web.presentation.external.rememberPullRequest
 import thread.web.presentation.external.savedOrNull
+import thread.web.presentation.itemCard
 
 /**
  * The pull requests linked to the Topic (v3 topic.js `extSection('pr')`). Each row opens the pull request in the side
@@ -65,7 +68,7 @@ internal fun TopicPrSection(
     var linking by remember(topic.id) { mutableStateOf(false) }
     val references = workspace.externalsOf(topic.id, ExternalProvider.GitHub)
     if (!gitHub.connected) {
-        TopicSection("prs", "Pull requests", references.size.toString(), open, onToggle) {
+        TopicSection("prs", CardKind.PullRequest, "Pull requests", references.size.toString(), open, onToggle) {
             P({ classes("sect__empty") }) {
                 Text("GitHub is not connected. ")
                 A(CONNECTIONS_PLACE.hash, { classes("lnk") }) { Text("Connect in Settings") }
@@ -75,6 +78,7 @@ internal fun TopicPrSection(
     }
     TopicSection(
         "prs",
+        CardKind.PullRequest,
         "Pull requests",
         references.size.toString(),
         open,
@@ -98,7 +102,7 @@ internal fun TopicPrSection(
         }
         SuggestedGroup(
             sectionKey = "prs",
-            icon = Icon.Pr,
+            card = CardKind.PullRequest,
             kind = "pull requests",
             workspace = workspace,
             topic = topic,
@@ -153,8 +157,11 @@ private fun LinkedPulls(
             val isOpen = ref != null && openId == ref.id
             val label = "#${reference.key}"
             key(reference.id) {
-                Li({ classes("xrow", *(if (isOpen) arrayOf("is-open") else emptyArray())) }) {
-                    Span({ classes("xrow__icon") }) { IconView(Icon.Pr, 18) }
+                Li({
+                    itemCard(CardKind.PullRequest)
+                    if (isOpen) classes("is-current")
+                }) {
+                    KindMark(CardKind.PullRequest)
                     if (ref != null) {
                         A(prItemPlace(ref, topic.id.value).hash, {
                             classes("xrow__main")
@@ -223,26 +230,12 @@ internal fun TopicPrSidePanel(
             (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
         }
     }
-    Div({
-        classes("side-panel")
-        attr("role", "region")
-        attr("aria-label", "Linked item")
-    }) {
-        Div({ classes("side-panel__bar") }) {
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--text", "btn--sm")
-                id("td-panel-close")
-                onClick { onClose() }
-            }) {
-                IconView(Icon.ChevLeft, 15)
-                Text(" Back to sections")
-            }
-            A(prItemPlace(ref, topic.id.value).hash, { classes("btn", "btn--text", "btn--sm") }) {
-                Text("Open as page ")
-                IconView(Icon.External, 14)
-            }
-        }
+    SidePanelCard(
+        kind = CardKind.PullRequest,
+        label = "Pull request",
+        pageHref = prItemPlace(ref, topic.id.value).hash,
+        onClose = onClose,
+    ) {
         if (view != null) ViewBanner(view, gitHub.name, "pull requests") { onGo(CONNECTIONS_PLACE) }
         PullRequestDetailView(gitHub, workspace, view, heading1 = false, onRefresh = { refresh++ }, onGo = onGo)
     }
