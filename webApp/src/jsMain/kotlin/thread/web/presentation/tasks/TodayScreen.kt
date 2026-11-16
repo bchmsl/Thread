@@ -44,7 +44,12 @@ import thread.domain.task.firstDayOf
 import thread.domain.task.todayTasks
 import thread.domain.time.clockText
 import thread.domain.topic.StatusCategory
+import thread.domain.topic.Topic
+import thread.domain.topic.TopicGroup
+import thread.domain.topic.TopicStatus
 import thread.domain.topic.statusOf
+import thread.domain.topic.todayStatuses
+import thread.domain.topic.todayTopicGroups
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
 import thread.web.presentation.EmptyState
@@ -71,7 +76,7 @@ import thread.web.presentation.topics.topicPlace
 
 /**
  * Today (v3 today.html): the date and the personal checklist lead, reminders and review requests sit on the rail,
- * Active Topics below. Each Task shows once, in the first group it qualifies for (D37). Upcoming and No date follow
+ * active and paused Topics below. Each Task shows once, in the first group it qualifies for (D37). Upcoming and No date follow
  * Earlier planned and start closed; every group opens and closes, and this device remembers it (D53).
  */
 @Composable
@@ -387,11 +392,40 @@ private fun RemindersRail(
     }
 }
 
+/** How Today lays out its Topics (owner change #1). This device remembers the choice, like the open groups (D53). */
+internal enum class ActiveLayout(
+    val id: String,
+    val label: String,
+) {
+    List("list", "List"),
+    Board("board", "Board"),
+}
+
+/** Where this device keeps the Topics layout. Not synced. */
+internal const val ACTIVE_LAYOUT_NAME = "thread.today.activeLayout"
+
+/** The layout last picked on this device, else List, also when storage is blocked. */
+internal fun activeLayout(): ActiveLayout {
+    val stored = readDeviceText(ACTIVE_LAYOUT_NAME)
+    return ActiveLayout.entries.firstOrNull { it.id == stored } ?: ActiveLayout.List
+}
+
+internal fun keepActiveLayout(layout: ActiveLayout) = writeDeviceText(ACTIVE_LAYOUT_NAME, layout.id)
+
+/**
+ * Active and paused Topics (owner change #1): only Topics whose status is in the Active or Paused category, grouped by
+ * that status in Settings order. List: a heading per status that opens and closes, with the Topics as rows. Board: a
+ * lane per status. With one such status there is nothing to group, so the list has no heading and the board is the
+ * card grid.
+ */
 @Composable
 private fun ActiveTopics(workspace: WorkspaceModel) {
     val statuses = workspace.statuses
-    val active = workspace.topics.filter { statusOf(it, statuses).category == StatusCategory.Active }
-    val names = statuses.filter { it.category == StatusCategory.Active }.joinToString(" and ") { it.name }
+    val shownStatuses = todayStatuses(statuses)
+    val groups = todayTopicGroups(workspace.topics, statuses)
+    val count = groups.sumOf { it.topics.size }
+    val grouped = shownStatuses.size > 1
+    var layout by remember { mutableStateOf(activeLayout()) }
     Section({
         classes("atopics")
         attr("aria-labelledby", "at-h")
@@ -401,49 +435,211 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
                 classes("h2")
                 id("at-h")
             }) {
-                Text("Active Topics ")
-                Span({ classes("n") }) { Text(active.size.toString()) }
+                Text("Active and paused Topics ")
+                Span({ classes("n") }) { Text(count.toString()) }
             }
-            Span({
-                classes("muted")
-                style { fontSize(13.px) }
-            }) { Text(if (names.isNotEmpty()) "Statuses in the Active category: $names" else "No status uses the Active category") }
+            // Grouped, the headings name the statuses, so the hint would only repeat them.
+            if (!grouped) {
+                val names = shownStatuses.joinToString(" and ") { it.name }
+                val hint =
+                    when {
+                        names.isEmpty() -> "No status uses the Active or Paused category"
+                        else -> "Statuses in the Active or Paused category: $names"
+                    }
+                Span({
+                    classes("muted")
+                    style { fontSize(13.px) }
+                }) { Text(hint) }
+            }
+            if (count > 0) {
+                LayoutSwitch(layout) { picked ->
+                    layout = picked
+                    keepActiveLayout(picked)
+                }
+            }
         }
-        if (active.isEmpty()) {
-            EmptyState(Icon.Topics, "No active Topics", "Topics show here when their status is in the Active category.") {
+        if (count == 0) {
+            val why = "Topics show here when their status is in the Active or Paused category."
+            EmptyState(Icon.Topics, "No active or paused Topics", why) {
                 A(View.Topics.place.hash, { classes("btn", "btn--line") }) { Text("Open Topics") }
             }
             return@Section
         }
-        Ul({ classes("agrid") }) {
-            active.forEach { topic ->
-                key(topic.id.value) {
-                    Li {
-                        A(topicPlace(topic).hash, {
-                            classes("acard")
-                            topicColor(topic.color)
-                        }) {
-                            Span({ classes("acard__top") }) {
-                                TopicHex(topic.name, topic.color, HexSize.Md)
-                                Span({ classes("acard__name") }) { Text(topic.name) }
-                            }
-                            StatusLabel(statusOf(topic, statuses))
-                            Span({ classes("acard__next") }) {
-                                // D52: the Topic's first open Task, as on the Topics list.
-                                val next = workspace.nextTask(topic.id)
-                                if (next != null) {
-                                    B { Text("Next:") }
-                                    Text(" ${next.title}")
-                                } else {
-                                    Span({ classes("muted") }) { Text("No open tasks.") }
-                                }
-                            }
-                            Span({ classes("acard__foot") }) { TopicProgress(topic, workspace.progress(topic.id)) }
-                        }
+        when {
+            layout == ActiveLayout.List && grouped ->
+                groups.forEach { group -> key(group.status.id.value) { ActiveGroup(group, workspace) } }
+            layout == ActiveLayout.List -> ActiveRows(groups.single().topics, workspace)
+            grouped -> ActiveBoard(shownStatuses, groups, workspace)
+            else -> ActiveCards(groups.single().topics, workspace, showStatus = true)
+        }
+    }
+}
+
+@Composable
+private fun LayoutSwitch(
+    layout: ActiveLayout,
+    onPick: (ActiveLayout) -> Unit,
+) {
+    Div({
+        classes("seg")
+        attr("role", "radiogroup")
+        attr("aria-label", "Active and paused Topics layout")
+    }) {
+        ActiveLayout.entries.forEach { option ->
+            Button({
+                type(ButtonType.Button)
+                attr("role", "radio")
+                attr("aria-checked", (option == layout).toString())
+                onClick { onPick(option) }
+            }) {
+                IconView(if (option == ActiveLayout.List) Icon.List else Icon.Topics, 16)
+                Text(" ${option.label}")
+            }
+        }
+    }
+}
+
+/** One status's Topics in the list. Its heading opens and closes it, and this device remembers it (D53). */
+@Composable
+private fun ActiveGroup(
+    group: TopicGroup,
+    workspace: WorkspaceModel,
+) {
+    val key = "at-${group.status.id.value}"
+    var open by remember(key) { mutableStateOf(isGroupOpen(key, true)) }
+    Section({
+        classes("tgroup", "tgroup--status")
+        if (!open) classes("is-closed")
+        attr("aria-labelledby", "g-$key")
+    }) {
+        H3({
+            classes("tgroup__head")
+            id("g-$key")
+        }) {
+            Button({
+                type(ButtonType.Button)
+                classes("tgroup__toggle")
+                attr("aria-expanded", open.toString())
+                attr("aria-controls", "gb-$key")
+                onClick {
+                    open = !open
+                    keepGroupOpen(key, open)
+                }
+            }) {
+                Span({ classes("chev") }) { IconView(Icon.ChevDown, 18) }
+                StatusLabel(group.status)
+                Span({ classes("n") }) { Text(group.topics.size.toString()) }
+            }
+        }
+        Div({
+            classes("tgroup__body")
+            id("gb-$key")
+            if (!open) attr("hidden", "")
+        }) { if (open) ActiveRows(group.topics, workspace) }
+    }
+}
+
+/** Topics as rows, like the Topics list: sticker, name, next Task, progress. */
+@Composable
+private fun ActiveRows(
+    topics: List<Topic>,
+    workspace: WorkspaceModel,
+) {
+    Ul({ classes("tl-list") }) {
+        topics.forEach { topic ->
+            key(topic.id.value) {
+                Li {
+                    A(topicPlace(topic).hash, {
+                        classes("trow2")
+                        topicColor(topic.color)
+                    }) {
+                        TopicHex(topic.name, topic.color, HexSize.Md)
+                        Span({ classes("trow2__name") }) { Text(topic.name) }
+                        Span({ classes("trow2__next") }) { NextTask(workspace.nextTask(topic.id)) }
+                        Span({ classes("trow2__side") }) { TopicProgress(topic, workspace.progress(topic.id)) }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * The small board: a lane per Active or Paused status, in Settings order, so a status keeps its place. A lane no Topic uses
+ * says so; on a phone, where lanes stack, it is left out.
+ */
+@Composable
+private fun ActiveBoard(
+    shownStatuses: List<TopicStatus>,
+    groups: List<TopicGroup>,
+    workspace: WorkspaceModel,
+) {
+    Div({ classes("aboard") }) {
+        shownStatuses.forEach { status ->
+            val topics = groups.firstOrNull { it.status.id == status.id }?.topics.orEmpty()
+            key(status.id.value) {
+                Section({
+                    classes("lane", "alane")
+                    if (topics.isEmpty()) classes("is-empty")
+                    attr("aria-labelledby", "al-${status.id.value}")
+                }) {
+                    H3({
+                        classes("lane__head")
+                        id("al-${status.id.value}")
+                    }) {
+                        StatusLabel(status)
+                        Text(" ")
+                        Span({ classes("n") }) { Text(topics.size.toString()) }
+                    }
+                    if (topics.isEmpty()) {
+                        P({ classes("lane__empty") }) { Text("No Topics") }
+                    } else {
+                        ActiveCards(topics, workspace, showStatus = false)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The v3 Today cards. In a lane the lane names the status, so the card leaves it out. */
+@Composable
+private fun ActiveCards(
+    topics: List<Topic>,
+    workspace: WorkspaceModel,
+    showStatus: Boolean,
+) {
+    val statuses = workspace.statuses
+    Ul({ classes(if (showStatus) "agrid" else "lane__list") }) {
+        topics.forEach { topic ->
+            key(topic.id.value) {
+                Li {
+                    A(topicPlace(topic).hash, {
+                        classes("acard")
+                        topicColor(topic.color)
+                    }) {
+                        Span({ classes("acard__top") }) {
+                            TopicHex(topic.name, topic.color, HexSize.Md)
+                            Span({ classes("acard__name") }) { Text(topic.name) }
+                        }
+                        if (showStatus) StatusLabel(statusOf(topic, statuses))
+                        Span({ classes("acard__next") }) { NextTask(workspace.nextTask(topic.id)) }
+                        Span({ classes("acard__foot") }) { TopicProgress(topic, workspace.progress(topic.id)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** D52: the Topic's first open Task, as on the Topics list. */
+@Composable
+private fun NextTask(next: Task?) {
+    if (next != null) {
+        B { Text("Next:") }
+        Text(" ${next.title}")
+    } else {
+        Span({ classes("muted") }) { Text("No open tasks.") }
     }
 }
 

@@ -50,6 +50,11 @@ Upcoming and No date follow Earlier planned (D53). A Task is in the first group 
 - Every group's heading is a button with a chevron (`aria-expanded`, `aria-controls`, the body `hidden` when closed), like a Topic Details section. The open count stays in the heading when closed. Overdue, Today and Earlier planned start open; Upcoming and No date start closed. Each device remembers the choice; it is not synced.
 - Since D54 a reminder day counts as a date: a Task with a reminder today (or one due and not dismissed) is under Today, a later one under Upcoming, and No date means no planned day, deadline or reminder. The heading hints say so: "Planned, due or reminded today", "Planned, due or reminded after today", "No planned day, deadline or reminder".
 - The page header count ("N open tasks") counts Overdue, Today and Earlier planned only.
+Active and paused Topics (D59): Topics whose status is in the Active or Paused category, one group per status in Settings order, oldest first.
+- List / Board switch, List by default; each device keeps the choice.
+- List: a heading per status (chevron, status swatch, name, count) over Topics list rows. A status with no Topic has no group. Groups start open, and each device remembers which are closed.
+- Board: one read-only lane per status with the Today cards. A lane with no Topic says "No Topics", hidden on phones. Lanes scroll inside the section.
+- With only one Active or Paused status there is no heading, and the hint names the status.
 Topic labels provide context.
 A Task that qualifies for multiple sections should not create confusing duplicates.
 Empty state should support quick capture, not just show an illustration.

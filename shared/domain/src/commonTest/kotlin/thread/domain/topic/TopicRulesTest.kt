@@ -65,6 +65,46 @@ class TopicRulesTest {
     }
 
     @Test
+    fun todayGroupsTopicsByEachActiveAndPausedStatusInWorkspaceOrder() {
+        // The owner's statuses: To-Do (Planned), Analysis, In Progress, QA (Active), Hold (Paused), Done (Done).
+        val todo = planned.copy(name = "To-Do")
+        val analysis = active.copy(name = "Analysis")
+        val inProgress = TopicStatus(StatusId("s-progress"), "In Progress", StatusCategory.Active, 2)
+        val qa = TopicStatus(StatusId("s-qa"), "QA", StatusCategory.Active, 3)
+        val hold = paused.copy(name = "Hold", sortOrder = 4)
+        val finished = done.copy(sortOrder = 5)
+        val order = listOf(todo, analysis, inProgress, qa, hold, finished)
+        val a = topic("a", inProgress, 1)
+        val b = topic("b", analysis, 9)
+        val c = topic("c", analysis, 2)
+        val d = topic("d", todo, 1)
+        val e = topic("e", hold, 1)
+        val f = topic("f", finished, 1)
+
+        assertEquals(listOf("Analysis", "In Progress", "QA", "Hold"), todayStatuses(order).map { it.name })
+        val groups = todayTopicGroups(listOf(a, b, c, d, e, f), order)
+
+        // QA has no Topic, so it has no group. Planned and Done never show.
+        assertEquals(listOf("Analysis", "In Progress", "Hold"), groups.map { it.status.name })
+        assertEquals(listOf("c", "b"), groups[0].topics.map { it.id.value })
+        assertEquals(listOf("a"), groups[1].topics.map { it.id.value })
+        assertEquals(listOf("e"), groups[2].topics.map { it.id.value })
+        // Moving Hold to the top in Settings moves its group first.
+        val moved = listOf(hold, todo, analysis, inProgress, qa)
+        assertEquals(listOf("Hold", "Analysis", "In Progress"), todayTopicGroups(listOf(a, b, c, e), moved).map { it.status.name })
+    }
+
+    @Test
+    fun todayHasNoGroupsWithoutActiveOrPausedTopics() {
+        assertTrue(todayTopicGroups(listOf(topic("a", planned), topic("b", done)), statuses).isEmpty())
+        assertTrue(todayTopicGroups(emptyList(), statuses).isEmpty())
+        // A Topic whose status is gone counts under the first status, Planned here, so Today leaves it out.
+        val orphan = Topic(TopicId("t1"), "Orphan", TopicColor.Sky, StatusId("s-gone"))
+        assertTrue(todayTopicGroups(listOf(orphan), statuses).isEmpty())
+        assertEquals(listOf("t1"), todayTopicGroups(listOf(orphan), listOf(paused, done)).single().topics.map { it.id.value })
+    }
+
+    @Test
     fun aNewTopicStartsAsPlannedWithTheNextColor() {
         val created = newTopic(TopicId("t-new"), "  Card limits  ", statuses, topicCount = 7)!!
         assertEquals("Card limits", created.name)

@@ -97,6 +97,8 @@ Two more groups follow Earlier planned (D53):
 
 Every group opens and closes from its heading. Upcoming and No date start closed, and each device remembers the choice.
 
+Below the Tasks, Today shows the Topics whose status is in the Active or Paused category, grouped by status in Settings order (D59). Planned and Done Topics are not shown. A List / Board switch picks the layout; List is the default.
+
 A Task added from Today without a Topic is planned for today and also waits in Inbox until it is filed (D38).
 
 ## Inbox

@@ -164,3 +164,23 @@ img.ProseMirror-separator {
    form. A state that needs the person (locked, damaged) uses the paused color (adr/ADR-016-encrypted-connection-sync.md). */
 .conn__st.is-warn { color: var(--warning); }
 .cform__intro { margin: -6px 0 12px; max-width: 62ch; }
+
+/* Owner change #1: Today's Active Topics grouped by status, either as a list (the Topics list rows under a heading per
+   status) or as a small board (a lane per Active status holding the v3 Today cards). */
+.atopics__head > .seg { margin-left: auto; }
+/* The status heading reads like Today's other group headings: the swatch keeps the category, the name the heading font. */
+.tgroup--status .tgroup__head .st { font-size: inherit; font-weight: inherit; color: var(--text); gap: 10px; }
+/* position: relative keeps the hidden status labels inside the scroll box, as on the Topics board. */
+.aboard {
+  position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(248px, 1fr); gap: 16px;
+  align-items: start; overflow-x: auto; padding: 2px 2px 12px; scroll-snap-type: x proximity;
+}
+.alane { min-height: 0; max-width: none; }
+/* A wide lane (two statuses on a wide screen) holds its cards side by side instead of one tall stack. */
+.alane .lane__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); }
+.alane .acard { padding: 14px; gap: 10px; background: var(--bg-raised); }
+.alane .lane__empty { padding: 14px 8px; }
+@media (max-width: 759px) {
+  .aboard { grid-auto-flow: row; grid-auto-columns: auto; overflow: visible; padding: 0; }
+  .alane.is-empty { display: none; }
+}

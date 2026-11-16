@@ -72,6 +72,29 @@ fun topicsInOrder(
     )
 }
 
+/** The Topics that show under one status. */
+data class TopicGroup(
+    val status: TopicStatus,
+    val topics: List<Topic>,
+)
+
+/** The statuses Today groups its Topics by (owner change #1): those in the Active or Paused category, in workspace order. */
+fun todayStatuses(statuses: List<TopicStatus>): List<TopicStatus> =
+    statuses.filter { it.category == StatusCategory.Active || it.category == StatusCategory.Paused }
+
+/**
+ * Today's Topics, grouped by status (owner change #1): one group per status in [todayStatuses], in workspace order,
+ * oldest Topic first inside a group. A status that no Topic uses has no group. A Topic whose status is gone counts
+ * under the first status, as everywhere else ([statusOf]).
+ */
+fun todayTopicGroups(
+    topics: List<Topic>,
+    statuses: List<TopicStatus>,
+): List<TopicGroup> {
+    val byStatus = topicsInOrder(topics, statuses).groupBy { statusOf(it, statuses).id }
+    return todayStatuses(statuses).mapNotNull { status -> byStatus[status.id]?.let { TopicGroup(status, it) } }
+}
+
 /** How many Topics use [status]. */
 fun useCount(
     status: StatusId,
