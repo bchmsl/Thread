@@ -24,6 +24,7 @@ Phase 4 review (2026-11-13, owner away): checked for consistency with the other 
 | Build id | First 16 hex digits of SHA-256 over every shell file's path and bytes. The same output gives the same id; any change gives a new id. |
 | Registration | Production build only (`process.env.NODE_ENV`), only where the browser has service workers. The development server has no worker, so development is never served stale files. |
 | Cache | One cache per build, `thread-shell-<buildId>`, filled on install with `cache: 'reload'` so the HTTP cache cannot mix in an older file. Cache first. Older `thread-shell-` caches are deleted on activate. |
+| App icons (D58) | `favicon.svg`, `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `manifest.webmanifest` and `icons/*.png` are processed resources, so they are shell files: cached on install and part of the build id. No build step change. |
 | Requests handled | Same-origin `GET` only. A navigation gets `index.html` (routes live in the hash). A listed shell file comes from the cache. Everything else, including Firebase, Jira and GitHub, goes straight to the network and is never cached by the worker. |
 
 **Update flow.** A page never mixes two builds:
