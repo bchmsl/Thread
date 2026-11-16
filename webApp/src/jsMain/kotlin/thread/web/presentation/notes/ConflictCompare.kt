@@ -33,6 +33,7 @@ import thread.domain.note.RichTextDocument
 import thread.domain.note.RichTextInline
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalIdScope
 
 /**
  * The v3 "Choose which version to keep" view (notes page, D41). The version not kept goes to Trash; Keep both makes
@@ -45,6 +46,7 @@ internal fun ConflictCompare(
     onBack: () -> Unit,
     onKeep: (ConflictChoice) -> Unit,
 ) {
+    val ids = LocalIdScope.current
     Div({ classes("cmp-wrap") }) {
         Button({
             classes("back")
@@ -57,7 +59,7 @@ internal fun ConflictCompare(
         Div({ classes("cmp-intro") }) {
             H2({
                 classes("h2")
-                id("cmp-h")
+                id("${ids}cmp-h")
                 tabIndex(-1)
             }) { Text("Choose which version to keep") }
             P({ classes("muted", "cmp-intro__text") }) {

@@ -31,7 +31,9 @@ import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
+import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.KeyboardEvent
 import thread.domain.account.AccountId
 import thread.domain.note.NoteFilter
 import thread.domain.note.NoteId
@@ -54,6 +56,8 @@ import thread.web.presentation.ToastState
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.agoText
+import thread.web.presentation.isEditKey
+import thread.web.presentation.isTextEntry
 import thread.web.presentation.itemCard
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.TopicHex
@@ -106,6 +110,13 @@ internal fun NotesScreen(
     // What the open Note shows before its listing catches up: the title as typed, and its save state.
     var openTitle by remember { mutableStateOf<Pair<String, String>?>(null) }
     var openState by remember { mutableStateOf<Pair<String, NoteSaveState>?>(null) }
+    // The open Note's mode (D70, owner answer Q3): viewing, unless it is a new Note.
+    var editing by remember(openId) {
+        mutableStateOf(
+            openId != null && opensForWriting(workspace, NoteId(openId), workspace.storedNotes.firstOrNull { it.id.value == openId }),
+        )
+    }
+    var canEdit by remember(openId) { mutableStateOf(true) }
     var previousOpen by remember { mutableStateOf(openId) }
     LaunchedEffect(openId) {
         val was = previousOpen
@@ -182,6 +193,25 @@ internal fun NotesScreen(
             id("npane")
             tabIndex(-1)
             attr("aria-label", "Note editor")
+            // E edits the open Note and Esc is Done, as in a card.
+            onKeyDown { event ->
+                val key = event.nativeEvent as? KeyboardEvent ?: return@onKeyDown
+                val target = key.target as? Element
+                if (openId == null || !canEdit || key.isComposing || target == null || target.closest("dialog") != null) return@onKeyDown
+                // ProseMirror marks every Escape in the note text as handled, though it does nothing with it.
+                val handled = key.defaultPrevented && !(key.key == "Escape" && (target as? HTMLElement)?.isContentEditable == true)
+                if (handled) return@onKeyDown
+                when {
+                    editing && key.key == "Escape" -> {
+                        key.preventDefault()
+                        editing = false
+                    }
+                    !editing && isEditKey(key) && !isTextEntry(target) -> {
+                        key.preventDefault()
+                        editing = true
+                    }
+                }
+            }
         }) {
             val noteId = openId?.let(::NoteId)
             val listing = noteId?.let { id -> workspace.storedNotes.firstOrNull { it.id == id } }?.takeUnless { it.discarded }
@@ -212,6 +242,9 @@ internal fun NotesScreen(
                             syncCenter = syncCenter,
                             onTitle = { openTitle = noteId.value to it },
                             onState = { state -> openState = state?.let { noteId.value to it } },
+                            editing = editing && canEdit,
+                            onEditing = { editing = it },
+                            onCanEdit = { canEdit = it },
                         )
                     }
             }
@@ -342,6 +375,9 @@ private fun rowId(noteId: String): String = "nrow-$noteId"
 
 /** The SyncCenter key of the open Note. */
 internal const val NOTE_SYNC_SOURCE = "note"
+
+/** The SyncCenter key of a Note open as a card (D70), apart from the Notes tab's. */
+internal const val NOTE_CARD_SYNC_SOURCE = "note-card"
 
 /** Below this width the index and the page do not fit side by side (v3 app.css). */
 private const val NARROW_WIDTH = 1000

@@ -135,7 +135,7 @@ An item is dismissed in a Topic only when `dismissed == true && !linked`. **Link
 - The `family:` and `mentions:` entries of a deleted Topic stay on the device until Jira or GitHub is disconnected, like the lists.
 - S5 searches only the Topic's linked repositories (or the known ones): a PR in another repository is not found.
 - A written PR that GitHub answers with 404 is asked again on each open (at most 5 per open). There is no "not a PR" memory.
-- Suggestions do not show while a ticket or PR is open in the side panel, because the panel replaces the sections.
+- Since D70 a ticket or PR opens as a card on top of the Topic, so the sections and their suggestions stay under it. (Before, the side panel replaced the sections and hid them.)
 
 ## Evidence
 

@@ -35,7 +35,6 @@ import org.w3c.dom.HTMLElement
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.ExternalView
-import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraList
@@ -57,7 +56,6 @@ import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.itemCard
 import thread.web.presentation.topics.PlainTopicTag
-import thread.web.presentation.topics.topicPlace
 import kotlin.math.ceil
 
 internal const val JIRA_TAB_PARAM = "tab"
@@ -74,12 +72,6 @@ internal fun jiraSearchPlace(query: String): Place =
     View.Jira.place
         .with(JIRA_TAB_PARAM, SEARCH_TAB)
         .with(JIRA_QUERY_PARAM, query)
-
-/** `#/item/jira/KEY`, the ticket as its own page; [fromTopic] makes its back link return to that Topic. */
-internal fun jiraItemPlace(
-    key: JiraIssueKey,
-    fromTopic: String?,
-): Place = Place.of("item", "jira", key.value).let { if (fromTopic != null) it.with("from", "topic:$fromTopic") else it }
 
 /** Whether the window is at least 1000px wide, where lists and details sit side by side (v3). */
 @Composable
@@ -546,55 +538,3 @@ private fun searchProblemText(problem: ExternalProblem): String =
         ExternalProblem.NotFound -> "No tickets match."
         is ExternalProblem.Failed -> "The search failed. Jira answered with an error (${problem.code})."
     }
-
-/**
- * One Jira ticket as its own page (v3 item.html?kind=jira): from a Topic on narrow screens, "Open as page", or a
- * related ticket there. The back link returns to the Topic it came from, else to Jira.
- */
-@Composable
-internal fun JiraItemScreen(
-    jira: JiraModel,
-    workspace: WorkspaceModel,
-    router: Router,
-    place: Place,
-) {
-    val key = place.segment(2)?.let(JiraIssueKey::parse)
-    val fromTopicId = place.param("from")?.takeIf { it.startsWith("topic:") }?.removePrefix("topic:")
-    val fromTopic = fromTopicId?.let(workspace::topic)
-    if (fromTopic != null) {
-        A(topicPlace(fromTopic).hash, { classes("back") }) {
-            IconView(Icon.ChevLeft, 16)
-            Text(" ${fromTopic.name}")
-        }
-    } else {
-        A(View.Jira.place.hash, { classes("back") }) {
-            IconView(Icon.ChevLeft, 16)
-            Text(" Jira")
-        }
-    }
-    if (!jira.checked) return
-    if (key == null) {
-        EmptyState(Icon.Jira, "Ticket not found", "It may not be shared with you.")
-        return
-    }
-    var refresh by remember { mutableStateOf(0) }
-    val view: ExternalView<JiraIssue>? = rememberJiraTicket(jira, if (jira.connected) key else null, refresh)
-    val titleShown = view?.savedOrNull != null
-    LaunchedEffect(key, titleShown) {
-        if (titleShown) {
-            delay(16)
-            (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
-        }
-    }
-    if (view?.savedOrNull != null) ViewBanner(view, jira.name, "tickets") { router.go(CONNECTIONS_PLACE) }
-    JiraTicket(
-        jira = jira,
-        workspace = workspace,
-        view = view,
-        heading1 = true,
-        relatedHref = { jiraItemPlace(it, fromTopic?.id?.value).hash },
-        onOpenRelated = { false },
-        onRefresh = { refresh++ },
-        onGo = router::go,
-    )
-}

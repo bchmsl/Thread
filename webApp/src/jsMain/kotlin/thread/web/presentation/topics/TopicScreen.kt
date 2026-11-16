@@ -13,6 +13,7 @@ import kotlinx.browser.document
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.web.attributes.AttrsScope
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.attributes.maxLength
@@ -41,12 +42,9 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextArea
 import org.jetbrains.compose.web.dom.TextInput
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLHeadingElement
 import org.w3c.dom.HTMLTextAreaElement
-import thread.domain.external.JiraIssueKey
-import thread.domain.external.PullRequestRef
-import thread.domain.note.NoteId
-import thread.domain.reminder.ReminderTarget
-import thread.domain.task.Task
+import org.w3c.dom.events.KeyboardEvent
 import thread.domain.topic.StatusId
 import thread.domain.topic.TOPIC_INFO_MAX_LENGTH
 import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
@@ -62,26 +60,27 @@ import thread.domain.workspace.editInfo
 import thread.domain.workspace.editTopic
 import thread.domain.workspace.moveTopic
 import thread.web.presentation.CardKind
+import thread.web.presentation.CardOpener
+import thread.web.presentation.CardType
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalIdScope
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
-import thread.web.presentation.Place
 import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
-import thread.web.presentation.external.rememberWide
+import thread.web.presentation.scopedId
 import thread.web.presentation.tasks.focusById
 import thread.web.presentation.trash.trashPlace
 
 /**
- * Topic details (v3 topic.html): identity and status on top, "Additional information" (D52), then Tasks and Notes,
- * with Jira, pull requests and Reminders beside them. A linked ticket or pull request opens in a side panel at 1000px and wider.
- * A Topic in Trash keeps its page: it says what went with it and offers Restore.
+ * A Topic's page in the Topics tab (v3 topic.html): [TopicDetails] under a link back to Topics. A Topic in Trash keeps
+ * its page: it says what went with it and offers Restore.
  */
 @Composable
 internal fun TopicScreen(
@@ -89,10 +88,7 @@ internal fun TopicScreen(
     jira: JiraModel,
     gitHub: GitHubModel,
     topicId: String?,
-    onOpenTask: (Task) -> Unit,
-    onOpenTarget: (ReminderTarget) -> Unit,
-    onOpenNote: (NoteId) -> Unit,
-    onGo: (Place) -> Unit,
+    cards: CardOpener,
 ) {
     if (!workspace.loaded) {
         if (workspace.readFailed) EmptyState(Icon.Alert, "Topics could not load", "Reload the page to try again.")
@@ -119,6 +115,40 @@ internal fun TopicScreen(
         return
     }
     FocusAfterSwitch(focusAfterSwitch, TOPIC_NAME_ID) { focusAfterSwitch = null }
+    A(View.Topics.place.hash, { classes("back") }) {
+        IconView(Icon.ChevLeft, 16)
+        Text(" Topics")
+    }
+    TopicDetails(workspace, jira, gitHub, topic, cards, inCard = false) {
+        // Move to Trash is instant with Undo (v3, owner decision 2026-11-13). The page then shows what went with it.
+        val edit = workspace.trashTopic(topic) ?: return@TopicDetails
+        focusAfterSwitch = GONE_HEADING_ID
+        toasts.show("Moved to Trash: ${topic.name}", undo = {
+            focusAfterSwitch = TOPIC_NAME_ID
+            workspace.undo(edit)
+        })
+    }
+}
+
+/**
+ * Topic Details (v3 topic.html): identity and status on top, "Additional information" (D52), then Tasks and Notes,
+ * with Jira, pull requests and Reminders beside them. Every linked item opens as a card (D70).
+ *
+ * The Topic's page shows it, and so does the Topic card ([inCard]). In the card the name is the card's heading, and
+ * Move to Trash sits in the card's footer: [onTrash] is null there.
+ */
+@Composable
+internal fun TopicDetails(
+    workspace: WorkspaceModel,
+    jira: JiraModel,
+    gitHub: GitHubModel,
+    topic: Topic,
+    cards: CardOpener,
+    inCard: Boolean,
+    onTrash: (() -> Unit)? = null,
+) {
+    val toasts = LocalToasts.current
+    val ids = LocalIdScope.current
     var editing by remember { mutableStateOf(false) }
     // v3 opens Tasks and Notes and closes Reminders by default; the choice lasts while the page is open.
     var tasksOpen by remember(topic.id) { mutableStateOf(true) }
@@ -126,31 +156,26 @@ internal fun TopicScreen(
     var remindersOpen by remember(topic.id) { mutableStateOf(false) }
     var jiraOpen by remember(topic.id) { mutableStateOf(true) }
     var prsOpen by remember(topic.id) { mutableStateOf(true) }
-    var panel by remember(topic.id) { mutableStateOf<LinkedPanel?>(null) }
-    val wide = rememberWide()
-    val scope = rememberCoroutineScope()
     var focusAddTask by remember { mutableStateOf(0) }
-    LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("td-new-task") }
+    LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("${ids}td-new-task") }
     val statuses = workspace.statuses
     val status = statusOf(topic, statuses)
 
-    A(View.Topics.place.hash, { classes("back") }) {
-        IconView(Icon.ChevLeft, 16)
-        Text(" Topics")
-    }
     Header({
         classes("td-head")
+        if (inCard) classes("dcard__th")
         topicColor(topic.color)
     }) {
-        TopicHex(topic.name, topic.color, HexSize.Lg)
-        H1({
+        TopicHex(topic.name, topic.color, if (inCard) HexSize.Md else HexSize.Lg)
+        val name: AttrsScope<HTMLHeadingElement>.() -> Unit = {
             classes("td-name")
-            id(TOPIC_NAME_ID)
+            id(ids + TOPIC_NAME_ID)
             tabIndex(-1)
-        }) { Text(topic.name) }
+        }
+        if (inCard) H2(name) { Text(topic.name) } else H1(name) { Text(topic.name) }
         Div({ classes("td-meta") }) {
             Span({ classes("st", "st--${status.category.id}") }) { Swatch(status.category) }
-            Label("td-status", { classes("vh") }) { Text("Status") }
+            Label("${ids}td-status", { classes("vh") }) { Text("Status") }
             SelectBox(
                 value = status.id.value,
                 options =
@@ -158,7 +183,7 @@ internal fun TopicScreen(
                         val category = categoryLabel(it.category)
                         it.id.value to if (it.name == category) it.name else "${it.name} ($category)"
                     },
-                id = "td-status",
+                id = "${ids}td-status",
                 classes = listOf("input", "input--sm", "input--auto"),
             ) { picked ->
                 val to = statuses.firstOrNull { it.id == StatusId(picked) }
@@ -191,100 +216,54 @@ internal fun TopicScreen(
                     focusAddTask++
                 }
             }) { Text("Add task") }
-            // Move to Trash is instant with Undo (v3, owner decision 2026-11-13). The page then shows what went with it.
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--text", "btn--danger-text")
-                attr("aria-describedby", "td-trash-hint")
-                onClick {
-                    val edit = workspace.trashTopic(topic) ?: return@onClick
-                    focusAfterSwitch = GONE_HEADING_ID
-                    toasts.show("Moved to Trash: ${topic.name}", undo = {
-                        focusAfterSwitch = TOPIC_NAME_ID
-                        workspace.undo(edit)
-                    })
+            if (onTrash != null) {
+                Button({
+                    type(ButtonType.Button)
+                    classes("btn", "btn--text", "btn--danger-text")
+                    attr("aria-describedby", "${ids}td-trash-hint")
+                    onClick { onTrash() }
+                }) {
+                    IconView(Icon.Trash, 16)
+                    Text(" Move to Trash")
                 }
-            }) {
-                IconView(Icon.Trash, 16)
-                Text(" Move to Trash")
+                TopicTrashHint()
             }
-            Span({
-                classes("vh")
-                id("td-trash-hint")
-            }) { Text("Its tasks and reminders go with it. Notes stay in Notes. You can undo or restore it from Trash.") }
         }
     }
-    SectionCard(
-        kind = CardKind.Info,
-        headingId = "pu-h",
-        bodyId = "pu-b",
-        title = "Additional information",
-        attrs = { topicColor(topic.color) },
-    ) {
-        // D52: one box. A Topic saved before it shows its "Where I left off" and "Next step" text here until edited.
-        InfoField("pu-h", topicInfo(topic), "Context, links, decisions: anything worth keeping with this Topic") { text ->
-            workspace.topic(topic.id.value)?.let { workspace.apply(editInfo(it, text)) }
-        }
-    }
-    // Suggestions are computed here, not in the sections, so the background checks go on while a side panel is open.
+    InfoSection(workspace, topic)
+    // Suggestions are computed once here, for both the Jira and the pull request section.
     val suggestions = rememberTopicSuggestions(workspace, jira, gitHub, topic)
+    // The card on top, if it shows one of this Topic's tickets or pull requests: that one asks for its own update.
+    val shown = cards.shown
     Div({ classes("td-grid") }) {
         Div({ classes("td-main") }) {
-            TopicTasksSection(workspace, topic, tasksOpen, { tasksOpen = !tasksOpen }, onOpenTask)
-            TopicNotesSection(workspace, topic, notesOpen, { notesOpen = !notesOpen }, onOpenNote)
+            TopicTasksSection(workspace, topic, tasksOpen, { tasksOpen = !tasksOpen }) { cards.openTask(it.id) }
+            TopicNotesSection(workspace, topic, notesOpen, { notesOpen = !notesOpen }) { id, edit -> cards.openNote(id, edit) }
         }
         Aside({
             classes("td-side")
             attr("aria-label", "Linked work and reminders")
         }) {
-            val shown = panel
-            // Closing the panel puts focus back on the row it was opened from.
-            val closePanel: (String) -> Unit = { selector ->
-                panel = null
-                scope.launch {
-                    delay(16)
-                    (document.querySelector(selector) as? HTMLElement)?.focus()
-                }
-            }
-            when {
-                shown is LinkedPanel.Ticket && wide ->
-                    TopicSidePanel(
-                        workspace,
-                        jira,
-                        topic,
-                        shown.key,
-                        onOpen = { panel = LinkedPanel.Ticket(it) },
-                        onClose = { closePanel(".icard .xrow__main[data-key=\"${shown.key.value}\"]") },
-                        onGo = onGo,
-                    )
-                shown is LinkedPanel.Pull && wide ->
-                    TopicPrSidePanel(
-                        workspace,
-                        gitHub,
-                        topic,
-                        shown.ref,
-                        onClose = { closePanel(".icard .xrow__main[data-id=\"${shown.ref.id}\"]") },
-                        onGo = onGo,
-                    )
-                else -> {
-                    val openKey = (shown as? LinkedPanel.Ticket)?.key?.value
-                    TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey, suggestions) { key ->
-                        if (wide) panel = LinkedPanel.Ticket(key)
-                        wide
-                    }
-                    val openId = (shown as? LinkedPanel.Pull)?.ref?.id
-                    TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId, suggestions) { ref ->
-                        if (wide) panel = LinkedPanel.Pull(ref)
-                        wide
-                    }
-                    TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, onOpenTarget)
-                }
-            }
+            val openKey = shown?.takeIf { it.type == CardType.Jira }?.id
+            TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey, suggestions, cards::openJira)
+            val openId = shown?.takeIf { it.type == CardType.Pr }?.id
+            TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId, suggestions, cards::openPr)
+            TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, cards::openTarget)
         }
     }
     if (editing) {
         EditTopicDialog(topic, workspace) { editing = false }
     }
+}
+
+/** What Move to Trash takes with it, for screen readers: the button's description. */
+@Composable
+internal fun TopicTrashHint() {
+    val hintId = scopedId("td-trash-hint")
+    Span({
+        classes("vh")
+        id(hintId)
+    }) { Text("Its tasks and reminders go with it. Notes stay in Notes. You can undo or restore it from Trash.") }
 }
 
 /** Moves focus to [target] once the element with that id is on the page, then calls [onDone]. */
@@ -361,16 +340,73 @@ private const val TOPIC_NAME_ID = "td-name"
 private const val GONE_HEADING_ID = "gone-h"
 
 /**
- * The "Additional information" text box (D52), labelled by the section heading [labelledBy]. It saves when it loses
- * focus (v3), and also a second after typing stops and when the page leaves it, so a reload or a closed tab never loses
- * what was typed. Text equal to [value] is not saved, so a blur without typing writes nothing. While it has focus, a
- * change from another device does not replace the text being typed.
+ * "Additional information" (D52). It shows as text, with a small Edit in its header that turns it into the text box
+ * (D70, owner request #3); Done or Esc turns it back. The text saves as it is typed, so there is no Cancel.
+ */
+@Composable
+private fun InfoSection(
+    workspace: WorkspaceModel,
+    topic: Topic,
+) {
+    val ids = LocalIdScope.current
+    var editing by remember(topic.id) { mutableStateOf(false) }
+    var toggle by remember { mutableStateOf<HTMLElement?>(null) }
+    var wasEditing by remember { mutableStateOf(false) }
+    // Back to the text: focus returns to the Edit button, where Done was.
+    LaunchedEffect(editing) {
+        if (wasEditing && !editing) toggle?.focus()
+        wasEditing = editing
+    }
+    val text = topicInfo(topic)
+    SectionCard(
+        kind = CardKind.Info,
+        headingId = "pu-h",
+        bodyId = "pu-b",
+        title = "Additional information",
+        attrs = { topicColor(topic.color) },
+        actions = {
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm")
+                attr("aria-label", if (editing) "Done editing additional information" else "Edit additional information")
+                ref {
+                    toggle = it
+                    onDispose { toggle = null }
+                }
+                onClick { editing = !editing }
+            }) {
+                IconView(if (editing) Icon.Check else Icon.Edit, 15)
+                Text(if (editing) " Done" else " Edit")
+            }
+        },
+    ) {
+        when {
+            editing ->
+                InfoField(
+                    labelledBy = "${ids}pu-h",
+                    value = text,
+                    placeholder = "Context, links, decisions: anything worth keeping with this Topic",
+                    onDone = { editing = false },
+                ) { typed -> workspace.topic(topic.id.value)?.let { workspace.apply(editInfo(it, typed)) } }
+            text.isNotEmpty() -> P({ classes("info-text") }) { Text(text) }
+            else -> P({ classes("sect__empty") }) { Text("Nothing here yet. Use Edit to add context, links and decisions.") }
+        }
+    }
+}
+
+/**
+ * The "Additional information" text box (D52), labelled by the section heading [labelledBy]. It takes focus when it
+ * opens. It saves when it loses focus (v3), a second after typing stops, and when it closes or the page leaves it, so
+ * a reload or a closed tab never loses what was typed. Text equal to [value] is not saved, so a blur without typing
+ * writes nothing. While it has focus, a change from another device does not replace the text being typed. Esc calls
+ * [onDone].
  */
 @Composable
 private fun InfoField(
     labelledBy: String,
     value: String,
     placeholder: String,
+    onDone: () -> Unit,
     onSave: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -383,10 +419,17 @@ private fun InfoField(
         pending = null
         if (text.trim() != latestValue) latestSave(text)
     }
+    LaunchedEffect(Unit) {
+        element?.let {
+            it.focus()
+            it.setSelectionRange(it.value.length, it.value.length)
+        }
+    }
     Div({ classes("field") }) {
         TextArea(attrs = {
             classes("input")
             attr("aria-labelledby", labelledBy)
+            attr("aria-keyshortcuts", "Escape")
             rows(4)
             placeholder(placeholder)
             maxLength(TOPIC_INFO_MAX_LENGTH)
@@ -408,6 +451,14 @@ private fun InfoField(
                     }
             }
             onChange { event -> saveNow(event.value) }
+            onKeyDown { event ->
+                val key = event.nativeEvent as? KeyboardEvent ?: return@onKeyDown
+                // Preventing it also keeps a Topic card open: the next Esc closes the card.
+                if (key.key == "Escape" && !key.isComposing) {
+                    key.preventDefault()
+                    onDone()
+                }
+            }
         })
     }
     SideEffect {
@@ -508,14 +559,3 @@ internal fun topicProblemText(problem: EditProblem): String =
         EditProblem.NotReady -> "Topics are still loading. Try again in a moment."
         else -> "That change could not be made"
     }
-
-/** What the Topic's side panel shows: a linked Jira ticket or a linked pull request. */
-private sealed interface LinkedPanel {
-    data class Ticket(
-        val key: JiraIssueKey,
-    ) : LinkedPanel
-
-    data class Pull(
-        val ref: PullRequestRef,
-    ) : LinkedPanel
-}

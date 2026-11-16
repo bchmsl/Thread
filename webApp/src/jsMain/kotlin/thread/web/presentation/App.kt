@@ -33,7 +33,6 @@ import thread.domain.note.NoteId
 import thread.domain.note.RichTextDocument
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
-import thread.domain.reminder.TargetKind
 import thread.domain.search.searchJiraCopies
 import thread.domain.search.searchPullRequestCopies
 import thread.domain.search.searchWorkspace
@@ -52,18 +51,14 @@ import thread.web.presentation.external.BackgroundRefresher
 import thread.web.presentation.external.ConnectionSyncModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.GitHubServices
-import thread.web.presentation.external.JiraItemScreen
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraScreen
 import thread.web.presentation.external.JiraServices
 import thread.web.presentation.external.JiraTypeIcon
-import thread.web.presentation.external.PrItemScreen
 import thread.web.presentation.external.PrScreen
 import thread.web.presentation.external.ShowRefreshProbe
-import thread.web.presentation.external.jiraPlace
 import thread.web.presentation.external.jiraSearchPlace
 import thread.web.presentation.external.jiraStatusClasses
-import thread.web.presentation.external.prPlace
 import thread.web.presentation.focus.FOCUS_PARAM
 import thread.web.presentation.focus.FocusClock
 import thread.web.presentation.focus.FocusModel
@@ -73,7 +68,6 @@ import thread.web.presentation.notes.NOTE_PARAM
 import thread.web.presentation.notes.NoteServices
 import thread.web.presentation.notes.NotesScreen
 import thread.web.presentation.notes.launchNoteWrite
-import thread.web.presentation.notes.notePlace
 import thread.web.presentation.settings.ConnectionsBlock
 import thread.web.presentation.settings.PreferencesBlock
 import thread.web.presentation.settings.SettingsScreen
@@ -90,13 +84,11 @@ import thread.web.presentation.shell.ViewsSheet
 import thread.web.presentation.shell.focusStatusLine
 import thread.web.presentation.tasks.InboxScreen
 import thread.web.presentation.tasks.ReminderBanners
-import thread.web.presentation.tasks.TaskSheet
 import thread.web.presentation.tasks.TodayScreen
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.TopicHex
 import thread.web.presentation.topics.TopicScreen
 import thread.web.presentation.topics.TopicsScreen
-import thread.web.presentation.topics.topicPlace
 import thread.web.presentation.topics.topicProblemText
 import thread.web.presentation.trash.TRASH_PARAM
 import thread.web.presentation.trash.TrashScreen
@@ -209,17 +201,19 @@ private fun Workspace(
     if (place.path.isEmpty()) {
         SideEffect { router.replace(View.Today.place) }
     }
+    // An item page link from before D70 opens the item in its own tab.
+    val legacy = legacyItemPlace(place) { it in gitHub.reviewRequested }
+    if (legacy != null) {
+        SideEffect { router.replace(legacy) }
+    }
     val view = View.of(place)
-    // The Task sheet and the Focus panel ride on any page as `?task=` and `?focus=`, so the page under them is the place
-    // without those parameters.
-    val page = place.with(TASK_PARAM, null).with(FOCUS_PARAM, null)
+    // Item cards and the Focus panel ride on any page as `?task=`, `?note=`, `?jira=`, `?pr=`, `?topic=` and `?focus=`,
+    // so the page under them is the place without those parameters.
+    val page = place.withoutCards().with(FOCUS_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
-    val jiraItem = place.head == "item" && place.segment(1) == "jira"
-    val prItem = place.head == "item" && place.segment(1) == "pr"
     // Opening another Note, Trash entry, Jira ticket or pull request keeps the view; those screens move focus themselves.
     val focusPlace =
         when {
-            jiraItem || prItem -> page
             view == View.Notes -> page.with(NOTE_PARAM, null)
             view == View.Trash -> page.with(TRASH_PARAM, null)
             view == View.Jira -> View.Jira.place
@@ -229,8 +223,6 @@ private fun Workspace(
     val title =
         when {
             place.head == "topic" -> placeTopicId?.let(workspace::topic)?.name ?: "Topic"
-            jiraItem -> place.segment(2) ?: view.label
-            prItem -> place.segment(4)?.let { "#$it" } ?: view.label
             else -> view.label
         }
     LaunchedEffect(title) { document.title = "$title | Thread" }
@@ -276,17 +268,13 @@ private fun Workspace(
         if (captureTypeReady) workspace.setPrefs(workspace.prefs.copy(captureType = capture.type.kind))
     }
     val syncState = syncCenter.overall(online)
-    val openTask: (Task) -> Unit = { task -> router.replace(taskPlace(router.place, task.id)) }
-    val openNote: (NoteId) -> Unit = { id -> router.go(notePlace(id)) }
-    val openTarget: (ReminderTarget) -> Unit = { target ->
-        when (target.kind) {
-            TargetKind.Task -> workspace.task(target.id)?.let(openTask)
-            TargetKind.Topic -> workspace.topic(target.id)?.let { router.go(topicPlace(it)) }
-            TargetKind.Note -> router.go(notePlace(NoteId(target.id)))
-        }
-    }
+    // Items open as cards on top of the page (D70).
+    val cards = remember(router) { CardOpener(router) }
+    val openTask: (Task) -> Unit = { task -> cards.openTask(task.id) }
+    val openNote: (NoteId) -> Unit = { id -> cards.openNote(id) }
+    val openTarget: (ReminderTarget) -> Unit = cards::openTarget
 
-    CompositionLocalProvider(LocalNow provides now) {
+    CompositionLocalProvider(LocalNow provides now, LocalCards provides cards) {
         A("#line", {
             classes("skip")
             onClick { event ->
@@ -301,10 +289,8 @@ private fun Workspace(
                 tabIndex(-1)
             }) {
                 when {
-                    place.head == "topic" ->
-                        TopicScreen(workspace, jira, gitHub, placeTopicId, openTask, openTarget, openNote, router::go)
-                    jiraItem -> JiraItemScreen(jira, workspace, router, place)
-                    prItem -> PrItemScreen(gitHub, workspace, router, place)
+                    legacy != null -> Unit
+                    place.head == "topic" -> TopicScreen(workspace, jira, gitHub, placeTopicId, cards)
                     view == View.Jira -> JiraScreen(jira, workspace, router, place)
                     view == View.Prs -> PrScreen(gitHub, workspace, router, place)
                     view == View.Today -> TodayScreen(workspace, gitHub, place.param("add") == "1", openTask, openTarget)
@@ -352,7 +338,7 @@ private fun Workspace(
                             is TopicCreation.Created -> {
                                 capture.title = ""
                                 capture.requestFocus(flash = false)
-                                toasts.show("Topic added to Topics", open = { router.go(topicPlace(created.topic)) })
+                                toasts.show("Topic added to Topics", open = { cards.openTopicCard(created.topic.id) })
                             }
                         }
                     type == CaptureType.Task ->
@@ -364,7 +350,7 @@ private fun Workspace(
                                 val topic = created.task.topicId?.let { workspace.topic(it.value) }
                                 toasts.show(
                                     if (topic != null) "Task added to ${topic.name}" else "Task added to Inbox",
-                                    open = { openTask(created.task) },
+                                    open = { cards.openTask(created.task.id, edit = true) },
                                 )
                             }
                         }
@@ -385,7 +371,7 @@ private fun Workspace(
                             val topic = topicId?.let { workspace.topic(it.value) }
                             toasts.show(
                                 if (topic != null) "Note added to ${topic.name}" else "Note added to Inbox",
-                                open = { openNote(note.id) },
+                                open = { cards.openNote(note.id, edit = true) },
                             )
                         }
                     }
@@ -398,20 +384,9 @@ private fun Workspace(
         )
         if (dialogs.isEmpty) ToastHost(toasts)
 
-        val sheetTaskId = place.param(TASK_PARAM)
-        if (sheetTaskId != null && workspace.loaded) {
-            val sheetTask = workspace.task(sheetTaskId)
-            if (sheetTask == null) {
-                // A link to a Task that was trashed, discarded or never synced here.
-                LaunchedEffect(sheetTaskId) {
-                    toasts.show("That task is not here any more. It may be in Trash.")
-                    router.replace(router.place.with(TASK_PARAM, null))
-                }
-            } else {
-                key(sheetTask.id.value) {
-                    TaskSheet(workspace, sheetTask, placeTopicId) { router.replace(router.place.with(TASK_PARAM, null)) }
-                }
-            }
+        val card = place.card
+        if (card != null && legacy == null && workspace.loaded) {
+            CardHost(card, workspace, jira, gitHub, router, cards, services.notes, signedIn.accountId, syncCenter)
         }
         if (place.param(FOCUS_PARAM) != null && workspace.loaded && focus.loaded) {
             FocusPanel(focus, workspace) { router.replace(router.place.with(FOCUS_PARAM, null)) }
@@ -463,13 +438,7 @@ private fun Workspace(
                     },
                 search = { query ->
                     val q = query.trim().lowercase()
-                    searchGroups(query, workspace, jira, gitHub, openTask = { task ->
-                        searchOpen = false
-                        openTask(task)
-                    }) { to ->
-                        searchOpen = false
-                        router.go(to)
-                    } +
+                    searchGroups(query, workspace, jira, gitHub, cards) { searchOpen = false } +
                         SearchGroup(
                             "Go to",
                             View.entries.filter { it.label.lowercase().contains(q) }.map { target ->
@@ -490,15 +459,16 @@ private fun Workspace(
 
 /**
  * The search groups of v3 openSearch for what is on this device: Topics, Tasks, Notes and the Jira tickets and pull
- * requests saved here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013, ADR-014).
+ * requests saved here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013, ADR-014). A pick closes search
+ * ([onPicked]) and opens the item as a card, a Topic too (D70).
  */
 private fun searchGroups(
     query: String,
     workspace: WorkspaceModel,
     jira: JiraModel,
     gitHub: GitHubModel,
-    openTask: (Task) -> Unit,
-    go: (Place) -> Unit,
+    cards: CardOpener,
+    onPicked: () -> Unit,
 ): List<SearchGroup> {
     val found = searchWorkspace(query, workspace.topics, workspace.tasks, workspace.notes) ?: return emptyList()
     val statuses = workspace.statuses
@@ -511,14 +481,20 @@ private fun searchGroups(
                     statusOf(topic, statuses).name,
                     { TopicHex(topic.name, topic.color, HexSize.Sm) },
                     kind = CardKind.Topic,
-                ) { go(topicPlace(topic)) }
+                ) {
+                    onPicked()
+                    cards.openTopicCard(topic.id)
+                }
             },
         ),
         SearchGroup(
             "Tasks",
             found.tasks.map { task ->
                 val sub = if (task.done) "Completed" else task.topicId?.let { workspace.topic(it.value)?.name } ?: "Standalone"
-                SearchOption(task.title, sub, { IconView(Icon.Task, 18) }, kind = CardKind.Task) { openTask(task) }
+                SearchOption(task.title, sub, { IconView(Icon.Task, 18) }, kind = CardKind.Task) {
+                    onPicked()
+                    cards.openTask(task.id)
+                }
             },
         ),
         SearchGroup(
@@ -526,7 +502,8 @@ private fun searchGroups(
             found.notes.map { note ->
                 val sub = workspace.topicsOf(note.id).joinToString(", ") { it.name }.ifEmpty { "Standalone" }
                 SearchOption(note.title.ifBlank { UNTITLED_NOTE }, sub, { IconView(Icon.Notes, 18) }, kind = CardKind.Note) {
-                    go(notePlace(note.id))
+                    onPicked()
+                    cards.openNote(note.id)
                 }
             },
         ),
@@ -543,7 +520,8 @@ private fun searchGroups(
                         issue.status?.let { jiraStatusClasses(it.category) }.orEmpty(),
                         kind = CardKind.Jira,
                     ) {
-                        go(jiraPlace(issue.key))
+                        onPicked()
+                        cards.openJira(issue.key)
                     }
                 }
             },
@@ -556,7 +534,8 @@ private fun searchGroups(
                 searchPullRequestCopies(query, gitHub.saved.values.map { it.value.summary() }).orEmpty().map { pull ->
                     val repository = "${pull.ref.owner}/${pull.ref.repo}"
                     SearchOption("${pull.title} #${pull.ref.number}", repository, { IconView(Icon.Pr, 18) }, kind = CardKind.PullRequest) {
-                        go(prPlace(pull.ref, review = pull.ref in gitHub.reviewRequested))
+                        onPicked()
+                        cards.openPr(pull.ref)
                     }
                 }
             },

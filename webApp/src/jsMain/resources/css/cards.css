@@ -14,7 +14,7 @@
   --k-time: #ced5e6;   /* Reminders. */
   --under: var(--bg-app); /* What a card sits on: notches and folded corners are cut in this color. */
 }
-.scard, .icard, .dcard, .dcard--panel { --k: var(--fog-500); }
+.scard, .icard, .dcard { --k: var(--fog-500); }
 [data-k="task"] { --k: var(--k-task); }
 [data-k="note"] { --k: var(--k-note); }
 [data-k="jira"] { --k: var(--k-jira); }
@@ -350,28 +350,27 @@ main:has(.md--wide) { max-width: 1520px; }
 .scard__body .av { box-shadow: 0 0 0 2px var(--bg-surface); }
 .scard__body .av--me { box-shadow: 0 0 0 1.5px var(--bg-surface), 0 0 0 3px var(--action); }
 
-/* ---------- The Topic side panel: the linked item's kind band, then the item ---------- */
-.side-panel.dcard--panel { padding: 0; }
-.dcard--panel > .dcard__head { position: sticky; top: 0; z-index: 2; gap: 8px; padding: 6px 8px; border-radius: 13px 13px 0 0; }
-/* The panel is 380px wide: there the mark names the kind, and the kind's name stays for screen readers. */
-.dcard--panel .dcard__kind > span:not(.kmark) {
-  position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+/* ---------- Item cards (D70, owner requests #2 and #3, lane 3's band) ---------- */
+/* An item opened from another screen shows as a card on top of it (CardHost.kt). The dialog is a clear frame over the
+   window and the card inside it is what shows, so a click on the frame, outside the card, closes it. On wide screens the
+   card hangs from the top, not the middle: it grows downward when Edit opens the fields, and the band stays put. */
+.dlg--card {
+  inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; overflow: hidden;
+  background: transparent; border-radius: 0; box-shadow: none;
 }
-.side-panel__body { --under: var(--bg-app); padding: 14px 14px 18px; background: var(--bg-app); }
-/* The band above already names the kind, so the item's own head card drops its band. */
-:is(.dcard, .dcard--panel) .xd__band { min-height: 0; padding: 12px 16px 0; background: none; border-bottom: 0; }
-:is(.dcard, .dcard--panel) .xd__band::before, :is(.dcard, .dcard--panel) .xd__band::after,
-:is(.dcard, .dcard--panel) .xd__band > .kmark { display: none; }
-
-/* ---------- Dialog card (#2 + #3, lane 1): an item opened large, under its kind's band ---------- */
 /* Put CardBand first inside an element with the `dcard` class and the card's kind (plus `topicColor` for a Topic). */
 .dcard {
   --under: var(--bg-surface);
-  position: relative; width: min(860px, calc(100vw - 32px)); margin: 6vh auto 0; overflow: hidden;
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  width: min(860px, calc(100vw - 32px)); max-height: min(88dvh, 940px); margin: max(24px, 6dvh) auto 0;
   background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow-pop);
 }
 .dcard--task { width: min(560px, calc(100vw - 32px)); }
-.dcard > .dcard__head { flex-wrap: nowrap; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 0; }
+/* A Topic card holds the Topic page; Compare versions shows a Note's two versions side by side. */
+.dcard--topic, .dcard--wide { width: min(1100px, calc(100vw - 32px)); }
+/* A Note keeps its height, so the card does not jump while the Note opens. */
+.dcard--note { height: min(88dvh, 940px); }
+.dcard > .dcard__head { flex: none; flex-wrap: nowrap; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 0; }
 /* The actions sit on the right, so the pattern fades the other way: dense by the mark, clear under the buttons. */
 .dcard__head::before {
   -webkit-mask-image: var(--pat, none), linear-gradient(to right, #000 0%, rgba(0, 0, 0, 0.6) 22%, transparent 55%);
@@ -380,11 +379,65 @@ main:has(.md--wide) { max-width: 1520px; }
 .dcard__head::after { display: none; }
 .dcard__kind { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 44px; font: 600 var(--fs-15)/1.2 var(--font-text); }
 .dcard__kind > span:not(.kmark) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* "Editing" next to the kind while the item is being edited (owner request #3). */
+.dcard__kind > .dcard__mode {
+  flex: none; padding: 2px 8px; border-radius: var(--r-pill); font-size: 12px; font-weight: 650;
+  background: rgba(242, 85, 158, 0.16); color: var(--action-hover);
+}
 .dcard__acts { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .dcard__back { margin-left: -6px; max-width: 40%; color: var(--text-2); }
 .dcard__lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A Topic card holds the Topic page: its sections sit on the page color, as on the page. */
+.dcard__x { width: 40px; padding: 0; justify-content: center; }
+.dcard__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 22px 24px 24px; }
+.dcard__foot { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); }
+.dcard__foot-start { margin-right: auto; }
+/* The band above already names the kind, so the item's own head card drops its band. */
+.dcard .xd__band { min-height: 0; padding: 12px 16px 0; background: none; border-bottom: 0; }
+.dcard .xd__band::before, .dcard .xd__band::after, .dcard .xd__band > .kmark { display: none; }
+
+/* Task card: the title as text and the dates as a short list while viewing, the fields while editing. */
+.dtask-body { display: flex; flex-direction: column; gap: 14px; }
+.dtask { display: flex; gap: 14px; align-items: flex-start; }
+.dtask .check { margin-top: 4px; }
+.dtask__t { flex: 1; min-width: 0; margin: 0; padding: 2px 0; font: 500 22px/1.3 var(--font-display); overflow-wrap: anywhere; }
+.dtask__t.is-done { text-decoration: line-through; color: var(--text-3); }
+/* The title box is as tall as the title it holds (TaskCard.kt fits it). */
+.dtask .ts-title__input { min-height: 0; }
+/* The ring keeps clear of the text, as on a Topic or Note title. */
+.dtask .ts-title__input:focus-visible { outline-offset: 6px; }
+.dtask__done { width: 100%; }
+.facts { display: grid; gap: 2px; margin: 0; padding-top: 8px; border-top: 1px solid var(--border); }
+.fact { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: start; gap: 12px; }
+.fact dt { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--text-3); font-size: var(--fs-14); font-weight: 600; }
+.fact dd { margin: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-height: 40px; font-size: var(--fs-15); }
+.fact dd > .ts-rems { flex-basis: 100%; }
+.facts__none { color: var(--text-3); }
+
+/* Note card: the card body is the page. The status bar sits above it, and the page fills the rest. */
+.dcard__body--page { display: flex; flex-direction: column; padding: 0; }
+.dcard--note .pagebar { flex: none; max-width: none; margin: 0; padding: 8px 16px 8px 24px; border-bottom: 1px solid var(--page-edge); }
+.dcard--note .nbanner { max-width: none; margin: 14px 24px 0; }
+.dcard--note .page { flex: 1 0 auto; max-width: none; margin: 0; padding: 40px 64px 64px; border: 0; border-radius: 0; box-shadow: none; }
+.dcard--note .page__stickers { top: 14px; right: 28px; }
+.dcard--note .cmp-wrap { padding: 16px 24px; }
+/* A Note being viewed, in a card or the Notes tab: the text is not a field, so no caret and no empty writing space. */
+.page__title.is-empty { color: var(--fog-700); }
+.editor[contenteditable="false"] { min-height: 0; caret-color: transparent; }
+.editor[contenteditable="false"] a { cursor: pointer; }
+
+/* Topic card: Topic Details as on the page, on the page color. Its columns follow the card's width, not the window's. */
 .dcard--topic { --under: var(--bg-app); background: var(--bg-app); }
+.dcard--topic > .dcard__foot { background: var(--bg-surface); }
+.dcard__body--topic { container-type: inline-size; padding-bottom: 28px; }
+.dcard__th { margin-bottom: 20px; }
+.dcard__th .td-name { font-size: 30px; }
+.dcard__body--topic .td-grid { grid-template-columns: minmax(0, 1fr); row-gap: 20px; }
+.dcard__body--topic .td-main > .scard:last-child { margin-bottom: 0; }
+@container (min-width: 900px) {
+  .dcard__body--topic .td-grid { grid-template-columns: minmax(0, 1fr) 340px; column-gap: 32px; }
+}
+/* Additional information, while viewing: the text as written, line breaks kept. */
+.info-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---------- Narrow screens ---------- */
 @media (max-width: 1099px) {
@@ -399,7 +452,14 @@ main:has(.md--wide) { max-width: 1520px; }
   .td-main > .scard:last-child { margin-bottom: 0; }
 }
 @media (max-width: 899px) {
-  .dcard, .dcard--task { width: 100%; min-height: 100vh; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+  /* A card is a full-height sheet with the same band. */
+  .dcard, .dcard--task, .dcard--topic, .dcard--wide, .dcard--note {
+    width: 100%; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0; box-shadow: none;
+  }
+  .dcard--note .pagebar { padding: 8px 12px 8px 18px; }
+  .dcard--note .nbanner { margin: 12px 16px 0; }
+  .dcard--note .page { padding: 32px 20px 48px; }
+  .dcard--note .page__stickers { top: 10px; right: 14px; }
 }
 @media (max-width: 759px) {
   .scard__head { flex-wrap: wrap; row-gap: 0; padding: 6px 8px 6px 10px; }
@@ -424,6 +484,10 @@ main:has(.md--wide) { max-width: 1520px; }
   .icard--sugg .xrow__key { margin-right: 104px; }
   .dcard > .dcard__head { padding: 6px 6px 6px 12px; }
   .dcard__lbl { display: none; }
+  .dcard__body { padding: 18px 16px 20px; }
+  .dcard__body--page { padding: 0; }
+  .dcard__th .td-name { font-size: 26px; }
+  .fact { grid-template-columns: 120px minmax(0, 1fr); }
   /* Search results: the title gets the full row, the context moves under it (app.css), next to the mark. */
   .pal__opt.icard { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 1px 12px; }
   .pal__opt.icard > :is(.kmark, .pal__lead) { grid-row: span 2; }

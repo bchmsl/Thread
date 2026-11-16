@@ -114,17 +114,21 @@ internal fun SectionCard(
     actions: (@Composable () -> Unit)? = null,
     body: @Composable () -> Unit,
 ) {
+    // Inside a card the ids carry the card's scope, so they never repeat the page's under it.
+    val scope = LocalIdScope.current
+    val headId = scope + headingId
+    val bodyElementId = scope + bodyId
     Section({
         classes("scard")
         if (!open) classes("is-closed")
         cardKind(kind)
-        attr("aria-labelledby", headingId)
+        attr("aria-labelledby", headId)
         attrs()
     }) {
         Div({ classes("scard__head") }) {
             val heading: AttrsScope<*>.() -> Unit = {
                 classes("scard__h")
-                id(headingId)
+                id(headId)
             }
             val head: @Composable () -> Unit = {
                 if (onToggle != null) {
@@ -132,7 +136,7 @@ internal fun SectionCard(
                         type(ButtonType.Button)
                         classes("scard__toggle")
                         attr("aria-expanded", open.toString())
-                        attr("aria-controls", bodyId)
+                        attr("aria-controls", bodyElementId)
                         onClick { onToggle() }
                     }) { HeadText(kind, mark, title, count, hint, foldable = true, titleContent) }
                 } else {
@@ -146,7 +150,7 @@ internal fun SectionCard(
         }
         Div({
             classes("scard__body")
-            id(bodyId)
+            id(bodyElementId)
             if (!open) attr("hidden", "")
         }) { if (open) body() }
     }
@@ -174,16 +178,17 @@ private fun HeadText(
 
 /**
  * The head of a card opened large (owner changes #2 and #3): its kind's band, so a dialog card reads like its list card.
- * [lead] comes first (a Back button), [label] names the kind ("Topic", "Task"), [actions] sit on the right (Edit, Open
- * full page, Close). Put it first in an element with the `dcard` class and [cardKind] (and `topicColor` for a Topic);
- * css/cards.css draws the band, and fades its pattern away from the buttons. Under 600 px, `dcard__lbl` text hides and
- * the buttons keep their accessible names.
+ * [lead] comes first (a Back button), [label] names the kind ("Topic", "Task"), [mode] follows it ("Editing"), and
+ * [actions] sit on the right (Edit, Open full page, Close). Put it first in an element with the `dcard` class and
+ * [cardKind] (and `topicColor` for a Topic); css/cards.css draws the band, and fades its pattern away from the buttons.
+ * Under 600 px, `dcard__lbl` text hides and the buttons keep their accessible names.
  */
 @Composable
 internal fun CardBand(
     kind: CardKind,
     label: String,
     lead: (@Composable () -> Unit)? = null,
+    mode: String? = null,
     actions: @Composable () -> Unit,
 ) {
     Header({ classes("scard__head", "dcard__head") }) {
@@ -191,6 +196,7 @@ internal fun CardBand(
         P({ classes("dcard__kind") }) {
             KindMark(kind)
             Span { Text(label) }
+            if (mode != null) Span({ classes("dcard__mode") }) { Text(mode) }
         }
         Div({ classes("dcard__acts") }) { actions() }
     }

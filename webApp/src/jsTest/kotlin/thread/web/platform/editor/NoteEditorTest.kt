@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.w3c.dom.DataTransfer
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLInputElement
 import org.w3c.dom.clipboard.ClipboardEvent
 import org.w3c.dom.clipboard.ClipboardEventInit
 import org.w3c.dom.events.KeyboardEvent
@@ -38,12 +39,23 @@ class NoteEditorTest {
         assertTrue(failures.isEmpty(), "Editor failures: $failures")
     }
 
-    private fun createEditor(initial: RichTextDocument): NoteEditor {
+    private fun createEditor(
+        initial: RichTextDocument,
+        editable: Boolean = true,
+        elementId: String = "editor",
+    ): NoteEditor {
         val mount = document.createElement("div") as HTMLElement
         document.body!!.appendChild(mount)
         mounts += mount
-        return NoteEditor(mount, initial, onChange = { changes += it }, onFormatting = {}, onFailure = { failures += it })
-            .also { editors += it }
+        return NoteEditor(
+            mount,
+            initial,
+            editable = editable,
+            elementId = elementId,
+            onChange = { changes += it },
+            onFormatting = {},
+            onFailure = { failures += it },
+        ).also { editors += it }
     }
 
     private fun NoteEditor.dom(): HTMLElement = mounts[editors.indexOf(this)].querySelector(".ProseMirror") as HTMLElement
@@ -239,6 +251,52 @@ class NoteEditorTest {
             RichTextDocument(listOf(paragraph(RichTextInline.Text("https://example.com/x", link = href("https://example.com/x"))))),
             editor.document,
         )
+    }
+
+    @Test
+    fun aViewedNoteTakesNoTypingUntilEditTurnsItOn() {
+        val note = RichTextDocument(listOf(paragraph(text("synthetic note"))))
+        val editor = createEditor(note, editable = false)
+        assertEquals("false", editor.dom().getAttribute("contenteditable"))
+
+        editor.setEditable(true)
+
+        assertEquals("true", editor.dom().getAttribute("contenteditable"))
+        assertEquals(note, editor.document)
+        assertTrue(changes.all { it == note }, "Changes: $changes")
+    }
+
+    @Test
+    fun aChecklistItemTicksWhileTheNoteIsViewed() {
+        val editor =
+            createEditor(
+                RichTextDocument(
+                    listOf(
+                        RichTextBlock.TaskList(
+                            listOf(
+                                TaskItem(checked = false, blocks = listOf(paragraph(text("first")))),
+                                TaskItem(checked = false, blocks = listOf(paragraph(text("second")))),
+                            ),
+                        ),
+                    ),
+                ),
+                editable = false,
+            )
+
+        (editor.dom().querySelectorAll("input[type=checkbox]").item(1) as HTMLInputElement).click()
+
+        val list = editor.document.blocks.first() as RichTextBlock.TaskList
+        assertEquals(listOf(false, true), list.items.map { it.checked })
+        assertEquals(editor.document, changes.last())
+        assertEquals("false", editor.dom().getAttribute("contenteditable"))
+    }
+
+    @Test
+    fun theTextTakesTheIdItIsGiven() {
+        // A Note card gives its own id, so the toolbar's aria-controls finds the card's text, not the page's (D70).
+        val editor = createEditor(RichTextDocument.EMPTY, elementId = "c-editor")
+
+        assertEquals("c-editor", editor.dom().id)
     }
 
     @Test

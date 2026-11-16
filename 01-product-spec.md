@@ -140,7 +140,7 @@ One page with collapsible sections, not a primary tab layout:
 - Main: Additional information (D52), Tasks.
 - Notes.
 - Related Jira tickets and PRs. Task rows show their next reminder (D54); "Topic reminders" lists only Topic reminders not moved yet or kept by Undo. Linked Jira tickets nest under their linked Jira parent (D64).
-- External item details open in a side panel on wide screens and a separate detail view on narrow screens.
+- Tasks, Notes, Jira tickets and pull requests open as cards on top of Topic Details, which stays as it was (D70).
 - Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click. The "Suggested" heading folds the group away; each device remembers it per Topic (D65).
 
 ## Integrations in v1

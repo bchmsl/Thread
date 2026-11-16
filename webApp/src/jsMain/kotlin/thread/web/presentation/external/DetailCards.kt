@@ -14,6 +14,7 @@ import thread.web.presentation.KindMark
 import thread.web.presentation.SectionCard
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.cardKind
+import thread.web.presentation.scopedId
 
 /**
  * A Jira ticket or a pull request, opened (owner changes #12 and #13, D68, D69): a head card in the kind's band with
@@ -33,9 +34,10 @@ internal fun DetailCards(
     main: @Composable () -> Unit,
     side: @Composable () -> Unit,
 ) {
+    val titleId = scopedId(XD_TITLE_ID)
     Article({
         classes("xd")
-        attr("aria-labelledby", XD_TITLE_ID)
+        attr("aria-labelledby", titleId)
     }) {
         Div({ classes("xd__grid") }) {
             Header({
@@ -49,7 +51,7 @@ internal fun DetailCards(
                 Div({ classes("scard__body") }) {
                     val titleAttrs: AttrsScope<*>.() -> Unit = {
                         classes("xd__title")
-                        id(XD_TITLE_ID)
+                        id(titleId)
                         tabIndex(-1)
                     }
                     if (heading1) H1(titleAttrs) { title() } else H2(titleAttrs) { title() }

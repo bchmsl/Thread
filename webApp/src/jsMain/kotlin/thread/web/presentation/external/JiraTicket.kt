@@ -30,11 +30,13 @@ import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
 import thread.web.presentation.SectionCard
 import thread.web.presentation.TopicCreation
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.isPlainClick
 import thread.web.presentation.notes.topicsPhrase
 import thread.web.presentation.topics.TopicTag
 import thread.web.presentation.topics.TopicsPickerDialog
@@ -245,6 +247,9 @@ private fun TicketActions(
     onGo: (Place) -> Unit,
 ) {
     val toasts = LocalToasts.current
+    val cards = LocalCards.current
+    // A Topic opens as a card on top of the ticket's screen (D70).
+    val openTopic: (Topic) -> Unit = { topic -> if (cards != null) cards.openTopic(topic.id) else onGo(topicPlace(topic)) }
     var picking by remember(reference.id) { mutableStateOf(false) }
     val key = issue.key.value
     Div({ classes("xd__acts") }) {
@@ -262,7 +267,7 @@ private fun TicketActions(
                     is TopicCreation.Created ->
                         toasts.show(
                             "Created Topic “${created.topic.name}” and linked $key",
-                            open = { onGo(topicPlace(created.topic)) },
+                            open = { openTopic(created.topic) },
                             openLabel = "Open Topic",
                         )
                 }
@@ -289,7 +294,7 @@ private fun TicketActions(
                 toasts.show(
                     if (picked.isEmpty()) "Removed all Topic links from $key" else "Linked $key to ${topicsPhrase(names)}",
                     undo = { workspace.undo(edit) },
-                    open = single?.let { topic -> { onGo(topicPlace(topic)) } },
+                    open = single?.let { topic -> { openTopic(topic) } },
                     openLabel = "Open Topic",
                 )
             },
@@ -321,7 +326,8 @@ private fun RelatedIssues(
                     A(relatedHref(related.key), {
                         classes("lnk")
                         attr("data-key", related.key.value)
-                        onClick { if (onOpenRelated(related.key)) it.preventDefault() }
+                        // A click with a modifier key follows the link, so the ticket opens in a new tab.
+                        onClick { if (isPlainClick(it.nativeEvent) && onOpenRelated(related.key)) it.preventDefault() }
                     }) {
                         if (type != null) JiraTypeIcon(type)
                         B { Text(related.key.value) }

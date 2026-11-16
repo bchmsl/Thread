@@ -1,6 +1,7 @@
 package thread.web.presentation.tasks
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -19,15 +20,16 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Fieldset
 import org.jetbrains.compose.web.dom.Footer
 import org.jetbrains.compose.web.dom.H2
-import org.jetbrains.compose.web.dom.Header
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Legend
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
+import org.jetbrains.compose.web.dom.TagElement
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextArea
 import org.jetbrains.compose.web.dom.Ul
+import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLTextAreaElement
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
@@ -47,83 +49,108 @@ import thread.domain.workspace.editTask
 import thread.domain.workspace.planTask
 import thread.domain.workspace.trashReminder
 import thread.domain.workspace.trashTask
+import thread.web.presentation.CardItem
+import thread.web.presentation.CardKind
+import thread.web.presentation.CardType
 import thread.web.presentation.CheckBox
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
+import thread.web.presentation.ItemCard
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
-import thread.web.presentation.ModalDialog
+import thread.web.presentation.Place
 import thread.web.presentation.SelectBox
 import thread.web.presentation.StoredValueInput
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.cardShownByPage
+import thread.web.presentation.dayText
+import thread.web.presentation.deadlineText
+import thread.web.presentation.onPlainClick
 import thread.web.presentation.taskProblemText
+import thread.web.presentation.topics.TopicTag
 import thread.web.presentation.topics.topicPlace
 import thread.web.presentation.whenText
 
 /**
- * The Task details sheet (v3 task sheet), opened by `?task=` on any page. Every field saves on its own; the sheet
- * shows what the store holds, so a change from another device appears here too.
+ * The Task card (D70, owner requests #2 and #3), opened by `?task=` on any page. It opens for viewing; Edit or E shows
+ * the fields. Every field saves on its own; the card shows what the store holds, so a change from another device
+ * appears here too. A Task has no tab of its own, so the card has no "Open full page".
  *
- * [currentTopicId] is the Topic whose page is open, if any: the sheet then leaves out "Open Topic".
+ * [page] is the page under the card: "Open Topic" is left out when that page is the Task's Topic. [startEditing] is
+ * for a Task made a moment ago. [backTo] names the card under this one.
  */
 @Composable
-internal fun TaskSheet(
+internal fun TaskCard(
     workspace: WorkspaceModel,
     task: Task,
-    currentTopicId: String?,
+    page: Place,
+    startEditing: Boolean,
+    backTo: String?,
+    onBack: () -> Unit,
     onClose: () -> Unit,
 ) {
     val now = LocalNow.current
     val toasts = LocalToasts.current
+    val cards = LocalCards.current
     var addingReminder by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(startEditing) }
     val id = task.id.value
 
     fun apply(result: EditResult) {
         if (result is EditResult.Refused) toasts.show(taskProblemText(result.problem)) else workspace.apply(result)
     }
 
-    ModalDialog(classes = listOf("dlg--sheet"), onClose = onClose) { titleId ->
-        Div({ classes("sheet") }) {
-            Header({ classes("sheet__head") }) {
-                H2({
-                    classes("sheet__title")
-                    id(titleId)
-                }) {
-                    IconView(Icon.Task, 18)
-                    Text(" Task")
-                }
-                IconButton(Icon.X, "Close task details") { onClose() }
-            }
-            Div({ classes("sheet__body") }) {
-                Div({ classes("ts-title") }) {
-                    CheckBox(
-                        task.done,
-                        label = if (task.done) "Reopen task" else "Complete task",
-                        classes = listOf("check", "check--lg"),
-                    ) { toggleWithToast(workspace, task, now.day, toasts) }
+    ItemCard(
+        kind = CardKind.Task,
+        label = "Task",
+        classes = listOf("dcard--task"),
+        editing = editing,
+        onEditing = { editing = it },
+        backTo = backTo,
+        onBack = onBack,
+        fullPage = null,
+        onClose = onClose,
+    ) {
+        Div({ classes("dcard__body", "dtask-body") }) {
+            Div({ classes("dtask") }) {
+                CheckBox(
+                    task.done,
+                    label = if (task.done) "Reopen task" else "Complete task",
+                    classes = listOf("check", "check--lg"),
+                ) { toggleWithToast(workspace, task, now.day, toasts) }
+                if (editing) {
                     TitleArea(task) { text ->
                         val current = workspace.task(id) ?: return@TitleArea false
                         val result = editTask(current, title = text)
                         apply(result)
                         result !is EditResult.Refused
                     }
+                } else {
+                    H2({
+                        classes("dtask__t")
+                        if (task.done) classes("is-done")
+                    }) { Text(task.title) }
                 }
-                Button({
-                    type(ButtonType.Button)
-                    classes("btn", "btn--primary", "btn--wide")
-                    onClick { toggleWithToast(workspace, task, now.day, toasts) }
-                }) { Text(if (task.done) "Reopen task" else "Complete task") }
+            }
+            Button({
+                type(ButtonType.Button)
+                // Done is the band's main button while editing, so Complete steps back then.
+                classes("btn", if (editing) "btn--line" else "btn--primary", "dtask__done")
+                onClick { toggleWithToast(workspace, task, now.day, toasts) }
+            }) { Text(if (task.done) "Reopen task" else "Complete task") }
+            P({ classes("ts-effect") }) {
+                IconView(Icon.Today, 16)
+                Span { Text(todayEffect(task, now, workspace.prefs.keepCompleted, workspace.taskReminderTimes[task.id])) }
+            }
+            if (task.inbox) {
                 P({ classes("ts-effect") }) {
-                    IconView(Icon.Today, 16)
-                    Span { Text(todayEffect(task, now, workspace.prefs.keepCompleted, workspace.taskReminderTimes[task.id])) }
+                    IconView(Icon.Inbox, 16)
+                    Span { Text("Also in Inbox until you file it or keep it standalone.") }
                 }
-                if (task.inbox) {
-                    P({ classes("ts-effect") }) {
-                        IconView(Icon.Inbox, 16)
-                        Span { Text("Also in Inbox until you file it or keep it standalone.") }
-                    }
-                }
+            }
+            if (editing) {
                 Div({ classes("field") }) {
                     Label("ts-topic", { classes("field__label") }) { Text("Topic") }
                     SelectBox(
@@ -142,36 +169,107 @@ internal fun TaskSheet(
                     DeadlineField(task, now.day) { deadline -> workspace.task(id)?.let { apply(editTask(it, deadline = deadline)) } }
                     TaskRemindersField(workspace, task, now.day) { addingReminder = true }
                 }
+            } else {
+                TaskFacts(
+                    workspace = workspace,
+                    task = task,
+                    today = now.day,
+                    onPlan = { day -> workspace.task(id)?.let { apply(planTask(it, day)) } },
+                ) { addingReminder = true }
             }
-            Footer({ classes("sheet__foot") }) {
-                val topic = task.topicId?.let { workspace.topic(it.value) }
-                if (topic != null && topic.id.value != currentTopicId) {
-                    A(topicPlace(topic).hash, { classes("btn", "btn--text") }) {
-                        IconView(Icon.Topics, 16)
-                        Text(" Open Topic")
-                    }
-                } else {
-                    Span()
-                }
-                Button({
-                    type(ButtonType.Button)
-                    classes("btn", "btn--text", "btn--danger-text")
-                    onClick {
-                        val current = workspace.task(id) ?: return@onClick
-                        val edit = workspace.apply(trashTask(current)) ?: return@onClick
-                        onClose()
-                        toasts.show("Moved to Trash: ${current.title}", undo = { workspace.undo(edit) })
-                    }
+        }
+        Footer({ classes("dcard__foot") }) {
+            val topic = task.topicId?.let { workspace.topic(it.value) }
+            if (topic != null && !cardShownByPage(page, CardItem(CardType.Topic, topic.id.value))) {
+                A(topicPlace(topic).hash, {
+                    classes("btn", "btn--text", "btn--sm", "dcard__foot-start")
+                    if (cards != null) onPlainClick { cards.openTopicCard(topic.id) }
                 }) {
-                    IconView(Icon.Trash, 16)
-                    Text(" Move to Trash")
+                    IconView(Icon.Topics, 15)
+                    Text(" Open Topic")
                 }
+            }
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--danger-text", "btn--sm")
+                onClick {
+                    val current = workspace.task(id) ?: return@onClick
+                    val edit = workspace.apply(trashTask(current)) ?: return@onClick
+                    onClose()
+                    toasts.show("Moved to Trash: ${current.title}", undo = { workspace.undo(edit) })
+                }
+            }) {
+                IconView(Icon.Trash, 15)
+                Text(" Move to Trash")
             }
         }
     }
     if (addingReminder) {
         ReminderDialog(workspace, ReminderTarget(TargetKind.Task, id), task.title) { addingReminder = false }
     }
+}
+
+/**
+ * The Task's Topic, dates and reminders, for viewing. The Today and Tomorrow chips still plan the Task (D70, owner
+ * answer Q5), and reminders can still be added and deleted: they are nudges about the Task, not its content.
+ */
+@Composable
+private fun TaskFacts(
+    workspace: WorkspaceModel,
+    task: Task,
+    today: LocalDay,
+    onPlan: (LocalDay) -> Unit,
+    onAddReminder: () -> Unit,
+) {
+    val topic = task.topicId?.let { workspace.topic(it.value) }
+    TagElement<HTMLElement>("dl", { classes("facts") }) {
+        Fact(Icon.Topics, "Topic") {
+            if (topic != null) TopicTag(topic) else None("No Topic (standalone)")
+        }
+        Fact(Icon.Today, "Planned day") {
+            val day = task.plannedDay
+            if (day != null) Span { Text(dayText(day, today)) } else None("Not planned")
+            // A chip shows only when it would change the day, so the value never reads "Today Today".
+            if (day != today) Chip("Today", label = "Plan for today") { onPlan(today) }
+            if (day != today.plusDays(1)) Chip("Tomorrow", label = "Plan for tomorrow") { onPlan(today.plusDays(1)) }
+        }
+        Fact(Icon.Clock, "Deadline") {
+            val deadline = task.deadline
+            if (deadline != null) Span { Text(deadlineText(deadline, today)) } else None("No deadline")
+        }
+        Fact(Icon.Bell, "Remind me") {
+            val reminders = workspace.remindersOf(task)
+            if (reminders.isNotEmpty()) TaskReminderList(workspace, task, today) else None("No reminders")
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text", "btn--sm", "facts__add")
+                onClick { onAddReminder() }
+            }) {
+                IconView(Icon.Plus, 15)
+                Text(" Add reminder")
+            }
+        }
+    }
+}
+
+@Composable
+private fun Fact(
+    icon: Icon,
+    label: String,
+    value: @Composable () -> Unit,
+) {
+    Div({ classes("fact") }) {
+        TagElement<HTMLElement>("dt", null) {
+            IconView(icon, 15)
+            Text(label)
+        }
+        TagElement<HTMLElement>("dd", null) { value() }
+    }
+}
+
+@Composable
+private fun None(text: String) {
+    Span({ classes("facts__none") }) { Text(text) }
 }
 
 /**
@@ -187,15 +285,18 @@ private fun TitleArea(
     TextArea(attrs = {
         classes("ts-title__input")
         if (task.done) classes("is-done")
-        rows(2)
+        rows(1)
         maxLength(TASK_TITLE_MAX_LENGTH)
         attr("aria-label", "Task title")
         attr("autofocus", "")
         ref {
             it.value = task.title
+            fitHeight(it)
             element = it
             onDispose { element = null }
         }
+        // One line for a short title, more as it wraps: the box is as tall as the title it holds.
+        onInput { event -> (event.target as? HTMLTextAreaElement)?.let(::fitHeight) }
         onKeyDown { event ->
             if (event.key == "Enter") {
                 event.preventDefault()
@@ -207,7 +308,19 @@ private fun TitleArea(
         }
     })
     SideEffect {
-        element?.let { if (document.activeElement != it && it.value != task.title) it.value = task.title }
+        element?.let {
+            if (document.activeElement != it && it.value != task.title) {
+                it.value = task.title
+                fitHeight(it)
+            }
+        }
+    }
+    // The box shows only while editing, so it appears after Edit: the cursor goes to the end of the title.
+    LaunchedEffect(element) {
+        element?.let {
+            it.focus()
+            it.setSelectionRange(it.value.length, it.value.length)
+        }
     }
 }
 
@@ -275,28 +388,13 @@ private fun TaskRemindersField(
     today: LocalDay,
     onAdd: () -> Unit,
 ) {
-    val toasts = LocalToasts.current
     Div({ classes("field") }) {
         Span({ classes("field__label", "field__label--sub") }) {
             IconView(Icon.Bell, 15)
             Text(" Remind me ")
             Span({ classes("field__aside") }) { Text("an in-app nudge at a time") }
         }
-        Ul({ classes("ts-rems") }) {
-            workspace.remindersOf(task).forEach { reminder ->
-                key(reminder.id.value) {
-                    val time = whenText(reminder.at, today)
-                    Li({ classes("ts-rem") }) {
-                        Span({ classes("ts-rem__time") }) { Text(time) }
-                        Span({ classes("ts-rem__text") }) { Text(reminder.text) }
-                        IconButton(Icon.Trash, "Delete reminder $time", small = true) {
-                            val edit = workspace.apply(trashReminder(reminder))
-                            if (edit != null) toasts.show("Reminder moved to Trash", undo = { workspace.undo(edit) })
-                        }
-                    }
-                }
-            }
-        }
+        TaskReminderList(workspace, task, today)
         Button({
             type(ButtonType.Button)
             classes("btn", "btn--line", "btn--sm")
@@ -308,18 +406,51 @@ private fun TaskRemindersField(
     }
 }
 
+/** The Task's reminders, each with Delete (and Undo in the toast). */
+@Composable
+private fun TaskReminderList(
+    workspace: WorkspaceModel,
+    task: Task,
+    today: LocalDay,
+) {
+    val toasts = LocalToasts.current
+    Ul({ classes("ts-rems") }) {
+        workspace.remindersOf(task).forEach { reminder ->
+            key(reminder.id.value) {
+                val time = whenText(reminder.at, today)
+                Li({ classes("ts-rem") }) {
+                    Span({ classes("ts-rem__time") }) { Text(time) }
+                    Span({ classes("ts-rem__text") }) { Text(reminder.text) }
+                    IconButton(Icon.Trash, "Delete reminder $time", small = true) {
+                        val edit = workspace.apply(trashReminder(reminder))
+                        if (edit != null) toasts.show("Reminder moved to Trash", undo = { workspace.undo(edit) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun fitHeight(area: HTMLTextAreaElement) {
+    area.style.height = "auto"
+    area.style.height = "${area.scrollHeight}px"
+}
+
+/** A small button. [label] is its accessible name when the text alone does not say what it does. */
 @Composable
 private fun Chip(
-    label: String,
+    text: String,
     quiet: Boolean = false,
+    label: String? = null,
     onClick: () -> Unit,
 ) {
     Button({
         type(ButtonType.Button)
         classes("chip")
         if (quiet) classes("chip--quiet")
+        if (label != null) attr("aria-label", label)
         onClick { onClick() }
-    }) { Text(label) }
+    }) { Text(text) }
 }
 
 /**

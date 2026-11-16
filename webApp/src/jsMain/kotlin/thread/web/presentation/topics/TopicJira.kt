@@ -1,14 +1,11 @@
 package thread.web.presentation.topics
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.browser.document
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
@@ -20,7 +17,6 @@ import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
-import org.w3c.dom.HTMLElement
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraStatus
 import thread.domain.external.NestedTicket
@@ -28,7 +24,6 @@ import thread.domain.external.nestUnderParents
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
-import thread.web.presentation.CardBand
 import thread.web.presentation.CardKind
 import thread.web.presentation.CardMark
 import thread.web.presentation.Icon
@@ -36,25 +31,20 @@ import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
 import thread.web.presentation.JiraTypeName
 import thread.web.presentation.LocalToasts
-import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
-import thread.web.presentation.cardKind
 import thread.web.presentation.external.CONNECTIONS_PLACE
 import thread.web.presentation.external.GoneBadge
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
-import thread.web.presentation.external.JiraTicket
 import thread.web.presentation.external.RefreshJiraOnShow
-import thread.web.presentation.external.ViewBanner
-import thread.web.presentation.external.XD_TITLE_ID
-import thread.web.presentation.external.jiraItemPlace
-import thread.web.presentation.external.rememberJiraTicket
-import thread.web.presentation.external.savedOrNull
+import thread.web.presentation.external.jiraPlace
 import thread.web.presentation.itemCard
+import thread.web.presentation.onPlainClick
+import thread.web.presentation.scopedId
 
 /**
- * The Jira tickets linked to the Topic (v3 topic.js `extSection('jira')`). Each row opens the ticket in the side panel
- * at 1000px and wider, else as its own page. Unlinking removes only the link; the ticket is not changed. A ticket from
+ * The Jira tickets linked to the Topic (v3 topic.js `extSection('jira')`). Each row opens the ticket as a card (D70);
+ * [openKey] is the ticket a card shows now. Unlinking removes only the link; the ticket is not changed. A ticket from
  * another Jira site than the connected one shows its key only.
  */
 @Composable
@@ -66,9 +56,10 @@ internal fun TopicJiraSection(
     onToggle: () -> Unit,
     openKey: String?,
     suggestions: TopicSuggestions,
-    onOpen: (JiraIssueKey) -> Boolean,
+    onOpen: (JiraIssueKey) -> Unit,
 ) {
     val toasts = LocalToasts.current
+    val linkId = scopedId("td-link-jira")
     var linking by remember(topic.id) { mutableStateOf(false) }
     val references = workspace.externalsOf(topic.id, ExternalProvider.Jira)
     if (!jira.connected) {
@@ -91,7 +82,7 @@ internal fun TopicJiraSection(
             Button({
                 type(ButtonType.Button)
                 classes("btn", "btn--text", "btn--sm")
-                id("td-link-jira")
+                id(linkId)
                 onClick { linking = true }
             }) {
                 IconView(Icon.Link, 15)
@@ -120,8 +111,8 @@ internal fun TopicJiraSection(
             topic = topic,
             rows = suggestions.jira,
             dismissed = suggestions.jiraDismissed,
-            href = { row -> row.jiraKey?.let { jiraItemPlace(it, topic.id.value).hash } ?: "#" },
-            onOpen = { row -> row.jiraKey?.let(onOpen) ?: false },
+            href = { row -> row.jiraKey?.let { jiraPlace(it).hash } ?: "#" },
+            onOpen = { row -> row.jiraKey?.let(onOpen) },
         )
     }
     if (linking) {
@@ -181,7 +172,7 @@ private fun LinkedTickets(
     references: List<ExternalReference>,
     parentOf: (JiraIssueKey) -> JiraIssueKey?,
     openKey: String?,
-    onOpen: (JiraIssueKey) -> Boolean,
+    onOpen: (JiraIssueKey) -> Unit,
 ) {
     val rows = nestUnderParents(references, { if (jira.isHere(it)) JiraIssueKey.parse(it.key) else null }, parentOf)
     Ul({ classes("tlist", "jtree") }) {
@@ -196,7 +187,7 @@ private fun LinkedTicket(
     jira: JiraModel,
     topic: Topic,
     openKey: String?,
-    onOpen: (JiraIssueKey) -> Boolean,
+    onOpen: (JiraIssueKey) -> Unit,
 ) {
     val toasts = LocalToasts.current
     val reference = node.row.item
@@ -213,11 +204,11 @@ private fun LinkedTicket(
             }) {
                 CardMark(CardKind.Jira, summary?.type)
                 if (here && issueKey != null) {
-                    A(jiraItemPlace(issueKey, topic.id.value).hash, {
+                    A(jiraPlace(issueKey).hash, {
                         classes("xrow__main")
                         attr("data-key", reference.key)
                         if (isOpen) attr("aria-current", "true")
-                        onClick { if (onOpen(issueKey)) it.preventDefault() }
+                        onPlainClick { onOpen(issueKey) }
                     }) {
                         RowText(
                             reference.key,
@@ -286,94 +277,5 @@ private fun RowText(
                 }
             }
         else -> Span({ classes("xrow__snip") }) { Text("From another Jira site. Connect that site to read it.") }
-    }
-}
-
-/**
- * The v3 side panel: a linked ticket next to the Topic at 1000px and wider, with "Back to sections" and "Open as
- * page". A related ticket opens in the same panel.
- */
-@Composable
-internal fun TopicSidePanel(
-    workspace: WorkspaceModel,
-    jira: JiraModel,
-    topic: Topic,
-    key: JiraIssueKey,
-    onOpen: (JiraIssueKey) -> Unit,
-    onClose: () -> Unit,
-    onGo: (Place) -> Unit,
-) {
-    var refresh by remember { mutableStateOf(0) }
-    val view = rememberJiraTicket(jira, key, refresh)
-    // The panel's title takes focus once the ticket is on screen (v3 td-open-ext).
-    val titleShown = view?.savedOrNull != null
-    LaunchedEffect(key, titleShown) {
-        if (titleShown) {
-            delay(16)
-            (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
-        }
-    }
-    SidePanelCard(
-        kind = CardKind.Jira,
-        label = "Jira",
-        pageHref = jiraItemPlace(key, topic.id.value).hash,
-        onClose = onClose,
-    ) {
-        if (view != null) ViewBanner(view, jira.name, "tickets") { onGo(CONNECTIONS_PLACE) }
-        JiraTicket(
-            jira = jira,
-            workspace = workspace,
-            view = view,
-            heading1 = false,
-            relatedHref = { jiraItemPlace(it, topic.id.value).hash },
-            onOpenRelated = { related ->
-                onOpen(related)
-                true
-            },
-            onRefresh = { refresh++ },
-            onGo = onGo,
-        )
-    }
-}
-
-/**
- * The side panel's card (D68): the linked item's kind band with "Back to sections" and "Open as page", then the item.
- * The band stays at the top while the panel scrolls.
- */
-@Composable
-internal fun SidePanelCard(
-    kind: CardKind,
-    label: String,
-    pageHref: String,
-    onClose: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Div({
-        classes("side-panel", "dcard--panel")
-        cardKind(kind)
-        attr("role", "region")
-        attr("aria-label", "Linked item")
-    }) {
-        CardBand(
-            kind = kind,
-            label = label,
-            lead = {
-                Button({
-                    type(ButtonType.Button)
-                    classes("btn", "btn--text", "btn--sm", "dcard__back")
-                    id("td-panel-close")
-                    onClick { onClose() }
-                }) {
-                    IconView(Icon.ChevLeft, 15)
-                    Text(" Back to sections")
-                }
-            },
-        ) {
-            A(pageHref, { classes("btn", "btn--text", "btn--sm") }) {
-                Text("Open as page ")
-                IconView(Icon.External, 14)
-            }
-        }
-        Div({ classes("side-panel__body") }) { content() }
     }
 }

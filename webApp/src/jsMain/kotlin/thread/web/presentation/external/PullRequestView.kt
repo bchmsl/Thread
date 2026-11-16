@@ -28,6 +28,7 @@ import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
 import thread.web.presentation.SectionCard
@@ -52,23 +53,6 @@ internal fun prPlace(
     View.Prs.place
         .let { if (review) it.with(PR_TAB_PARAM, PR_REVIEW_TAB) else it }
         .with(PR_ID_PARAM, ref.id)
-
-/** `#/item/pr/owner/repo/n`, the pull request as its own page; [fromTopic] makes its back link return to that Topic. */
-internal fun prItemPlace(
-    ref: PullRequestRef,
-    fromTopic: String?,
-): Place =
-    Place.of("item", "pr", ref.owner, ref.repo, ref.number.toString()).let {
-        if (fromTopic != null) it.with("from", "topic:$fromTopic") else it
-    }
-
-/** The pull request of an item place, or null. */
-internal fun prRefOf(place: Place): PullRequestRef? {
-    val owner = place.segment(2) ?: return null
-    val repo = place.segment(3) ?: return null
-    val number = place.segment(4) ?: return null
-    return PullRequestRef.parse("$owner/$repo#$number")
-}
 
 /**
  * One pull request (v3 `X.prDetail`, owner change #13), read-only: the copy on screen and when it is from, then the
@@ -390,6 +374,9 @@ private fun PullRequestActions(
     onGo: (Place) -> Unit,
 ) {
     val toasts = LocalToasts.current
+    val cards = LocalCards.current
+    // A Topic opens as a card on top of the pull request's screen (D70).
+    val openTopic: (Topic) -> Unit = { topic -> if (cards != null) cards.openTopic(topic.id) else onGo(topicPlace(topic)) }
     var picking by remember(reference.id) { mutableStateOf(false) }
     val label = "#${pull.ref.number}"
     Div({ classes("xd__acts") }) {
@@ -407,7 +394,7 @@ private fun PullRequestActions(
                     is TopicCreation.Created ->
                         toasts.show(
                             "Created Topic “${created.topic.name}” and linked $label",
-                            open = { onGo(topicPlace(created.topic)) },
+                            open = { openTopic(created.topic) },
                             openLabel = "Open Topic",
                         )
                 }
@@ -434,7 +421,7 @@ private fun PullRequestActions(
                 toasts.show(
                     if (picked.isEmpty()) "Removed all Topic links from $label" else "Linked $label to ${topicsPhrase(names)}",
                     undo = { workspace.undo(edit) },
-                    open = single?.let { topic -> { onGo(topicPlace(topic)) } },
+                    open = single?.let { topic -> { openTopic(topic) } },
                     openLabel = "Open Topic",
                 )
             },

@@ -13,9 +13,11 @@ import thread.domain.external.PullRequestList
 import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.KindMark
+import thread.web.presentation.LocalCards
 import thread.web.presentation.SectionCard
 import thread.web.presentation.View
 import thread.web.presentation.itemCard
+import thread.web.presentation.onPlainClick
 
 /**
  * Today's "Review requested" column (v3 today.js `reviews`) as a pull request section card (D68): the saved list
@@ -24,6 +26,7 @@ import thread.web.presentation.itemCard
  */
 @Composable
 internal fun ReviewRequestedRail(gitHub: GitHubModel) {
+    val cards = LocalCards.current
     val view = if (gitHub.checked && gitHub.connected) rememberPullRequestList(gitHub, PullRequestList.ReviewRequested, 0) else null
     val items = view?.savedOrNull?.value?.items
     SectionCard(
@@ -60,9 +63,11 @@ internal fun ReviewRequestedRail(gitHub: GitHubModel) {
                             val detail = gitHub.detail(pull.ref.id)
                             Li({ itemCard(CardKind.PullRequest) }) {
                                 KindMark(CardKind.PullRequest)
+                                // A plain click opens the pull request as a card (D70); the address stays its tab.
                                 A(prPlace(pull.ref, review = true).hash, {
                                     classes("icard__main")
                                     attr("data-id", pull.ref.id)
+                                    if (cards != null) onPlainClick { cards.openPr(pull.ref) }
                                 }) {
                                     Span({ classes("xi__top") }) {
                                         Span({ classes("xi__repo") }) { Text(pull.ref.repo) }

@@ -27,6 +27,7 @@ import thread.web.platform.editor.EditorFormatting
 import thread.web.platform.editor.NoteEditor
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalIdScope
 
 private class ToolbarButton(
     val icon: Icon,
@@ -61,6 +62,7 @@ private const val LINK_ERROR = "Use a full address that starts with https://, ht
 internal fun NoteToolbar(
     formatting: EditorFormatting,
     editor: NoteEditor?,
+    editorId: String,
     enabled: Boolean,
     onLinkDone: (String) -> Unit,
 ) {
@@ -72,7 +74,7 @@ internal fun NoteToolbar(
         classes("tb")
         attr("role", "toolbar")
         attr("aria-label", "Formatting")
-        attr("aria-controls", "editor")
+        attr("aria-controls", editorId)
         onKeyDown { event ->
             val target = event.target as? HTMLElement ?: return@onKeyDown
             if (!target.classList.contains("tb__btn")) return@onKeyDown
@@ -180,10 +182,11 @@ private fun LinkForm(
 ) {
     var address by remember(state) { mutableStateOf(state.existing.orEmpty()) }
     var error by remember(state) { mutableStateOf(false) }
+    val ids = LocalIdScope.current
 
     Form(attrs = {
         classes("tb__link")
-        id("tb-link")
+        id("${ids}tb-link")
         attr("novalidate", "")
         attr("autocomplete", "off")
         onSubmit { event ->
@@ -191,19 +194,19 @@ private fun LinkForm(
             val href = LinkHref.parse(address)
             if (href == null) {
                 error = true
-                (document.getElementById("tb-url") as? HTMLElement)?.focus()
+                (document.getElementById("${ids}tb-url") as? HTMLElement)?.focus()
             } else {
                 onApply(href)
             }
         }
     }) {
-        Label("tb-url", { classes("vh") }) { Text("Link address") }
+        Label("${ids}tb-url", { classes("vh") }) { Text("Link address") }
         Input(InputType.Url) {
             classes("input")
-            id("tb-url")
+            id("${ids}tb-url")
             value(address)
             placeholder("https://")
-            attr("aria-describedby", "tb-err")
+            attr("aria-describedby", "${ids}tb-err")
             if (error) attr("aria-invalid", "true")
             onInput {
                 address = it.value
@@ -239,7 +242,7 @@ private fun LinkForm(
         }) { Text("Cancel") }
         P({
             classes("tb__err")
-            id("tb-err")
+            id("${ids}tb-err")
             if (!error) attr("hidden", "")
         }) { if (error) Text(LINK_ERROR) }
     }

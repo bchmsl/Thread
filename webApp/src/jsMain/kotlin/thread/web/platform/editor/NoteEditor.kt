@@ -2,6 +2,8 @@ package thread.web.platform.editor
 
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLInputElement
+import org.w3c.dom.events.Event
 import org.w3c.dom.events.KeyboardEvent
 import thread.domain.note.LinkHref
 import thread.domain.note.RichTextDocument
@@ -32,21 +34,44 @@ internal data class EditorFormatting(
  * Everything else, also in pasted content, is dropped by the schema. Links allow only http, https and mailto, and the
  * link mark keeps only its address. Links are added with the toolbar ([applyLink]), not by autolink or paste rules.
  * ⌘Enter or Ctrl+Enter in a checklist item ticks it, as in v3.
+ *
+ * [elementId] is the text's element id, for the toolbar's `aria-controls`; a Note card gives its own (D70).
+ *
+ * Not [editable] (view mode): the text cannot be typed into, links open like links, and checklist items still tick.
+ * A tick is a normal change and goes to [onChange].
  */
 internal class NoteEditor(
-    mount: HTMLElement,
+    private val mount: HTMLElement,
     initial: RichTextDocument,
+    editable: Boolean = true,
+    elementId: String = "editor",
     private val onChange: (RichTextDocument) -> Unit,
     private val onFormatting: (EditorFormatting) -> Unit,
     private val onFailure: (Throwable) -> Unit,
 ) {
     private var failed = false
     private var contentError: Throwable? = null
-    private val editor = TiptapEditor(options(mount, initial))
+    private val editor = TiptapEditor(options(mount, initial, editable, elementId))
+
+    // Capture phase: runs before Tiptap's own listener on the checkbox, which only keeps the tick (onReadOnlyChecked).
+    private val readOnlyTick: (Event) -> Unit = { event -> tickReadOnly(event) }
 
     init {
         contentError?.let(::fail)
         onFormatting(formatting(editor))
+        mount.addEventListener("change", readOnlyTick, true)
+    }
+
+    /** Turns typing on or off. Stays off after a failure, so a broken body is never saved over a good one. */
+    fun setEditable(editable: Boolean) {
+        if (failed || editor.isDestroyed || editor.isEditable == editable) return
+        editor.setEditable(editable, false)
+    }
+
+    /** Focuses the end of the text. */
+    fun focusEnd() {
+        if (editor.isDestroyed) return
+        editor.chain().focus("end").run()
     }
 
     /** The plain text of the body, blocks separated by blank lines. */
@@ -155,17 +180,42 @@ internal class NoteEditor(
     }
 
     fun destroy() {
+        mount.removeEventListener("change", readOnlyTick, true)
         if (!editor.isDestroyed) editor.destroy()
+    }
+
+    /**
+     * Ticks a checklist item in view mode. Tiptap leaves the document alone when the editor is not editable, so the
+     * item is found from the checkbox's place in the page and changed here.
+     */
+    private fun tickReadOnly(event: Event) {
+        if (failed || editor.isDestroyed || editor.isEditable) return
+        val box = event.target as? HTMLInputElement ?: return
+        if (box.type != "checkbox") return
+        val content = box.closest("li")?.querySelector(":scope > div") ?: return
+        val view = editor.view
+        val position = view.posAtDOM(content, 0)
+        val resolved = view.state.doc.resolve(position)
+        var depth: Int = resolved.depth.unsafeCast<Int>()
+        while (depth > 0) {
+            if (resolved.node(depth).type.name == "taskItem") {
+                view.dispatch(view.state.tr.setNodeMarkup(resolved.before(depth), null, jsObjectOf("checked" to box.checked)))
+                return
+            }
+            depth--
+        }
     }
 
     private fun options(
         mount: HTMLElement,
         initial: RichTextDocument,
+        editable: Boolean,
+        elementId: String,
     ): dynamic {
         val editorProps = jsObjectOf()
         editorProps.attributes =
             jsObjectOf(
-                "id" to "editor",
+                "id" to elementId,
                 "class" to "editor",
                 "aria-label" to "Note text",
                 "aria-multiline" to "true",
@@ -178,6 +228,7 @@ internal class NoteEditor(
         options.extensions = extensions()
         options.content = RichTextEditorJson.toEditor(initial)
         options.editorProps = editorProps
+        options.editable = editable
         // Tiptap's base styles are copied into our stylesheet instead, so no <style> element is injected.
         options.injectCSS = false
         // Refuse content that does not fit the schema instead of silently dropping parts of it.
@@ -261,6 +312,8 @@ internal class NoteEditor(
                     jsObjectOf(
                         "nested" to true,
                         "a11y" to jsObjectOf("checkboxLabel" to { node: dynamic, _: Boolean -> checkboxLabel(node) }),
+                        // View mode keeps the tick; tickReadOnly has already changed the document.
+                        "onReadOnlyChecked" to { _: dynamic, _: Boolean -> true },
                     ),
                 ),
             )

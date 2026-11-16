@@ -52,6 +52,7 @@ import thread.web.presentation.CardKind
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
@@ -66,6 +67,7 @@ import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.ReviewRequestedRail
 import thread.web.presentation.itemCard
 import thread.web.presentation.longDate
+import thread.web.presentation.onPlainClick
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.StatusLabel
@@ -525,14 +527,17 @@ private fun ActiveRows(
     topics: List<Topic>,
     workspace: WorkspaceModel,
 ) {
+    val cards = LocalCards.current
     Ul({ classes("tlist") }) {
         topics.forEach { topic ->
             key(topic.id.value) {
                 Li {
+                    // A Topic from Today opens as a card (D70, owner answer Q1); the address stays its page.
                     A(topicPlace(topic).hash, {
                         itemCard(CardKind.Topic)
                         classes("trow2")
                         topicColor(topic.color)
+                        if (cards != null) onPlainClick { cards.openTopic(topic.id) }
                     }) {
                         TopicHex(topic.name, topic.color, HexSize.Md)
                         Span({ classes("trow2__name") }) { Text(topic.name) }
@@ -595,6 +600,7 @@ private fun ActiveCards(
     showStatus: Boolean,
 ) {
     val statuses = workspace.statuses
+    val cards = LocalCards.current
     Ul({ classes(if (showStatus) "agrid" else "lane__list") }) {
         topics.forEach { topic ->
             key(topic.id.value) {
@@ -603,6 +609,7 @@ private fun ActiveCards(
                         classes("acard")
                         cardKind(CardKind.Topic)
                         topicColor(topic.color)
+                        if (cards != null) onPlainClick { cards.openTopic(topic.id) }
                     }) {
                         Span({ classes("acard__top") }) {
                             TopicHex(topic.name, topic.color, HexSize.Md)

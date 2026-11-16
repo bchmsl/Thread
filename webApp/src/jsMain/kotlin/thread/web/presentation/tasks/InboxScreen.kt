@@ -33,6 +33,7 @@ import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.KindMark
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
@@ -61,6 +62,7 @@ internal fun InboxScreen(
         return
     }
     val toasts = LocalToasts.current
+    val cards = LocalCards.current
     val now = LocalNow.current
     val zone = workspace.prefs.timeZone
     val items = inboxItems(workspace.inbox, workspace.inboxNotes)
@@ -200,7 +202,7 @@ internal fun InboxScreen(
                 toasts.show(
                     "Linked ${itemCount(linked.size)} to ${topic.name}",
                     undo = { workspace.undo(edit) },
-                    open = { router.go(topicPlace(topic)) },
+                    open = { if (cards != null) cards.openTopic(topic.id) else router.go(topicPlace(topic)) },
                     openLabel = "Open Topic",
                 )
             },

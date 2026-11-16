@@ -76,6 +76,7 @@ import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
 import thread.web.presentation.JiraTypeName
+import thread.web.presentation.LocalIdScope
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.WorkspaceModel
@@ -84,6 +85,7 @@ import thread.web.presentation.external.JiraModel
 import thread.web.presentation.external.JiraStatusLozenge
 import thread.web.presentation.external.orFallback
 import thread.web.presentation.itemCard
+import thread.web.presentation.onPlainClick
 import thread.web.presentation.rememberOnline
 
 /*
@@ -469,15 +471,17 @@ internal fun SuggestedGroup(
     rows: List<SuggestionRow>,
     dismissed: List<DismissedRow>,
     href: (SuggestionRow) -> String,
-    onOpen: (SuggestionRow) -> Boolean,
+    onOpen: (SuggestionRow) -> Unit,
 ) {
     val toasts = LocalToasts.current
+    // A Topic card can show over this Topic's page: its ids and selectors are scoped (D70).
+    val ids = LocalIdScope.current
     val scope = rememberCoroutineScope()
     var expanded by remember(topic.id) { mutableStateOf(false) }
     var reviewing by remember(topic.id) { mutableStateOf(false) }
     var open by remember(topic.id, sectionKey) { mutableStateOf(areSuggestionsOpen(topic.id.value, sectionKey)) }
-    val groupId = "sg-$sectionKey"
-    val heading = { document.querySelector("#sh-$sectionKey button") as? HTMLElement }
+    val groupId = "${ids}sg-$sectionKey"
+    val heading = { document.querySelector("#${ids}sh-$sectionKey button") as? HTMLElement }
     // After Link or "Don't suggest" the row leaves: focus the suggestion now at its place, else the heading.
     val focusAfter: (SuggestionRow, Int) -> Unit = { row, index ->
         scope.launch {
@@ -529,7 +533,7 @@ internal fun SuggestedGroup(
                                 A(href(row), {
                                     classes("xrow__main")
                                     attr("data-suggested", row.reference.id)
-                                    onClick { if (onOpen(row)) it.preventDefault() }
+                                    onPlainClick { onOpen(row) }
                                 }) {
                                     Span({ classes("xrow__key") }) {
                                         // The card's stub shows the type's icon (D63, D68); screen readers hear it here.

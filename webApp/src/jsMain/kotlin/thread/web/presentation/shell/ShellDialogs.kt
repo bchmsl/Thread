@@ -31,9 +31,12 @@ import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
 import thread.web.presentation.Kbd
 import thread.web.presentation.KindMark
+import thread.web.presentation.LocalCards
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.SyncProblem
 import thread.web.presentation.View
+import thread.web.presentation.cardFor
+import thread.web.presentation.isPlainClick
 import thread.web.presentation.itemCard
 import thread.web.presentation.syncText
 
@@ -52,6 +55,7 @@ internal fun SyncPanel(
     onClose: () -> Unit,
 ) {
     val text = syncText(state)
+    val cards = LocalCards.current
     ModalDialog(classes = listOf("dlg--pop", "dlg--sync"), onClose = onClose) { titleId ->
         Div({ classes("syncp") }) {
             Header({ classes("focus__head") }) {
@@ -80,7 +84,17 @@ internal fun SyncPanel(
                             Div({ classes("syncp__item") }) {
                                 val place = problem.place
                                 if (place != null) {
-                                    A(place.hash, { onClick { onClose() } }) {
+                                    // The item opens as a card over the page (D70); a setting opens its page.
+                                    val item = cardFor(place)
+                                    A(place.hash, {
+                                        onClick { event ->
+                                            onClose()
+                                            if (cards != null && item != null && isPlainClick(event.nativeEvent)) {
+                                                event.preventDefault()
+                                                cards.open(item)
+                                            }
+                                        }
+                                    }) {
                                         IconView(Icon.Notes, 16)
                                         Text(" " + problem.label)
                                     }

@@ -2,11 +2,13 @@ package thread.web.presentation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.browser.document
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.Button
@@ -38,8 +40,11 @@ internal val LocalDialogStack = compositionLocalOf<DialogStack> { error("No Dial
 
 /**
  * A native modal `<dialog>` with the v3 classes (`dlg` plus [classes]). Escape and a click on the backdrop close it,
- * and the browser returns focus to where it was. [onClose] runs when the dialog closes by itself; removing it from
- * the composition closes it without calling [onClose].
+ * and focus returns to where it was, also when the dialog is removed. [onClose] runs when the dialog closes by itself;
+ * removing it from the composition closes it without calling [onClose].
+ *
+ * With [onDismiss], Escape and a click on the backdrop call it instead, and the dialog stays open until the caller
+ * removes it, so the caller can ask first. The browser can still close it on a repeated Escape, and then [onClose] runs.
  *
  * Give the title the id from [titleId] so the dialog is named by it.
  */
@@ -47,6 +52,7 @@ internal val LocalDialogStack = compositionLocalOf<DialogStack> { error("No Dial
 internal fun ModalDialog(
     classes: List<String> = emptyList(),
     label: String? = null,
+    onDismiss: (() -> Unit)? = null,
     onClose: () -> Unit,
     content: @Composable (titleId: String) -> Unit,
 ) {
@@ -55,26 +61,62 @@ internal fun ModalDialog(
     val id = remember { stack.push() }
     val titleId = "dlg-title-$id"
     val latestOnClose by rememberUpdatedState(onClose)
+    val latestOnDismiss by rememberUpdatedState(onDismiss)
+    val latestLabel by rememberUpdatedState(label)
+    val dialogElement = remember { arrayOfNulls<HTMLElement>(1) }
     DisposableEffect(id) { onDispose { stack.remove(id) } }
+    // Compose HTML sets every attribute again when one of them changes, and that drops the `open` that showModal()
+    // added, which hides the dialog without a close event. A label can change while the dialog is open (a card follows
+    // its item's title), so it is set here, outside the attributes Compose manages.
+    SideEffect { label?.let { dialogElement[0]?.setAttribute("aria-label", it) } }
     TagElement<HTMLElement>(
         tagName = "dialog",
         applyAttrs = {
             classes("dlg")
             if (classes.isNotEmpty()) classes(*classes.toTypedArray())
-            if (label != null) attr("aria-label", label) else attr("aria-labelledby", titleId)
+            if (label == null) attr("aria-labelledby", titleId)
             ref { element ->
                 val dialog = element.asDynamic()
+                // What had focus before the dialog opened, such as the row that opened a card.
+                val opener = document.activeElement as? HTMLElement
+                dialogElement[0] = element
+                latestLabel?.let { element.setAttribute("aria-label", it) }
                 var removing = false
+                // A press that starts inside, as when selecting text, and ends on the backdrop is not a click outside.
+                var pressedOutside = false
+                val dismiss = {
+                    val handler = latestOnDismiss
+                    if (handler != null) handler() else dialog.close()
+                }
                 val closeListener: (Event) -> Unit = { if (!removing) latestOnClose() }
-                val clickListener: (Event) -> Unit = { event -> if (event.target == element) dialog.close() }
+                val downListener: (Event) -> Unit = { event -> pressedOutside = event.target == element }
+                val clickListener: (Event) -> Unit = { event ->
+                    if (event.target == element && pressedOutside) dismiss()
+                    pressedOutside = false
+                }
+                val cancelListener: (Event) -> Unit = { event ->
+                    if (latestOnDismiss != null) {
+                        event.preventDefault()
+                        dismiss()
+                    }
+                }
                 element.addEventListener("close", closeListener)
+                element.addEventListener("pointerdown", downListener)
                 element.addEventListener("click", clickListener)
+                element.addEventListener("cancel", cancelListener)
                 dialog.showModal()
                 onDispose {
+                    dialogElement[0] = null
                     removing = true
                     element.removeEventListener("close", closeListener)
+                    element.removeEventListener("pointerdown", downListener)
                     element.removeEventListener("click", clickListener)
+                    element.removeEventListener("cancel", cancelListener)
                     if (dialog.open == true) dialog.close()
+                    // Compose takes the dialog out of the page before this runs, and a dialog that is no longer in the
+                    // page does not give focus back. When focus fell to the page, it goes back to where it was.
+                    val focused = document.activeElement
+                    if ((focused == null || focused == document.body) && opener?.isConnected == true) opener.focus()
                 }
             }
         },

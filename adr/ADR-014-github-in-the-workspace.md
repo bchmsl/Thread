@@ -38,9 +38,9 @@ Status: Proposed (2026-11-13). Written in Phase 11 while the owner was away. Bui
 
 - Pull requests page: "Mine" and "Review requested" tabs with counts. At 1000px and wider the pull request shows next to the list (the first one when none is picked), narrower one at a time with a back link.
 - Inside each tab (D62): one group per repository, with a heading (`owner/name`) and a count, that opens and closes like Today's groups and is remembered per device. The repository with the most recent update comes first. A row shows the state pill and the assignees (avatars, the first login and "+N", or "Unassigned"); the viewer comes first as "You" in a pink pill with a pink ring on the avatar. Review requested rows add "by <author>"; rows no longer repeat the repository.
-- `#/item/pr/owner/repo/number`: the pull request as a page, with a back link to the Topic it came from.
+- From outside the Pull requests tab a pull request opens as a card on top of the screen (`?pr=owner/repo#n`, D70), with "Open full page" to the tab (Review requested when it is listed there). The old `#/item/pr/owner/repo/number` page is gone; its links open the pull request in its tab.
 - Detail, as cards (D69): a head card with the state pill (Open, or Draft), repository, title and number, the author, head and base branch, CI and review indicators, commits, changed files and lines added and removed, Link to Topic (several Topics), Create Topic from pull request and Open in GitHub (hidden for SYNTHETIC data); a Description card (formatted text from its Markdown, D57, ADR-007); Reviewers (people and teams), Assignees and Topics cards. The "updated" and "CI sources" fields are gone (D69). No comments.
-- Topic details: the Pull requests section lists linked pull requests. At 1000px and wider one opens in the side panel; narrower, as its own page.
+- Topic details: the Pull requests section lists linked pull requests. One opens as a card on top of the Topic (D70; before D70, a side panel at 1000px and wider).
 - Today: the "Review requested" column lists the saved list, then GitHub's answer.
 - ⌘K adds "Pull requests (downloaded)" for pull requests saved on this device (title, number or repository).
 - Settings > Connections: a token form with one field (a fine-grained, read-only personal access token). The token field is never filled back in. Disconnect asks first.

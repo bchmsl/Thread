@@ -48,7 +48,6 @@ import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.itemCard
 import thread.web.presentation.topics.PlainTopicTag
-import thread.web.presentation.topics.topicPlace
 
 /**
  * The Pull requests page (v3 prs.html, adr/ADR-014-github-in-the-workspace.md): "Mine" and "Review requested" on the
@@ -411,46 +410,3 @@ internal fun rowAuthor(
     mine: Boolean,
     viewer: String?,
 ): GitHubPerson? = author?.takeUnless { mine && (viewer == null || it.isLogin(viewer)) }
-
-/**
- * One pull request as its own page (v3 item.html?kind=pr): from a Topic on narrow screens or "Open as page". The back
- * link returns to the Topic it came from, else to Pull requests.
- */
-@Composable
-internal fun PrItemScreen(
-    gitHub: GitHubModel,
-    workspace: WorkspaceModel,
-    router: Router,
-    place: Place,
-) {
-    val ref = prRefOf(place)
-    val fromTopicId = place.param("from")?.takeIf { it.startsWith("topic:") }?.removePrefix("topic:")
-    val fromTopic = fromTopicId?.let(workspace::topic)
-    if (fromTopic != null) {
-        A(topicPlace(fromTopic).hash, { classes("back") }) {
-            IconView(Icon.ChevLeft, 16)
-            Text(" ${fromTopic.name}")
-        }
-    } else {
-        A(View.Prs.place.hash, { classes("back") }) {
-            IconView(Icon.ChevLeft, 16)
-            Text(" Pull requests")
-        }
-    }
-    if (!gitHub.checked) return
-    if (ref == null) {
-        EmptyState(Icon.Pr, "Pull request not found", "It may be closed or not shared with you.")
-        return
-    }
-    var refresh by remember { mutableStateOf(0) }
-    val view = rememberPullRequest(gitHub, if (gitHub.connected) ref else null, refresh)
-    val titleShown = view?.savedOrNull != null
-    LaunchedEffect(ref, titleShown) {
-        if (titleShown) {
-            delay(16)
-            (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
-        }
-    }
-    if (view?.savedOrNull != null) ViewBanner(view, gitHub.name, "pull requests") { router.go(CONNECTIONS_PLACE) }
-    PullRequestDetailView(gitHub, workspace, view, heading1 = true, onRefresh = { refresh++ }, onGo = router::go)
-}

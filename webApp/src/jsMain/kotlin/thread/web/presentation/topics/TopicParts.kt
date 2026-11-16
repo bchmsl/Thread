@@ -18,7 +18,9 @@ import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicStatus
 import thread.domain.topic.monogram
+import thread.web.presentation.LocalCards
 import thread.web.presentation.Place
+import thread.web.presentation.onPlainClick
 
 /** The v3 sticker sizes (shell.js HEX_PX). */
 internal enum class HexSize(
@@ -130,7 +132,10 @@ internal fun TopicHexEmpty(size: HexSize) {
     }
 }
 
-/** A Topic's tag (v3 T.topicTag): a link to the Topic, or [noneLabel] for a Task without one. */
+/**
+ * A Topic's tag (v3 T.topicTag): a link to the Topic, or [noneLabel] for a Task without one. A plain click opens the
+ * Topic as the Topics tab does: its page there, a card anywhere else (D70).
+ */
 @Composable
 internal fun TopicTag(
     topic: Topic?,
@@ -143,9 +148,11 @@ internal fun TopicTag(
         }
         return
     }
+    val cards = LocalCards.current
     A(topicPlace(topic).hash, {
         classes("ttag")
         topicColor(topic.color)
+        if (cards != null) onPlainClick { cards.openTopic(topic.id) }
     }) {
         TopicHex(topic.name, topic.color, HexSize.Xs)
         Span { Text(topic.name) }

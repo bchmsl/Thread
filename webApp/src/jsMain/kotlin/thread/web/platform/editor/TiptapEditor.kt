@@ -10,8 +10,13 @@ internal external class TiptapEditor(
 ) {
     val isDestroyed: Boolean
 
+    val isEditable: Boolean
+
     /** The ProseMirror editor state. */
     val state: dynamic
+
+    /** The ProseMirror editor view. */
+    val view: dynamic
 
     fun chain(): TiptapChain
 

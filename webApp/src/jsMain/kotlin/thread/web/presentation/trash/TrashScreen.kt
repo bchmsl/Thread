@@ -52,6 +52,7 @@ import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.KindMark
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
@@ -97,6 +98,7 @@ internal fun TrashScreen(
     externalLabel: (ExternalReference) -> String,
 ) {
     val toasts = LocalToasts.current
+    val cards = LocalCards.current
     val scope = rememberCoroutineScope()
     var wide by remember { mutableStateOf(mediaMatches(WIDE_QUERY)) }
     DisposableEffect(Unit) {
@@ -150,13 +152,14 @@ internal fun TrashScreen(
                 launchNoteWrite(toasts, "“${entry.title}” could not be restored. Try again.") {
                     services.syncRemote(accountId).setInTrash(noteId, false)
                 }
-                open = { router.go(notePlace(noteId)) }
+                open = { if (cards != null) cards.openNote(noteId) else router.go(notePlace(noteId)) }
             }
             else -> {
                 workspace.restore(entry) ?: return
                 open =
                     when (entry) {
-                        is TrashEntry.TopicEntry -> ({ router.go(topicPlace(entry.topic)) })
+                        is TrashEntry.TopicEntry ->
+                            ({ if (cards != null) cards.openTopic(entry.topic.id) else router.go(topicPlace(entry.topic)) })
                         is TrashEntry.TaskEntry -> ({ workspace.task(entry.id)?.let(onOpenTask) })
                         is TrashEntry.ReminderEntry -> ({ onOpenTarget(entry.reminder.target) })
                         is TrashEntry.NoteEntry -> ({})

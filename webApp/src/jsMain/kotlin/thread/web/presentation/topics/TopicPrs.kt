@@ -1,14 +1,11 @@
 package thread.web.presentation.topics
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.browser.document
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
@@ -20,7 +17,6 @@ import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
-import org.w3c.dom.HTMLElement
 import thread.domain.external.PullRequestRef
 import thread.domain.topic.Topic
 import thread.domain.workspace.ExternalProvider
@@ -33,25 +29,21 @@ import thread.web.presentation.IconButton
 import thread.web.presentation.IconView
 import thread.web.presentation.KindMark
 import thread.web.presentation.LocalToasts
-import thread.web.presentation.Place
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.CONNECTIONS_PLACE
 import thread.web.presentation.external.CiIndicator
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.GoneBadge
-import thread.web.presentation.external.PullRequestDetailView
 import thread.web.presentation.external.RefreshPullsOnShow
 import thread.web.presentation.external.ReviewIndicator
-import thread.web.presentation.external.ViewBanner
-import thread.web.presentation.external.XD_TITLE_ID
-import thread.web.presentation.external.prItemPlace
-import thread.web.presentation.external.rememberPullRequest
-import thread.web.presentation.external.savedOrNull
+import thread.web.presentation.external.prPlace
 import thread.web.presentation.itemCard
+import thread.web.presentation.onPlainClick
+import thread.web.presentation.scopedId
 
 /**
- * The pull requests linked to the Topic (v3 topic.js `extSection('pr')`). Each row opens the pull request in the side
- * panel at 1000px and wider, else as its own page. Unlinking removes only the link; GitHub is not changed.
+ * The pull requests linked to the Topic (v3 topic.js `extSection('pr')`). Each row opens the pull request as a card
+ * (D70); [openId] is the one a card shows now. Unlinking removes only the link; GitHub is not changed.
  */
 @Composable
 internal fun TopicPrSection(
@@ -62,9 +54,10 @@ internal fun TopicPrSection(
     onToggle: () -> Unit,
     openId: String?,
     suggestions: TopicSuggestions,
-    onOpen: (PullRequestRef) -> Boolean,
+    onOpen: (PullRequestRef) -> Unit,
 ) {
     val toasts = LocalToasts.current
+    val linkId = scopedId("td-link-pr")
     var linking by remember(topic.id) { mutableStateOf(false) }
     val references = workspace.externalsOf(topic.id, ExternalProvider.GitHub)
     if (!gitHub.connected) {
@@ -87,7 +80,7 @@ internal fun TopicPrSection(
             Button({
                 type(ButtonType.Button)
                 classes("btn", "btn--text", "btn--sm")
-                id("td-link-pr")
+                id(linkId)
                 onClick { linking = true }
             }) {
                 IconView(Icon.Link, 15)
@@ -108,8 +101,8 @@ internal fun TopicPrSection(
             topic = topic,
             rows = suggestions.pulls,
             dismissed = suggestions.pullsDismissed,
-            href = { row -> row.pull?.let { prItemPlace(it, topic.id.value).hash } ?: "#" },
-            onOpen = { row -> row.pull?.let(onOpen) ?: false },
+            href = { row -> row.pull?.let { prPlace(it, review = it in gitHub.reviewRequested).hash } ?: "#" },
+            onOpen = { row -> row.pull?.let(onOpen) },
         )
     }
     if (linking) {
@@ -143,7 +136,7 @@ private fun LinkedPulls(
     topic: Topic,
     references: List<ExternalReference>,
     openId: String?,
-    onOpen: (PullRequestRef) -> Boolean,
+    onOpen: (PullRequestRef) -> Unit,
 ) {
     val toasts = LocalToasts.current
     // The rows show CI and reviews: GitHub is asked for the latest while they show (D67). The open one asks on its own.
@@ -163,11 +156,11 @@ private fun LinkedPulls(
                 }) {
                     KindMark(CardKind.PullRequest)
                     if (ref != null) {
-                        A(prItemPlace(ref, topic.id.value).hash, {
+                        A(prPlace(ref, review = ref in gitHub.reviewRequested).hash, {
                             classes("xrow__main")
                             attr("data-id", ref.id)
                             if (isOpen) attr("aria-current", "true")
-                            onClick { if (onOpen(ref)) it.preventDefault() }
+                            onPlainClick { onOpen(ref) }
                         }) {
                             Span({ classes("xrow__key") }) {
                                 B { Text(label) }
@@ -208,35 +201,5 @@ private fun LinkedPulls(
                 }
             }
         }
-    }
-}
-
-/** The v3 side panel for a linked pull request: next to the Topic at 1000px and wider, with "Back to sections". */
-@Composable
-internal fun TopicPrSidePanel(
-    workspace: WorkspaceModel,
-    gitHub: GitHubModel,
-    topic: Topic,
-    ref: PullRequestRef,
-    onClose: () -> Unit,
-    onGo: (Place) -> Unit,
-) {
-    var refresh by remember { mutableStateOf(0) }
-    val view = rememberPullRequest(gitHub, ref, refresh)
-    val titleShown = view?.savedOrNull != null
-    LaunchedEffect(ref, titleShown) {
-        if (titleShown) {
-            delay(16)
-            (document.getElementById(XD_TITLE_ID) as? HTMLElement)?.focus()
-        }
-    }
-    SidePanelCard(
-        kind = CardKind.PullRequest,
-        label = "Pull request",
-        pageHref = prItemPlace(ref, topic.id.value).hash,
-        onClose = onClose,
-    ) {
-        if (view != null) ViewBanner(view, gitHub.name, "pull requests") { onGo(CONNECTIONS_PLACE) }
-        PullRequestDetailView(gitHub, workspace, view, heading1 = false, onRefresh = { refresh++ }, onGo = onGo)
     }
 }

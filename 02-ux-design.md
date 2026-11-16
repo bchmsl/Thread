@@ -80,13 +80,12 @@ Width (D66), at 760 px and wider: when the lanes fit the page, nothing changes. 
 
 Header with title/status and short goal.
 Main flow: Additional information, personal Tasks, Notes.
-Additional information (D52) replaces v3's "Pick up here": the same tinted section, one text box (4 rows) labelled by its heading, placeholder "Context, links, decisions: anything worth keeping with this Topic". It saves on blur, a second after typing stops, and when the page leaves. A Topic saved before shows its "Where I left off" and "Next step" text in the box until it is edited.
+Additional information (D52) replaces v3's "Pick up here": the same tinted section, one text box (4 rows, behind Edit since D70) labelled by its heading, placeholder "Context, links, decisions: anything worth keeping with this Topic". It saves on blur, a second after typing stops, and when the page leaves. A Topic saved before shows its "Where I left off" and "Next step" text in the box until it is edited.
 Secondary region: Jira, PRs. Since D54 there is no Reminders section: Task rows show a bell with the next reminder, and "Topic reminders" appears only while the Topic has some left from an older build.
 Linked Jira tickets nest under their linked parent (D64), by Jira's `parent` field only; issue links stay flat. Nested lists, 25 px a level (16 px below 760 px) with a thin guide line, no deeper indent after 3 levels. A ticket whose parent is not linked shows a muted "in <KEY>" after its title; if an older ancestor is linked, it nests under the closest one and keeps the hint.
 Sections collapse; exact default expansion behavior to be designed.
-Open Jira/PR details in one contextual side panel on wide screens.
-Do not stack multiple competing sidebars; related links may collapse into the panel header.
-On narrow screens, show details as a routed screen with a clear return path.
+Tasks, Notes, Jira tickets and pull requests open as cards on top of the page (D70, see Item cards); the page stays as it was under the card. There is no side panel and no routed detail screen.
+Additional information shows as text while viewing (D70). Its small Edit opens the same box, focused; Done or Esc closes it. The text saves as before.
 
 Suggestions (D49, ADR-017). Not in the v3 prototype; placement queued as Q77.
 - A "Suggested" group under the linked rows of the Jira and Pull requests sections. Hidden when not connected or when there is nothing to suggest.
@@ -101,6 +100,7 @@ Suggestions (D49, ADR-017). Not in the v3 prototype; placement queued as Q77.
 
 ### Note editor
 
+A Note opens for viewing, in the Notes tab and in a card (D70): no caret, no toolbar, the title as a heading. Checklist items still tick and links open. Edit (or E) switches to writing; Done (or Esc) goes back. A new Note opens for writing. A Note the editor cannot read keeps Edit off.
 Visual formatting: headings, emphasis, lists, checkboxes, links.
 Quiet autosave indicator: Saving locally / Saved locally / Syncing / Synced / Needs attention.
 Do not show Synced before remote acknowledgment.
@@ -118,7 +118,21 @@ Jira status shows as a small lozenge colored by status category, like Jira (D50)
 Jira issue types show as Thread's own icons (D63): a white glyph on a colored tile for Epic, Story, Task, Subtask, Bug and Defect, and a gray one for any other type. Rows show the icon only, with the type name in its label and hover title; the ticket header shows the icon and the name. A ticket whose type is not on the device keeps the plain Jira mark, and so do places that mean Jira itself (nav, Settings, empty states, ⌘K "Search Jira", the "Link a Jira ticket" picker).
 The Jira "Assigned to me" tab has a "Current sprint only" checkbox above the list (D50). Off by default, remembered on this device, hidden when the site has no sprints. The label is the 40 px tap target. With it on and nothing in the sprint, the empty state says "Nothing assigned to you in the current sprint".
 Unsupported rich content should degrade to an understandable placeholder/link, not disappear silently.
-A Jira ticket and a pull request open as cards (D68, D69): a head card in the kind's band (key or state, title, people, actions), then each part as its own card. Jira: Description, Comments and Related issues on the left; Details and Topics on the right. A pull request is laid out like GitHub: the head card has the state, repository, title, the author (avatar and login, "You" for the viewer), the branches, CI and review, and three counts (commits, files changed, lines added and removed with GitHub's five blocks); Description on the left; Reviewers (avatar, login and review state, teams marked), Assignees and Topics on the right. The two columns switch on the width the detail has, not the window's, so the same layout fits the page, the Topic side panel and an 860 px dialog. On one column the order is head, Reviewers, Description, Assignees, Topics. The pull request's own "Updated" field and the "CI sources" field are gone; the "Updated 09:41" bar above keeps when the copy was downloaded, and a muted line still says when the token could not read a CI part.
+A Jira ticket and a pull request open as cards (D68, D69): a head card in the kind's band (key or state, title, people, actions), then each part as its own card. Jira: Description, Comments and Related issues on the left; Details and Topics on the right. A pull request is laid out like GitHub: the head card has the state, repository, title, the author (avatar and login, "You" for the viewer), the branches, CI and review, and three counts (commits, files changed, lines added and removed with GitHub's five blocks); Description on the left; Reviewers (avatar, login and review state, teams marked), Assignees and Topics on the right. The two columns switch on the width the detail has, not the window's, so the same layout fits the page and an 860 px card (D70). On one column the order is head, Reviewers, Description, Assignees, Topics. The pull request's own "Updated" field and the "CI sources" field are gone; the "Updated 09:41" bar above keeps when the copy was downloaded, and a muted line still says when the token could not read a CI part.
+
+### Item cards (D70)
+
+The rule: an item opened from its own tab opens there (a Note from the Notes list, a ticket from the Jira tab, a pull request from the Pull requests tab, a Topic from the Topics tab or its page). From anywhere else (Topic Details, Today, Inbox, reminders, toasts, Trash, the sync panel, ⌘K, another card) it opens as a card on top, and the page under it does not change. Views always navigate.
+
+- **Cards:** Task 560 px; Note 860 px at a fixed height (1100 px while Compare versions is open); Jira ticket and pull request 860 px, read-only; Topic 1100 px with Topic Details as on the page, its two columns from 900 px of card width (a container query). On wide screens a card hangs from the top, so it grows downward and the band stays put. Under 900 px it fills the screen.
+- **Band:** lane 3's kind band (D68) with Back (named after the card under it, when there is one), Edit or Done (Task and Note), "Open full page" (the item in its own tab; not for a Task) and Close. "Editing" shows next to the kind while editing. Under 600 px the button labels hide; each keeps its accessible name.
+- **One card at a time:** an item opened from a card replaces it, and Back returns. The browser's Back does the same, and a card's address (`?task=`, `?note=`, `?jira=`, `?pr=`, `?topic=`) survives a reload. A link to an item the page already shows shows the page. A link to a gone item shows a toast.
+- **View mode (#3):** Tasks and Notes open for viewing. Viewing opens with focus on Close. E edits (not while typing in a field); Esc while editing goes back to viewing and a second Esc closes. No Cancel: edits save as they are made. New items open for editing.
+- **Task card:** viewing shows the title, Complete task, what Today will do, and Topic, Planned day (with Today and Tomorrow chips that still plan it), Deadline and Remind me (add and delete still work). Editing shows the title box, Topic, planned day, deadline and reminders. The foot has "Open Topic" and Move to Trash.
+- **Topic card:** Topic Details on the page color, with its own Edit dialog and Additional information's Edit and Done; the band has no Edit. The foot has Move to Trash with Undo.
+- **Closing a Note** whose latest changes are not saved on this device (Close, Esc, a click outside) asks "Close this note?" with "Close anyway". The browser's Back does not ask.
+- Closing the last card returns focus to the row that opened the first one. Ids inside a card carry their own prefix.
+- A row that is a link, and a Jira card's related ticket, keeps the item's own page as its address: a middle click or a click with a modifier key opens that page in a new tab instead of a card.
 
 ### Quick capture
 
@@ -198,8 +212,7 @@ Direction D, "Band + Object", picked by the orchestrator while the owner was awa
 - A suggestion is the same card with a dashed edge and a quieter title. The "Suggested N" heading still folds them away (D65).
 - A Jira card's stub holds the issue type icon (D63) in place of the Jira mark, so a ticket shows one mark. The stub, the tear line and the blue still say Jira, and the stub keeps the Jira mark when the type is not known. The type shows on hover, and screen readers hear it in the card's link. A Topic's tickets under a linked parent (D64) are cards in the nested lists, one card gap apart.
 - ⌘K results are small cards of their kind. Settings' Jira and GitHub connections use the kinds' marks and accents.
-- A dialog card (an item opened large) starts with the kind's band: the mark and kind name, a back button on the left and the actions on the right. Below 600 px the button labels hide and the card fills the screen. A Topic's dialog card sits on the page color, like the Topic page.
-- In the Topic side panel (380 px) the band shows the mark only; the kind's name stays for screen readers.
+- An item card (D70, an item opened on top of another screen) starts with the kind's band: the mark and kind name, a back button on the left and the actions on the right. Under 900 px the card fills the screen, and under 600 px the button labels hide. A Topic's card sits on the page color, like the Topic page.
 
 ## Accessibility and interaction quality
 

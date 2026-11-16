@@ -106,8 +106,55 @@ internal class Router {
     }
 
     fun replace(to: Place) {
-        window.history.replaceState(null, "", to.hash)
+        // An entry that still shows a card keeps its card depth, so closing the card still returns to the page.
+        window.history.replaceState(if (to.hasCard) window.history.state else null, "", to.hash)
         place = to
+    }
+
+    /**
+     * How many card entries this one sits on, counting itself: 0 for a page, and for a card that came from a link or a
+     * reload with no entry of its own.
+     */
+    val cardDepth: Int
+        get() {
+            val state: dynamic = window.history.state ?: return 0
+            return state.threadCard as? Int ?: 0
+        }
+
+    /** The card under this one, which Back returns to, or null when the entry under it is the page. */
+    val previousCard: CardItem?
+        get() {
+            if (cardDepth < 2) return null
+            val state: dynamic = window.history.state ?: return null
+            return (state.threadPrev as? String)?.let { Place.parse(it).card }
+        }
+
+    /**
+     * Opens a card on the page: a history entry of its own, so browser Back closes it, or returns to the card before
+     * it. A card that came from a link has no entry under it, so the next card replaces it.
+     */
+    fun openCard(to: Place) {
+        if (to.hash == window.location.hash) return
+        if (place.hasCard && cardDepth == 0) {
+            replace(to)
+            return
+        }
+        val state = js("({})")
+        state.threadCard = cardDepth + 1
+        state.threadPrev = window.location.hash
+        window.history.pushState(state, "", to.hash)
+        place = to
+    }
+
+    /** Closes the card: back to the page entry under it, or, for a card from a link, the page without the card. */
+    fun closeCard() {
+        val depth = cardDepth
+        if (depth > 0) window.history.go(-depth) else replace(place.withoutCards())
+    }
+
+    /** The card before this one. */
+    fun back() {
+        window.history.back()
     }
 
     /** Listens for hash changes (links, back, forward). Returns a function that stops listening. */
@@ -118,6 +165,11 @@ internal class Router {
             if (hash.isEmpty() || hash.startsWith("#/")) place = Place.parse(hash)
         }
         window.addEventListener("hashchange", listener)
-        return { window.removeEventListener("hashchange", listener) }
+        // Back and forward between card entries made with pushState.
+        window.addEventListener("popstate", listener)
+        return {
+            window.removeEventListener("hashchange", listener)
+            window.removeEventListener("popstate", listener)
+        }
     }
 }

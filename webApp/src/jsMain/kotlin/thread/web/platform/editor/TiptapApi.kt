@@ -17,6 +17,9 @@ internal external interface TiptapExtension {
 internal external interface TiptapChain {
     fun focus(): TiptapChain
 
+    /** Focuses at "start", "end" or "all". */
+    fun focus(position: String): TiptapChain
+
     fun toggleBold(): TiptapChain
 
     fun toggleItalic(): TiptapChain

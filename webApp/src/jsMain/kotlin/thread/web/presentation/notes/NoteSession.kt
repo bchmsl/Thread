@@ -47,11 +47,17 @@ import thread.web.platform.onPageLeave
 import thread.web.platform.warnBeforeUnload
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalIdScope
 import thread.web.presentation.ToastState
 
 /**
  * One open Note. Edits go to [DraftAutosaver] (this device) and, when [accountId] is set, to [NoteSyncer] (the
  * server). The status line and banners show only what the device or the server confirmed.
+ *
+ * Not [editing] (view mode, D70): the title and text show as a page. Checklist items still tick, links open, and every
+ * banner, Reminder and Move to Trash still work; a tick saves like any edit. With [onEditing], the status bar holds
+ * Edit and Done (the Notes tab); a card holds them in its band instead. [onCanEdit] says whether the editor can edit
+ * this note at all: it cannot when it failed to read it.
  */
 @Composable
 internal fun NoteSession(
@@ -61,6 +67,9 @@ internal fun NoteSession(
     ready: NoteLoad.Ready,
     toasts: ToastState,
     onCompareShown: (Boolean) -> Unit,
+    editing: Boolean = true,
+    onEditing: ((Boolean) -> Unit)? = null,
+    onCanEdit: (Boolean) -> Unit = {},
     focusTitle: Boolean = false,
     onTitleChange: (String) -> Unit = {},
     onSaveState: (NoteSaveState) -> Unit = {},
@@ -80,6 +89,8 @@ internal fun NoteSession(
     var editorFailure by remember { mutableStateOf<Throwable?>(null) }
     var comparing by remember { mutableStateOf(false) }
     var online by remember { mutableStateOf(isOnline()) }
+    var toggle by remember { mutableStateOf<HTMLElement?>(null) }
+    val ids = LocalIdScope.current
     val syncer =
         remember {
             accountId?.let { id ->
@@ -138,9 +149,20 @@ internal fun NoteSession(
     val showCompare = comparing && conflict != null
     LaunchedEffect(showCompare) {
         onCompareShown(showCompare)
-        if (showCompare) (document.getElementById("cmp-h") as? HTMLElement)?.focus()
+        if (showCompare) (document.getElementById("${ids}cmp-h") as? HTMLElement)?.focus()
     }
     DisposableEffect(Unit) { onDispose { onCompareShown(false) } }
+    // Edit puts the cursor at the end of the text; Done leaves the text as a page again, with focus on Edit, so E works
+    // again at once (a card's band does the same for its own Edit).
+    var shownEditing by remember { mutableStateOf(editing) }
+    LaunchedEffect(editing, editor) {
+        val current = editor ?: return@LaunchedEffect
+        current.setEditable(editing)
+        if (editing && !shownEditing) current.focusEnd()
+        if (!editing && shownEditing) toggle?.focus()
+        shownEditing = editing
+    }
+    LaunchedEffect(editorFailure == null) { onCanEdit(editorFailure == null) }
 
     fun edited(draft: LocalDraft) {
         if (draft == autosaver.current) return
@@ -161,7 +183,7 @@ internal fun NoteSession(
             return
         }
         comparing = false
-        (document.getElementById("npane") as? HTMLElement)?.focus()
+        (document.getElementById("${ids}npane") as? HTMLElement)?.focus()
         onResolved(choice, copyId)
     }
 
@@ -177,7 +199,7 @@ internal fun NoteSession(
         return
     }
 
-    Div({ id("nbanners") }) {
+    Div({ id("${ids}nbanners") }) {
         when {
             editorFailure != null -> EditorFailedBanner(onCopy = ::copyNoteText)
             saveState == NoteSaveState.LocalFailed ->
@@ -212,10 +234,26 @@ internal fun NoteSession(
     Div({ classes("pagebar") }) {
         SaveStatus(saveState, editorFailed = editorFailure != null, syncedAt = syncedAt)
         Span({ classes("pagebar__sp") })
+        if (onEditing != null && editorFailure == null) {
+            Button({
+                classes("btn", "btn--sm", if (editing) "btn--primary" else "btn--line", "pagebar__edit")
+                type(ButtonType.Button)
+                attr("aria-keyshortcuts", if (editing) "Escape" else "E")
+                attr("title", if (editing) "Done editing (Esc)" else "Edit (E)")
+                ref {
+                    toggle = it
+                    onDispose { toggle = null }
+                }
+                onClick { onEditing(!editing) }
+            }) {
+                IconView(if (editing) Icon.Check else Icon.Edit, 15)
+                Text(if (editing) "Done" else "Edit")
+            }
+        }
         if (onReminder != null && sync?.inTrash != true) {
             Button({
                 classes("btn", "btn--text", "btn--sm")
-                id("note-rem")
+                id("${ids}note-rem")
                 type(ButtonType.Button)
                 onClick { onReminder() }
             }) {
@@ -226,7 +264,7 @@ internal fun NoteSession(
         if (syncer != null && sync?.inTrash != true) {
             Button({
                 classes("btn", "btn--text", "btn--sm", "btn--danger-text")
-                id("note-trash")
+                id("${ids}note-trash")
                 type(ButtonType.Button)
                 onClick {
                     syncer.setInTrash(true)
@@ -243,35 +281,32 @@ internal fun NoteSession(
         attr("aria-label", "Note")
     }) {
         filing()
-        H2({ classes("vh") }) { Text("Note: ${title.ifBlank { UNTITLED }}") }
-        Label("note-title", { classes("vh") }) { Text("Note title") }
-        TextArea(title) {
-            classes("page__title")
-            id("note-title")
-            attr("rows", "1")
-            attr("placeholder", UNTITLED)
-            if (editorFailure != null) attr("readonly", "")
-            onInput { event ->
-                title = event.value
-                edited(autosaver.current.copy(title = event.value))
-            }
-            onKeyDown { event ->
-                if (event.key == "Enter" && (event.nativeEvent as? KeyboardEvent)?.isComposing != true) {
-                    event.preventDefault()
-                    editor?.focus()
-                }
-            }
-            ref { element ->
-                titleElement = element
-                onDispose { titleElement = null }
-            }
+        if (!editing) {
+            H2({
+                classes("page__title")
+                if (title.isBlank()) classes("is-empty")
+            }) { Text(title.ifBlank { UNTITLED }) }
+        } else {
+            H2({ classes("vh") }) { Text("Note: ${title.ifBlank { UNTITLED }}") }
+            Label("${ids}note-title", { classes("vh") }) { Text("Note title") }
+            TitleField(
+                title = title,
+                readOnly = editorFailure != null,
+                onInput = { text ->
+                    title = text
+                    edited(autosaver.current.copy(title = text))
+                },
+                onEnter = { editor?.focus() },
+                onElement = { titleElement = it },
+            )
+            NoteToolbar(
+                formatting = formatting,
+                editor = editor,
+                editorId = "${ids}editor",
+                enabled = editorFailure == null,
+                onLinkDone = toasts::show,
+            )
         }
-        NoteToolbar(
-            formatting = formatting,
-            editor = editor,
-            enabled = editorFailure == null,
-            onLinkDone = toasts::show,
-        )
         Div({
             classes("editor-mount")
             ref { element ->
@@ -280,6 +315,8 @@ internal fun NoteSession(
                         mount = element,
                         // The newest content: the compare view can replace it while the editor is not shown.
                         initial = autosaver.current.body,
+                        editable = editing,
+                        elementId = "${ids}editor",
                         onChange = { body -> edited(autosaver.current.copy(body = body)) },
                         onFormatting = { formatting = it },
                         onFailure = { editorFailure = it },
@@ -294,6 +331,36 @@ internal fun NoteSession(
     }
 }
 
+/** The title box while editing. Enter moves on to the text. */
+@Composable
+private fun TitleField(
+    title: String,
+    readOnly: Boolean,
+    onInput: (String) -> Unit,
+    onEnter: () -> Unit,
+    onElement: (HTMLElement?) -> Unit,
+) {
+    val ids = LocalIdScope.current
+    TextArea(title) {
+        classes("page__title")
+        id("${ids}note-title")
+        attr("rows", "1")
+        attr("placeholder", UNTITLED)
+        if (readOnly) attr("readonly", "")
+        onInput { event -> onInput(event.value) }
+        onKeyDown { event ->
+            if (event.key == "Enter" && (event.nativeEvent as? KeyboardEvent)?.isComposing != true) {
+                event.preventDefault()
+                onEnter()
+            }
+        }
+        ref { element ->
+            onElement(element)
+            onDispose { onElement(null) }
+        }
+    }
+}
+
 @Composable
 private fun SaveStatus(
     state: NoteSaveState,
@@ -301,9 +368,10 @@ private fun SaveStatus(
     syncedAt: String?,
 ) {
     val view = if (editorFailed) StatusView(Icon.Alert, "Needs attention", "Editing is off", "tone-bad") else statusView(state, syncedAt)
+    val ids = LocalIdScope.current
     P({
         classes("savest", view.tone)
-        id("nsave")
+        id("${ids}nsave")
         attr("role", "status")
         attr("aria-live", "polite")
         attr("data-status", if (editorFailed) "EditorFailed" else state.name)

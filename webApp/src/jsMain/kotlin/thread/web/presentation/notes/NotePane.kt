@@ -35,6 +35,7 @@ import thread.domain.workspace.setNoteTopics
 import thread.web.platform.WallClock
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
+import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Router
@@ -43,6 +44,8 @@ import thread.web.presentation.SyncProblem
 import thread.web.presentation.SyncReport
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.onPlainClick
+import thread.web.presentation.scopedId
 import thread.web.presentation.shortDate
 import thread.web.presentation.tasks.ReminderDialog
 import thread.web.presentation.topics.HexSize
@@ -51,9 +54,21 @@ import thread.web.presentation.topics.TopicTag
 import thread.web.presentation.topics.TopicsPickerDialog
 import thread.web.presentation.topics.topicPlace
 
+/** How a Note shows as a card on another screen (D70) instead of in the Notes tab. */
+internal class NoteCardMode(
+    val onClose: () -> Unit,
+    /** Compare versions is open: the card widens for its two columns. */
+    val onComparing: (Boolean) -> Unit,
+)
+
 /**
  * The open Note: its filing (Topics, Inbox) from the workspace listing, and its text from this device and the server
  * through [NoteSession]. [listing] is null for a Note made here a moment ago whose listing the store has not shown yet.
+ * [card] is set when the Note shows as a card on another screen.
+ *
+ * [editing] is the Note's mode (D70): it opens for viewing, and Edit (E) or Done (Esc) call [onEditing]. In the Notes
+ * tab the status bar holds Edit and Done; a card holds them in its band. [onCanEdit] reports whether the editor could
+ * read the Note, so Edit can stay off when it could not.
  */
 @Composable
 internal fun NotePane(
@@ -66,24 +81,33 @@ internal fun NotePane(
     syncCenter: SyncCenter,
     onTitle: (String) -> Unit,
     onState: (NoteSaveState?) -> Unit,
+    editing: Boolean,
+    onEditing: (Boolean) -> Unit,
+    onCanEdit: (Boolean) -> Unit,
+    card: NoteCardMode? = null,
 ) {
     val toasts = LocalToasts.current
     val now = LocalNow.current
+    val cards = LocalCards.current
     var comparing by remember { mutableStateOf(false) }
     var reminding by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(listing?.title.orEmpty()) }
     val shownTitle = title.ifBlank { UNTITLED_NOTE }
     val topics = workspace.topicsOf(noteId)
+    // A card reports under its own name, so it never clears the Notes tab's report.
+    val syncSource = if (card != null) NOTE_CARD_SYNC_SOURCE else NOTE_SYNC_SOURCE
+    // From a card, another Note opens as a card too; the Notes tab opens it in the tab.
+    val openNote: (NoteId) -> Unit = { id -> if (card != null && cards != null) cards.openNote(id) else router.go(notePlace(id)) }
 
     DisposableEffect(noteId) {
         onDispose {
             onState(null)
-            syncCenter.report(NOTE_SYNC_SOURCE, null)
+            syncCenter.report(syncSource, null)
         }
     }
 
-    if (!comparing) BackToNotes()
+    if (!comparing && card == null) BackToNotes()
     NoteLoader(services, accountId, noteId) { store, ready ->
         NoteSession(
             services = services,
@@ -91,7 +115,13 @@ internal fun NotePane(
             store = store,
             ready = ready,
             toasts = toasts,
-            onCompareShown = { comparing = it },
+            editing = editing,
+            onEditing = if (card == null) onEditing else null,
+            onCanEdit = onCanEdit,
+            onCompareShown = {
+                comparing = it
+                card?.onComparing?.invoke(it)
+            },
             focusTitle = workspace.isMadeHere(noteId),
             onTitleChange = {
                 title = it
@@ -99,18 +129,18 @@ internal fun NotePane(
             },
             onSaveState = { state ->
                 onState(state)
-                syncCenter.report(NOTE_SYNC_SOURCE, SyncReport(listOf(state), listOfNotNull(noteProblem(noteId, shownTitle, state))))
+                syncCenter.report(syncSource, SyncReport(listOf(state), listOfNotNull(noteProblem(noteId, shownTitle, state))))
             },
             onReminder = { reminding = true },
             onTrashed = { trashedTitle ->
-                router.replace(View.Notes.place)
+                if (card != null) card.onClose() else router.replace(View.Notes.place)
                 toasts.show(
                     "Moved to Trash: ${trashedTitle.ifBlank { UNTITLED_NOTE }}",
                     undo = {
                         launchNoteWrite(toasts, "Restoring the note was not saved. The server refused the change.") {
                             services.syncRemote(accountId).setInTrash(noteId, false)
                         }
-                        router.go(notePlace(noteId))
+                        openNote(noteId)
                     },
                 )
             },
@@ -120,7 +150,7 @@ internal fun NotePane(
                     ConflictChoice.KeepBoth ->
                         toasts.show(
                             "Kept both. The other device's copy is a second note.",
-                            open = { router.go(notePlace(copyId)) },
+                            open = { openNote(copyId) },
                             openLabel = "Open copy",
                         )
                     ConflictChoice.KeepThisDevice ->
@@ -175,6 +205,7 @@ private fun NoteFiling(
     topics: List<Topic>,
     onChange: () -> Unit,
 ) {
+    val cards = LocalCards.current
     if (topics.isNotEmpty()) {
         Div({
             classes("page__stickers")
@@ -184,10 +215,12 @@ private fun NoteFiling(
                 A(topicPlace(topic).hash, {
                     tabIndex(-1)
                     attr("title", topic.name)
+                    if (cards != null) onPlainClick { cards.openTopic(topic.id) }
                 }) { TopicHex(topic.name, topic.color, HexSize.Md) }
             }
         }
     }
+    val linkId = scopedId("note-link")
     Div({ classes("page__links") }) {
         if (topics.isNotEmpty()) {
             Span { Text("Linked to") }
@@ -198,7 +231,7 @@ private fun NoteFiling(
         Button({
             classes("btn", "btn--text", "btn--sm")
             type(ButtonType.Button)
-            id("note-link")
+            id(linkId)
             onClick { onChange() }
         }) {
             IconView(Icon.Link, 15)
