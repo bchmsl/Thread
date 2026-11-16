@@ -11,6 +11,7 @@ import thread.domain.external.ConnectionStore
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalRecordSource
 import thread.domain.external.ExternalResult
+import thread.domain.external.GitHubConnection
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestList
@@ -44,7 +45,7 @@ class GitHubPullRequestLists(
 
     override suspend fun readSaved(key: PullRequestList): Saved<PullRequestListPage>? {
         val (savedAt, bundle) = SavedRecord.decode(lists.get(storageKey(key)) ?: return null, SCOPE) ?: return null
-        return GitHubJson.listPage(bundle)?.let { Saved(it, savedAt) }
+        return GitHubJson.listPage(bundle, savedViewer())?.let { Saved(it, savedAt) }
     }
 
     override suspend fun refresh(
@@ -59,13 +60,39 @@ class GitHubPullRequestLists(
                 is ExternalResult.Problem -> return result
             }
         val bundle = GitHubJson.listBundle(answer) ?: return ExternalResult.Problem(BAD_RESPONSE)
-        val page = GitHubJson.listPage(bundle) ?: return ExternalResult.Problem(BAD_RESPONSE)
+        val page = GitHubJson.listPage(bundle, viewer(connection, nowMillis)) ?: return ExternalResult.Problem(BAD_RESPONSE)
         val stored = succeeded { lists.put(storageKey(key), SavedRecord.encode(nowMillis, SCOPE, bundle)) }
         return ExternalResult.Ok(Refreshed(Saved(page, nowMillis), stored))
     }
 
     override suspend fun forgetSaved(key: PullRequestList) {
         lists.delete(storageKey(key))
+    }
+
+    /**
+     * The token's own login (owner change #8): saved next to the connection, else asked once with `GET /user` and
+     * saved. Any problem leaves it unknown for now, and the list still loads; the next refresh asks again. A token
+     * changed while GitHub answered keeps the answer out of the store: it belongs to the old token.
+     */
+    private suspend fun viewer(
+        connection: GitHubConnection,
+        nowMillis: Long,
+    ): String? {
+        savedViewer()?.let { return it }
+        val answer =
+            when (val result = client.viewer(connection, nowMillis)) {
+                is ExternalResult.Ok -> result.value
+                is ExternalResult.Problem -> return null
+            }
+        val login = GitHubJson.viewerLogin(answer) ?: return null
+        succeeded { if (connections.gitHub() == connection) connections.saveGitHubViewer(login) }
+        return login
+    }
+
+    private suspend fun savedViewer(): String? {
+        var login: String? = null
+        succeeded { login = connections.gitHubViewer() }
+        return login
     }
 
     private fun storageKey(list: PullRequestList): String =

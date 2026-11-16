@@ -3,6 +3,7 @@ package thread.web.presentation.external
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -16,8 +17,10 @@ import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
+import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
@@ -28,7 +31,11 @@ import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
 import thread.domain.external.PullRequestRef
 import thread.domain.external.PullRequestSummary
+import thread.domain.external.RepositoryPullRequests
+import thread.domain.external.pullRequestsByRepository
 import thread.domain.workspace.gitHubReference
+import thread.web.platform.readDeviceText
+import thread.web.platform.writeDeviceText
 import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
@@ -74,8 +81,18 @@ internal fun PrScreen(
             ?.items
             .orEmpty()
 
-    // At 1000px and wider the first pull request of the list shows when none is picked (v3 shownId).
-    val shownRef = openRef ?: if (wide) rows.firstOrNull()?.ref else null
+    // At 1000px and wider the first pull request of the list shows when none is picked (v3 shownId): the top row of the
+    // repository groups (owner change #8).
+    val shownRef =
+        openRef ?: if (wide) {
+            pullRequestsByRepository(rows)
+                .firstOrNull()
+                ?.pulls
+                ?.firstOrNull()
+                ?.ref
+        } else {
+            null
+        }
     var pullRefresh by remember { mutableStateOf(0) }
     val pullView = rememberPullRequest(gitHub, shownRef, pullRefresh)
     var focusTitle by remember { mutableStateOf(false) }
@@ -243,9 +260,27 @@ private fun ListPanel(
                     EmptyState(Icon.Pr, "No open pull requests", "Your open pull requests show here.")
                 }
             } else {
-                Ul({ classes("md__scroll") }) {
-                    page.items.forEach { pull ->
-                        PrRow(pull, prPlace(pull.ref, reviewTab), pull.ref == shownRef, mine = !reviewTab, gitHub, workspace, onOpen)
+                val list = if (reviewTab) PullRequestList.ReviewRequested else PullRequestList.Mine
+                Div({ classes("md__scroll", "prgroups") }) {
+                    pullRequestsByRepository(page.items).forEachIndexed { index, group ->
+                        key(list, group.repo.lowercase()) {
+                            RepositoryGroup(group, list, index) {
+                                group.pulls.forEach { pull ->
+                                    key(pull.ref.id) {
+                                        PrRow(
+                                            pull,
+                                            prPlace(pull.ref, reviewTab),
+                                            pull.ref == shownRef,
+                                            !reviewTab,
+                                            page.viewer,
+                                            gitHub,
+                                            workspace,
+                                            onOpen,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 if (page.totalCount > page.items.size || page.isIncomplete) {
@@ -259,8 +294,63 @@ private fun ListPanel(
 }
 
 /**
- * v3 `X.prRow`: state and repository, title and number, CI and review state, author and Topics. CI and review state
- * show once the pull request was opened on this device (one list request cannot carry them, ADR-007).
+ * One repository's pull requests in a list (owner change #8): a heading with `owner/name` and the count, which opens
+ * and closes the group like Today's groups (D53). This device remembers it per list and repository.
+ */
+@Composable
+private fun RepositoryGroup(
+    group: RepositoryPullRequests,
+    list: PullRequestList,
+    index: Int,
+    rows: @Composable () -> Unit,
+) {
+    val key = "${list.name.lowercase()}.${group.repo.lowercase()}"
+    val id = "prg-${list.name.lowercase()}-$index"
+    var open by remember(key) { mutableStateOf(readDeviceText("$PR_GROUP_OPEN_NAME.$key") != "0") }
+    val owner = group.repo.substringBefore('/')
+    val name = group.repo.substringAfter('/')
+    Section({
+        classes("tgroup", "prgroup")
+        if (!open) classes("is-closed")
+        attr("aria-labelledby", id)
+    }) {
+        H2({
+            classes("tgroup__head")
+            id(id)
+        }) {
+            Button({
+                type(ButtonType.Button)
+                classes("tgroup__toggle")
+                attr("aria-expanded", open.toString())
+                attr("aria-controls", "$id-b")
+                onClick {
+                    open = !open
+                    writeDeviceText("$PR_GROUP_OPEN_NAME.$key", if (open) "1" else "0")
+                }
+            }) {
+                Span({ classes("chev") }) { IconView(Icon.ChevDown, 18) }
+                Span({ classes("prgroup__name") }) {
+                    Span({ classes("prgroup__owner") }) { Text("$owner/") }
+                    Text(name)
+                }
+                Span({ classes("n") }) { Text(group.pulls.size.toString()) }
+            }
+        }
+        Ul({
+            classes("prgroup__body")
+            id("$id-b")
+            if (!open) attr("hidden", "")
+        }) { if (open) rows() }
+    }
+}
+
+/** Where this device keeps whether a repository group is open, per list and repository: `1` or `0`. Not synced. */
+private const val PR_GROUP_OPEN_NAME = "thread.prs.open"
+
+/**
+ * v3 `X.prRow`, in a repository group (owner change #8): state and the assignees; title and number; CI and review
+ * state; the author (Review requested only: Mine is always yours) and Topics. The repository is the group's heading. CI
+ * and review state show once the pull request was opened on this device (one list request cannot carry them, ADR-007).
  */
 @Composable
 private fun PrRow(
@@ -268,6 +358,7 @@ private fun PrRow(
     to: Place,
     current: Boolean,
     mine: Boolean,
+    viewer: String?,
     gitHub: GitHubModel,
     workspace: WorkspaceModel,
     onOpen: (PullRequestRef) -> Unit,
@@ -286,7 +377,7 @@ private fun PrRow(
         }) {
             Span({ classes("xi__top") }) {
                 StatePill(pull.isDraft)
-                Span { Text("${pull.ref.owner}/${pull.ref.repo}") }
+                Assignees(pull.assignees, viewer)
             }
             Span({ classes("xi__title") }) {
                 Text("${pull.title} ")
@@ -304,7 +395,7 @@ private fun PrRow(
                 }
             }
             Span({ classes("xi__meta") }) {
-                Span { Text(if (mine) "You" else pull.author ?: "Someone") }
+                if (!mine) Span({ classes("xi__by") }) { Text("by ${pull.author ?: "someone"}") }
                 if (topics.isEmpty()) Span { Text("Not linked") } else topics.forEach { PlainTopicTag(it) }
             }
         }

@@ -34,8 +34,10 @@ Update 2026-11-16 (D57): the description is shown as formatted text, parsed from
 | Mine | `GET /search/issues?q=is:pr is:open author:@me archived:false&sort=updated&order=desc&per_page=50` |
 | Review requested | Same with `review-requested:@me` |
 | One pull request | `GET /repos/{o}/{r}/pulls/{n}`, `…/pulls/{n}/reviews?per_page=100`, `…/commits/{sha}/status?per_page=100`, `…/commits/{sha}/check-runs?per_page=100` |
+| The viewer (D62) | `GET /user`, with a list refresh, only while the token's own login is not saved yet. It counts against the core limit. |
 
 - The list rows link to `owner/repo#number`. Owner and repo names must match `A-Z a-z 0-9 _ . -`, and the head SHA must be a full SHA, because both go into request paths.
+- **Assignees and the viewer (D62):** list rows keep each assignee's `login` and numeric `id` from the search answer. A login must match `A-Z a-z 0-9 _ . - [ ]` (apps end in `[bot]`), or that person is left out. The avatar address is built from the id, `https://avatars.githubusercontent.com/u/{id}?s=40&v=4`; Thread never uses `avatar_url` or any other address from an answer, so no other image host can appear (ADR-015). The 40 px size stays sharp at 20 px on a 2x screen. The viewer's login from `GET /user` passes the same check and is saved with the connection (ADR-008), not in the cache. A failed or odd answer leaves it unknown: the list still loads, rows show the login instead of "You", and the next refresh asks again. A token changed while GitHub answered keeps that answer out of the store.
 - When the token cannot read statuses or check runs (403 or 404), the pull request still loads. "CI sources" then says which part was not readable, and the CI state comes from the readable part only (G3).
 
 ### Indicators (pure domain rules, `PullRequestStates`)
@@ -46,7 +48,7 @@ Update 2026-11-16 (D57): the description is shown as formatted text, parsed from
 - **Description (D57):** GitHub Markdown, parsed in shared Kotlin (`GitHubMarkdown`, `shared/data` commonMain) into the read-only `ExternalDocument` blocks and drawn as DOM elements by `ExternalDocumentView`. Thread does not ask GitHub for rendered HTML, and no HTML from GitHub is inserted. Owner's words: "Also pull requests should be rendered as formatted text as it is on Github pull request". Replaces the earlier rule "plain text, split into paragraphs on blank lines".
   - Covers CommonMark plus GitHub's tables, task lists (read-only checkboxes), strikethrough, bare `https://` and `www.` links, `#123` (an issue or pull request in the same repository) and `@name` (the GitHub account). A team (`@org/team`) and an email address stay text.
   - A newline inside a paragraph is a line break, as GitHub shows pull request descriptions.
-  - Images become a link "Image: <alt>" that opens the image, because the CSP loads images only from Thread itself.
+  - Images become a link "Image: <alt>" that opens the image, because the CSP loads images only from Thread itself (and, since D62, GitHub's avatar host, which description images do not use).
   - Raw HTML stays visible text, except three things GitHub never shows as text: comments are hidden, `<br>` is a line break and `<img>` becomes an image link. `<details>`, `<summary>`, `<kbd>` and other tags show as typed.
   - Every link passes the Notes link rule (`https`, `http`, `mailto`, no spaces or control characters) or stays plain text. Links open in a new tab with `rel="noopener noreferrer"` (D46).
   - Caps against hostile text: 65,536 characters (GitHub's own limit), 2,000 blocks, tables of 100 rows by 20 columns, 16 levels of nesting. The screen says what it did not show ("The rest of this description", "The rest of this table", "Deeply nested content"). A wide table or code block scrolls inside its own box, and quotes and lists stop indenting after four levels, so the page never scrolls sideways, even at 390 px.
@@ -73,6 +75,7 @@ Update 2026-11-16 (D57): the description is shown as formatted text, parsed from
 
 - IndexedDB `thread-external-cache`, stores `prLists` (`mine`, `review-requested`) and `pullRequests` (by `owner/repo#number`). Fixture mode uses `thread-external-cache-synthetic`.
 - A record is `{recordVersion: 1, savedAtMillis, scope: "github", data}`. `data` keeps only what Thread shows.
+- A list row in `data` keeps `number`, `title`, `user.login`, `draft`, `updated_at`, `repository_url` and, since D62, `assignees: [{login, id}]` (always an array; GitHub's `null` is saved as none). A list saved before D62 has no `assignees` key: its rows show no assignees until the next refresh. The record version stays 1, because reading the old shape is still correct.
 - A copy is refreshed when it is opened, or with Refresh. There is no background refresh and no ETag revalidation yet.
 - "Delete saved copies" clears all four cache stores. Disconnect hides the copies until GitHub is connected again (v3).
 - Nothing goes to Firestore. The worker (ADR-008) never sees these requests.
@@ -91,3 +94,4 @@ Update 2026-11-16 (D57): the description is shown as formatted text, parsed from
 - Why check runs were readable (see Context), and so whether a fine-grained token without extra permissions can read them.
 - Whether the lists held the right pull requests and the detail looked right. The log has no content, and the owner has not reported on it.
 - A token waiting for organization approval, and paging (`Link`).
+- D62, checked on SYNTHETIC fixtures only: `GET /user` with a fine-grained token (GitHub's docs did not confirm it for every token kind), real assignee answers, and real avatar images. If `GET /user` fails, rows show the login instead of "You"; nothing else breaks.

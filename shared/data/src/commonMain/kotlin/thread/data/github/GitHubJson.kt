@@ -12,12 +12,14 @@ import thread.data.external.asObject
 import thread.data.external.bool
 import thread.data.external.copy
 import thread.data.external.int
+import thread.data.external.long
 import thread.data.external.obj
 import thread.data.external.objects
 import thread.data.external.pick
 import thread.data.external.putIfNotNull
 import thread.data.external.str
 import thread.domain.external.CheckOutcome
+import thread.domain.external.GitHubPerson
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestListPage
@@ -54,20 +56,36 @@ internal object GitHubJson {
                         copy(item, "draft")
                         copy(item, "updated_at")
                         copy(item, "repository_url")
+                        // Always an array, so a saved copy from before owner change #8 (no key) reads as "not known".
+                        put("assignees", JsonArray(item.objects("assignees").map { it.pick("login", "id") }))
                     }
                 }
             put("items", JsonArray(kept))
         }
     }
 
-    fun listPage(bundle: JsonObject): PullRequestListPage? {
+    fun listPage(
+        bundle: JsonObject,
+        viewer: String? = null,
+    ): PullRequestListPage? {
         val items = bundle.arr("items") ?: return null
         val summaries = items.mapNotNull { it.asObject()?.let(::summary) }
         return PullRequestListPage(
             items = summaries,
             totalCount = bundle.int("total_count") ?: summaries.size,
             isIncomplete = bundle.bool("incomplete_results") ?: false,
+            viewer = viewer,
         )
+    }
+
+    /** The login in a `GET /user` answer, or null. */
+    fun viewerLogin(user: JsonElement): String? = user.asObject()?.str("login")?.takeIf { LOGIN.matches(it) }
+
+    /** A saved or fresh assignee: a login Thread can show, and the avatar address built from the numeric account id. */
+    private fun person(raw: JsonObject): GitHubPerson? {
+        val login = raw.str("login")?.takeIf { LOGIN.matches(it) } ?: return null
+        val avatar = raw.long("id")?.takeIf { it > 0 }?.let { LinkHref.parse("$AVATARS/u/$it?s=$AVATAR_PIXELS&v=4") }
+        return GitHubPerson(login, avatar)
     }
 
     private fun summary(item: JsonObject): PullRequestSummary? {
@@ -81,6 +99,7 @@ internal object GitHubJson {
             isDraft = item.bool("draft") ?: false,
             updatedAtMillis = ExternalTime.parseMillis(item.str("updated_at")),
             webUrl = webUrl(ref),
+            assignees = item.arr("assignees")?.mapNotNull { it.asObject()?.let(::person) },
         )
     }
 
@@ -261,4 +280,13 @@ internal object GitHubJson {
     }
 
     private const val GHOST = "ghost"
+
+    /** GitHub logins: letters, digits and dashes; apps add `[bot]`. Thread shows them only as text. */
+    private val LOGIN = Regex("^[A-Za-z0-9][A-Za-z0-9_.\\[\\]-]{0,99}$")
+
+    /** The only image host Thread loads from (CSP `img-src`, owner change #8). */
+    private const val AVATARS = "https://avatars.githubusercontent.com"
+
+    /** 40 px: sharp for a 20 px avatar on a 2x screen. */
+    private const val AVATAR_PIXELS = 40
 }

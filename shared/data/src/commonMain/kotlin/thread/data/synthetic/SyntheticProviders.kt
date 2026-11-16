@@ -61,12 +61,22 @@ class SyntheticConnectionStore : ConnectionStore {
 
     override suspend fun gitHub(): GitHubConnection? = gitHub
 
+    private var gitHubViewer: String? = null
+
     override suspend fun saveGitHub(connection: GitHubConnection) {
+        if (connection.token.reveal() != gitHub?.token?.reveal()) gitHubViewer = null
         gitHub = connection
     }
 
     override suspend fun clearGitHub() {
         gitHub = null
+        gitHubViewer = null
+    }
+
+    override suspend fun gitHubViewer(): String? = gitHubViewer
+
+    override suspend fun saveGitHubViewer(login: String) {
+        gitHubViewer = login
     }
 }
 
@@ -169,6 +179,7 @@ object SyntheticFixtures {
         path: String,
         query: String,
     ): String? {
+        if (path == "https://api.github.com/user") return VIEWER
         if (path == "https://api.github.com/search/issues") {
             return when {
                 "author%3A%40me" in query -> SEARCH_MINE
@@ -383,24 +394,87 @@ object SyntheticFixtures {
             "SYN-102" to """{"startAt":0,"maxResults":100,"total":0,"comments":[]}""",
         )
 
+    /** The token's own SYNTHETIC account (`GET /user`). */
+    private const val VIEWER = """{"login":"synthetic-me","id":1,"avatar_url":"https://avatars.githubusercontent.com/u/1?v=4"}"""
+
+    /** SYNTHETIC assignees, as GitHub sends them in a search answer. Id 5 has no avatar image in the screen checks. */
+    private fun people(vararg ids: Int): String =
+        ids.joinToString(",", "[", "]") { id ->
+            val login =
+                when (id) {
+                    1 -> "synthetic-me"
+                    2 -> "synthetic-teammate"
+                    3 -> "synthetic-reviewer-a"
+                    4 -> "synthetic-reviewer-b"
+                    else -> "synthetic-person-with-a-long-login"
+                }
+            """{"login":"$login","id":$id,"avatar_url":"https://avatars.githubusercontent.com/u/$id?v=4","type":"User"}"""
+        }
+
+    /** Mine (owner change #8): three repositories; no, one, two and three assignees; the viewer among them. */
     private val SEARCH_MINE =
         """
-        {"total_count":2,"incomplete_results":false,"items":[
+        {"total_count":5,"incomplete_results":false,"items":[
+          {"number":41,"title":"SYNTHETIC: Paginate the sync endpoint","user":{"login":"synthetic-me","id":1},"draft":false,
+           "updated_at":"2026-11-13T10:20:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-api",
+           "assignees":${people(2, 1, 3)}},
           {"number":12,"title":"SYNTHETIC: Add the offline shell","user":{"login":"synthetic-me","id":1},"draft":false,
            "updated_at":"2026-11-12T14:00:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-app",
-           "html_url":"https://github.com/synthetic-org/synthetic-app/pull/12","pull_request":{"url":"x"}},
+           "html_url":"https://github.com/synthetic-org/synthetic-app/pull/12","pull_request":{"url":"x"},"assignees":${people(1)}},
           {"number":13,"title":"SYNTHETIC: Draft change with failing CI","user":{"login":"synthetic-me"},"draft":true,
-           "updated_at":"2026-11-11T08:30:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-app"}
+           "updated_at":"2026-11-11T08:30:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-app",
+           "assignees":[]},
+          {"number":38,"title":"SYNTHETIC: Retry on 503 with backoff","user":{"login":"synthetic-me"},"draft":false,
+           "updated_at":"2026-11-10T12:00:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-api",
+           "assignees":${people(2, 4)}},
+          {"number":5,"title":"SYNTHETIC: Rename the surface tokens","user":{"login":"synthetic-me"},"draft":false,
+           "updated_at":"2026-11-09T17:45:00Z","repository_url":"https://api.github.com/repos/synthetic-labs/synthetic-design-tokens",
+           "assignees":${people(4)}}
         ]}
         """.trimIndent()
 
+    /** Review requested (owner change #8): the viewer assigned to someone else's pull request, four assignees, a long name. */
     private val SEARCH_REVIEW =
         """
-        {"total_count":1,"incomplete_results":false,"items":[
+        {"total_count":4,"incomplete_results":false,"items":[
+          {"number":44,"title":"SYNTHETIC: Add request ids to the logs","user":{"login":"synthetic-reviewer-a"},"draft":false,
+           "updated_at":"2026-11-13T15:05:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-api",
+           "assignees":${people(1)}},
           {"number":7,"title":"SYNTHETIC: Review requested from you","user":{"login":"synthetic-teammate"},"draft":false,
-           "updated_at":"2026-11-12T11:15:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-lib"}
+           "updated_at":"2026-11-12T11:15:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-lib",
+           "assignees":${people(2)}},
+          {"number":101,"title":"SYNTHETIC: A long title that wraps over two lines on a narrow screen, to check the row",
+           "user":{"login":"synthetic-person-with-a-long-login"},"draft":false,"updated_at":"2026-11-11T19:30:00Z",
+           "repository_url":"https://api.github.com/repos/synthetic-labs/synthetic-repository-with-a-very-long-name-for-wrapping",
+           "assignees":${people(3, 5, 4, 2)}},
+          {"number":9,"title":"SYNTHETIC: Bump the date library","user":{"login":"synthetic-teammate"},"draft":true,
+           "updated_at":"2026-11-08T09:00:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-lib",
+           "assignees":null}
         ]}
         """.trimIndent()
+
+    /** A plain SYNTHETIC pull request for the rows above that have no detail of their own: no description, CI passing. */
+    private fun plainPull(
+        id: String,
+        title: String,
+        author: String,
+        updated: String,
+        shaDigit: Char,
+    ): Pair<String, SyntheticPull> {
+        val sha = shaDigit.toString().repeat(40)
+        val number = id.substringAfter('#')
+        return id to
+            SyntheticPull(
+                sha = sha,
+                json =
+                    """{"number":$number,"title":"$title","user":{"login":"$author"},"draft":false,""" +
+                        """"head":{"ref":"feature/synthetic-$number","sha":"$sha"},"base":{"ref":"main"},"body":null,""" +
+                        """"updated_at":"$updated","requested_reviewers":[{"login":"synthetic-me"}],"requested_teams":[]}""",
+                reviews = "[]",
+                statuses = """{"state":"success","total_count":1,"statuses":[{"context":"synthetic/lint","state":"success"}]}""",
+                checkRuns = """{"total_count":1,"check_runs":[{"name":"build","status":"completed","conclusion":"success"}]}""",
+            )
+    }
 
     private class SyntheticPull(
         val sha: String,
@@ -567,5 +641,47 @@ object SyntheticFixtures {
                     statuses = null,
                     checkRuns = """{"total_count":1,"check_runs":[{"name":"build","status":"completed","conclusion":"success"}]}""",
                 ),
+            plainPull(
+                "synthetic-org/synthetic-api#41",
+                "SYNTHETIC: Paginate the sync endpoint",
+                "synthetic-me",
+                "2026-11-13T10:20:00Z",
+                'a',
+            ),
+            plainPull(
+                "synthetic-org/synthetic-api#38",
+                "SYNTHETIC: Retry on 503 with backoff",
+                "synthetic-me",
+                "2026-11-10T12:00:00Z",
+                'b',
+            ),
+            plainPull(
+                "synthetic-labs/synthetic-design-tokens#5",
+                "SYNTHETIC: Rename the surface tokens",
+                "synthetic-me",
+                "2026-11-09T17:45:00Z",
+                'c',
+            ),
+            plainPull(
+                "synthetic-org/synthetic-api#44",
+                "SYNTHETIC: Add request ids to the logs",
+                "synthetic-reviewer-a",
+                "2026-11-13T15:05:00Z",
+                'd',
+            ),
+            plainPull(
+                "synthetic-labs/synthetic-repository-with-a-very-long-name-for-wrapping#101",
+                "SYNTHETIC: A long title that wraps over two lines on a narrow screen, to check the row",
+                "synthetic-person-with-a-long-login",
+                "2026-11-11T19:30:00Z",
+                'e',
+            ),
+            plainPull(
+                "synthetic-org/synthetic-lib#9",
+                "SYNTHETIC: Bump the date library",
+                "synthetic-teammate",
+                "2026-11-08T09:00:00Z",
+                'f',
+            ),
         )
 }

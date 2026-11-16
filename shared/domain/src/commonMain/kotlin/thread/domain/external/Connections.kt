@@ -91,9 +91,19 @@ interface ConnectionStore {
 
     suspend fun gitHub(): GitHubConnection?
 
+    /** Saves [connection]. A different token forgets [gitHubViewer], which belonged to the old one. */
     suspend fun saveGitHub(connection: GitHubConnection)
 
+    /** Also forgets [gitHubViewer]. */
     suspend fun clearGitHub()
+
+    /**
+     * The login of the GitHub token's own account, as GitHub answered it once (owner change #8), or null. Kept on this
+     * device next to the connection and never synced: it is not part of [GitHubConnection].
+     */
+    suspend fun gitHubViewer(): String?
+
+    suspend fun saveGitHubViewer(login: String)
 }
 
 class ConnectionStoreException(

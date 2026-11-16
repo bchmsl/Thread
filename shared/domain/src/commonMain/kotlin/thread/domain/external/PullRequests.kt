@@ -44,14 +44,57 @@ data class PullRequestSummary(
     val isDraft: Boolean,
     val updatedAtMillis: Long?,
     val webUrl: LinkHref?,
+    /**
+     * The pull request's GitHub assignees (owner change #8), in GitHub's order. Null when not known: a copy saved
+     * before Thread kept them, or a row that did not come from a list.
+     */
+    val assignees: List<GitHubPerson>? = null,
 )
 
-/** A list as GitHub's search returned it. [isIncomplete] is GitHub's own flag for a search that timed out. */
+/** A GitHub account on a list row. [avatarUrl] is built by Thread from the account id, never taken from an answer. */
+data class GitHubPerson(
+    val login: String,
+    val avatarUrl: LinkHref?,
+) {
+    /** GitHub logins ignore case. */
+    fun isLogin(other: String?): Boolean = other != null && login.equals(other, ignoreCase = true)
+}
+
+/**
+ * A list as GitHub's search returned it. [isIncomplete] is GitHub's own flag for a search that timed out. [viewer] is
+ * the login of the token's own account, or null when Thread could not read it yet.
+ */
 data class PullRequestListPage(
     val items: List<PullRequestSummary>,
     val totalCount: Int,
     val isIncomplete: Boolean,
+    val viewer: String? = null,
 )
+
+/** One repository's pull requests in a list (owner change #8). [repo] is `owner/name`. */
+data class RepositoryPullRequests(
+    val repo: String,
+    val pulls: List<PullRequestSummary>,
+)
+
+/**
+ * Groups [pulls] by repository (owner change #8). The repository with the most recent update comes first; inside a
+ * group, the newest update first. A pull request without an update time goes last. Repository names ignore case, as
+ * on GitHub; a group shows the name as its first pull request has it.
+ */
+fun pullRequestsByRepository(pulls: List<PullRequestSummary>): List<RepositoryPullRequests> {
+    val newestFirst =
+        compareByDescending<PullRequestSummary, Long?>(nullsFirst()) { it.updatedAtMillis }
+            .thenByDescending { it.ref.number }
+    return pulls
+        .groupBy { it.repoKey() }
+        .values
+        .map { group -> group.sortedWith(newestFirst) }
+        .sortedWith(compareBy<List<PullRequestSummary>, PullRequestSummary>(newestFirst) { it.first() }.thenBy { it.first().repoKey() })
+        .map { group -> RepositoryPullRequests("${group.first().ref.owner}/${group.first().ref.repo}", group) }
+}
+
+private fun PullRequestSummary.repoKey(): String = "${ref.owner}/${ref.repo}".lowercase()
 
 /**
  * A pull request GitHub search found for Topic suggestions (D49 S5). [keys] are the searched Jira keys its title or

@@ -15,6 +15,8 @@ import thread.domain.external.ExternalDocument
 import thread.domain.external.ExternalInline
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
+import thread.domain.external.GitHubConnection
+import thread.domain.external.GitHubPerson
 import thread.domain.external.PullRequestDetail
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
@@ -23,11 +25,14 @@ import thread.domain.external.Refreshed
 import thread.domain.external.ReviewState
 import thread.domain.external.Reviewer
 import thread.domain.external.ReviewerState
+import thread.domain.external.SecretText
+import thread.domain.note.LinkHref
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** SYNTHETIC connection and answers only. */
@@ -49,6 +54,10 @@ class GitHubRepositoriesTest {
 
     private fun ref(id: String) = requireNotNull(PullRequestRef.parse(id))
 
+    private companion object {
+        const val USER = "https://api.github.com/user"
+    }
+
     @Test
     fun theTwoListsComeFromSearch() =
         runTest {
@@ -58,19 +67,45 @@ class GitHubRepositoriesTest {
             val mine = lists.refresh(PullRequestList.Mine, NOW).value()
             val review = lists.refresh(PullRequestList.ReviewRequested, NOW).value()
 
-            assertEquals(listOf("synthetic-org/synthetic-app#12", "synthetic-org/synthetic-app#13"), mine.items.map { it.ref.id })
-            assertEquals(listOf(false, true), mine.items.map { it.isDraft })
             assertEquals(
-                "https://github.com/synthetic-org/synthetic-app/pull/12",
-                mine.items
-                    .first()
-                    .webUrl
-                    ?.value,
+                listOf(
+                    "synthetic-org/synthetic-api#41",
+                    "synthetic-org/synthetic-app#12",
+                    "synthetic-org/synthetic-app#13",
+                    "synthetic-org/synthetic-api#38",
+                    "synthetic-labs/synthetic-design-tokens#5",
+                ),
+                mine.items.map { it.ref.id },
             )
-            assertEquals(listOf("synthetic-org/synthetic-lib#7"), review.items.map { it.ref.id })
+            assertEquals(listOf(false, false, true, false, false), mine.items.map { it.isDraft })
+            assertEquals("https://github.com/synthetic-org/synthetic-app/pull/12", mine.items[1].webUrl?.value)
+            assertEquals(
+                listOf(
+                    "synthetic-org/synthetic-api#44",
+                    "synthetic-org/synthetic-lib#7",
+                    "synthetic-labs/synthetic-repository-with-a-very-long-name-for-wrapping#101",
+                    "synthetic-org/synthetic-lib#9",
+                ),
+                review.items.map { it.ref.id },
+            )
+            // Owner change #8: the assignees in GitHub's order, and the token's own login from one GET /user.
+            assertEquals(
+                listOf("synthetic-teammate", "synthetic-me", "synthetic-reviewer-a"),
+                mine.items[0].assignees?.map { it.login },
+            )
+            assertEquals(
+                listOf(listOf("synthetic-me"), emptyList()),
+                mine.items.subList(1, 3).map { pull ->
+                    pull.assignees?.map { it.login }
+                },
+            )
+            assertEquals(emptyList(), review.items[3].assignees, "GitHub's \"assignees\": null is nobody")
+            assertEquals("synthetic-me", mine.viewer)
+            assertEquals("synthetic-me", review.viewer)
             assertEquals(
                 listOf(
                     "https://api.github.com/search/issues?q=is%3Apr%20is%3Aopen%20author%3A%40me%20archived%3Afalse&sort=updated&order=desc&per_page=50",
+                    "https://api.github.com/user",
                     "https://api.github.com/search/issues?q=is%3Apr%20is%3Aopen%20review-requested%3A%40me%20archived%3Afalse" +
                         "&sort=updated&order=desc&per_page=50",
                 ),
@@ -235,10 +270,133 @@ class GitHubRepositoriesTest {
             val refused = lists.refresh(PullRequestList.ReviewRequested, NOW + 30_000)
 
             assertEquals(ExternalResult.Problem(ExternalProblem.RateLimited(NOW + 60_000)), refused)
-            assertEquals(budget, transport.requests.size, "no request goes out once the minute's budget is spent")
+            assertEquals(budget, transport.searches(), "no search goes out once the minute's budget is spent")
             lists.refresh(PullRequestList.ReviewRequested, NOW + 60_000).value()
-            assertEquals(budget + 1, transport.requests.size)
+            assertEquals(budget + 1, transport.searches())
+            assertEquals(budget + 2, transport.requests.size, "plus the one GET /user")
         }
+
+    @Test
+    fun theViewerIsAskedOnceAndKeptWithTheConnection() =
+        runTest {
+            val transport = syntheticTransport()
+            val lists = lists(transport)
+
+            lists.refresh(PullRequestList.Mine, NOW).value()
+            lists.refresh(PullRequestList.ReviewRequested, NOW + 1).value()
+            val again = lists.refresh(PullRequestList.Mine, NOW + 2).value()
+
+            assertEquals(1, transport.requests.count { it.url == USER })
+            assertEquals("synthetic-me", again.viewer)
+            assertEquals("synthetic-me", connections.gitHubViewer())
+            assertEquals("synthetic-me", assertNotNull(lists.readSaved(PullRequestList.Mine)).value.viewer)
+        }
+
+    @Test
+    fun aViewerGitHubCannotGiveLeavesItUnknownAndTheListStillLoads() =
+        runTest {
+            val synthetic = syntheticTransport()
+            val failures =
+                listOf(
+                    answer(403, """{"message":"Resource not accessible by personal access token"}"""),
+                    answer(200, """{"login":"../not-a-login","id":1}"""),
+                    answer(200, "not json"),
+                )
+            for (failure in failures) {
+                connections.clearGitHub()
+                val transport = CapturingTransport { if (it.url == USER) failure else synthetic.respond(it) }
+                val lists = lists(transport)
+
+                val page = lists.refresh(PullRequestList.Mine, NOW).value()
+
+                assertEquals(5, page.items.size, failure.body)
+                assertNull(page.viewer, failure.body)
+                assertNull(connections.gitHubViewer(), failure.body)
+                lists.refresh(PullRequestList.Mine, NOW + 1).value()
+                assertEquals(2, transport.requests.count { it.url == USER }, "the next refresh asks again")
+            }
+        }
+
+    @Test
+    fun aLoginForATokenReplacedMeanwhileIsNotKept() =
+        runTest {
+            val synthetic = syntheticTransport()
+            val other = GitHubConnection(SecretText("synthetic-other-token-not-real"))
+            val transport =
+                CapturingTransport {
+                    if (it.url == USER) connections.saveGitHub(other)
+                    synthetic.respond(it)
+                }
+
+            val page = lists(transport).refresh(PullRequestList.Mine, NOW).value()
+
+            assertEquals("synthetic-me", page.viewer, "the list it answers was searched with the old token")
+            assertNull(connections.gitHubViewer())
+            assertEquals(other, connections.gitHub())
+        }
+
+    @Test
+    fun aListSavedBeforeAssigneesWereKeptReadsAsNotKnown() =
+        runTest {
+            val lists = lists(syntheticTransport())
+            store.put(
+                "mine",
+                """
+                {"recordVersion":1,"savedAtMillis":$NOW,"scope":"github","data":{"total_count":1,"incomplete_results":false,"items":[
+                  {"number":12,"title":"SYNTHETIC: Add the offline shell","user":{"login":"synthetic-me"},"draft":false,
+                   "updated_at":"2026-11-12T14:00:00Z","repository_url":"https://api.github.com/repos/synthetic-org/synthetic-app"}]}}
+                """.trimIndent(),
+            )
+
+            val saved = assertNotNull(lists.readSaved(PullRequestList.Mine)).value
+
+            assertEquals(listOf("synthetic-org/synthetic-app#12"), saved.items.map { it.ref.id })
+            assertNull(saved.items.single().assignees)
+        }
+
+    @Test
+    fun assigneesKeepTheLoginAndIdOnlyAndTheAvatarComesFromTheId() =
+        runTest {
+            val search =
+                """
+                {"total_count":1,"incomplete_results":false,"items":[{"number":3,"title":"SYNTHETIC: Assignees",
+                  "user":{"login":"synthetic-me"},"draft":false,"updated_at":"2026-11-12T14:00:00Z",
+                  "repository_url":"https://api.github.com/repos/synthetic-org/synthetic-app","assignees":[
+                    {"login":"synthetic-a","id":7,"avatar_url":"https://synthetic-elsewhere.example/a.png","email":"synthetic@example.test"},
+                    {"login":"<img src=x>","id":8},
+                    {"login":"synthetic-b"},
+                    {"login":"synthetic-c","id":0},
+                    {"login":"synthetic-bot[bot]","id":9},
+                    "not an object"]}]}
+                """.trimIndent()
+            val transport =
+                CapturingTransport {
+                    if (it.url ==
+                        USER
+                    ) {
+                        answer(200, """{"login":"synthetic-me","id":1}""")
+                    } else {
+                        answer(200, search)
+                    }
+                }
+
+            val page = lists(transport).refresh(PullRequestList.Mine, NOW).value()
+
+            assertEquals(
+                listOf(
+                    GitHubPerson("synthetic-a", LinkHref.parse("https://avatars.githubusercontent.com/u/7?s=40&v=4")),
+                    GitHubPerson("synthetic-b", null),
+                    GitHubPerson("synthetic-c", null),
+                    GitHubPerson("synthetic-bot[bot]", LinkHref.parse("https://avatars.githubusercontent.com/u/9?s=40&v=4")),
+                ),
+                page.items.single().assignees,
+            )
+            val stored = assertNotNull(store.get("mine"))
+            assertFalse("avatar_url" in stored, "Thread builds the avatar address itself")
+            assertFalse("synthetic@example.test" in stored, "the saved copy keeps the login and id only")
+        }
+
+    private fun CapturingTransport.searches(): Int = requests.count { "/search/" in it.url }
 
     @Test
     fun allSavedListsTheSavedDetailsNewestFirstAndNothingWhenDisconnected() =

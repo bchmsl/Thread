@@ -49,7 +49,7 @@ load 2                  page asks waiting B: TAKE_OVER_IF_ALONE
 | Item | Choice |
 |---|---|
 | Where | IndexedDB database `thread-connections`, store `connections`, in this browser profile only |
-| Records | `jira` → `{recordVersion: 1, site, cloudId, email, token}`; `github` → `{recordVersion: 1, token}` |
+| Records | `jira` → `{recordVersion: 1, site, cloudId, email, token}`; `github` → `{recordVersion: 1, token}`; `github-viewer` → `{recordVersion: 1, login}`, the token's own GitHub login (D62). Saving a different token or Disconnect deletes `github-viewer`. It is not a secret and is never synced: connection sync (ADR-016) carries the Jira and GitHub connections only. |
 | Writes | `durability: "strict"`, so "Connected" shows only after the browser reports the record on disk |
 | Damaged or unknown record | Reads as "not connected"; the person connects again |
 | In memory | `SecretText`. `toString()` gives `SecretText(hidden)`. `reveal()` is used only to build the `Authorization` header and to write the record. Storage errors use fixed texts that never contain the record. |

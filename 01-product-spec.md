@@ -146,7 +146,7 @@ One page with collapsible sections, not a primary tab layout:
 ## Integrations in v1
 
 - Jira page: assigned tickets, search for other accessible tickets, link to existing Topic or create Topic.
-- Pull Requests page: My PRs and Review Requested, with CI and review state.
+- Pull Requests page: My PRs and Review Requested, with CI and review state. Each list is grouped by repository, and each row shows its GitHub assignees (avatar and name), with "You" marked when the owner is one (D62).
 - Show external details even if not linked to a Topic.
 - Read-only: opening originals is supported.
 - Posting comments, changing status, merging, and other external mutations are deferred.

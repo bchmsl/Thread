@@ -46,6 +46,12 @@ internal class GitHubClient(
         return get(connection, url, "GET /search/issues (mentions)", nowMillis)
     }
 
+    /** The token's own account (owner change #8). Thread keeps only its login. */
+    suspend fun viewer(
+        connection: GitHubConnection,
+        nowMillis: Long,
+    ): ExternalResult<JsonElement> = get(connection, "$API/user", "GET /user", nowMillis)
+
     suspend fun pull(
         connection: GitHubConnection,
         ref: PullRequestRef,

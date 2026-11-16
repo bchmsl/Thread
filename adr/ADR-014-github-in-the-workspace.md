@@ -21,7 +21,8 @@ Status: Proposed (2026-11-13). Written in Phase 11 while the owner was away. Bui
 ### What stays on the device
 
 - Each opened pull request is saved in IndexedDB `pullRequests` (by `owner/repo#number`) with its reviews and CI summary. No diff or file content is read.
-- The "Mine" and "Review requested" rows are saved in `prLists`.
+- The "Mine" and "Review requested" rows are saved in `prLists`, with each row's assignees (login and id, D62).
+- The token's own GitHub login is saved with the connection (`github-viewer`, ADR-008), so a row can say "You" offline. It is never synced.
 - Disconnect hides lists and copies until a token is saved again. "Delete saved copies" removes Jira and GitHub copies from this device; the connections stay.
 
 ### Reading
@@ -35,6 +36,7 @@ Status: Proposed (2026-11-13). Written in Phase 11 while the owner was away. Bui
 ### Screens
 
 - Pull requests page: "Mine" and "Review requested" tabs with counts. At 1000px and wider the pull request shows next to the list (the first one when none is picked), narrower one at a time with a back link.
+- Inside each tab (D62): one group per repository, with a heading (`owner/name`) and a count, that opens and closes like Today's groups and is remembered per device. The repository with the most recent update comes first. A row shows the state pill and the assignees (avatars, the first login and "+N", or "Unassigned"); the viewer comes first as "You" in a pink pill with a pink ring on the avatar. Review requested rows add "by <author>"; rows no longer repeat the repository.
 - `#/item/pr/owner/repo/number`: the pull request as a page, with a back link to the Topic it came from.
 - Detail: state pill (Open, or Draft), repository, head branch, title and number, CI and review indicators, Topic chips, Link to Topic (several Topics), Create Topic from pull request, Open in GitHub (hidden for SYNTHETIC data), description as formatted text from its Markdown (D57, ADR-007), reviewers (people and teams), and fields (repository, author, branch, updated, CI sources). No comments.
 - Topic details: the Pull requests section lists linked pull requests. At 1000px and wider one opens in the side panel; narrower, as its own page.

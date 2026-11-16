@@ -16,7 +16,8 @@ import thread.domain.external.SecretText
 /**
  * [ConnectionStore] on a [KeyValueStore] on this device (adr/ADR-008).
  *
- * Records: `jira` → `{recordVersion: 1, site, cloudId, email, token}`, `github` → `{recordVersion: 1, token}`.
+ * Records: `jira` → `{recordVersion: 1, site, cloudId, email, token}`, `github` → `{recordVersion: 1, token}`,
+ * `github-viewer` → `{recordVersion: 1, login}` (owner change #8, removed with a new or cleared GitHub token).
  * Tokens stay in this browser profile. They are never synced, logged or sent anywhere but the provider's API. A
  * damaged record reads as no connection, so the person can set it up again.
  */
@@ -52,15 +53,31 @@ class KeyValueConnectionStore(
     }
 
     override suspend fun saveGitHub(connection: GitHubConnection) {
+        val previous = read(GITHUB)?.str("token")
         val record =
             buildJsonObject {
                 put(KEY_VERSION, VERSION)
                 put("token", connection.token.reveal())
             }
         write(GITHUB, record)
+        if (previous != connection.token.reveal()) remove(GITHUB_VIEWER)
     }
 
-    override suspend fun clearGitHub() = remove(GITHUB)
+    override suspend fun clearGitHub() {
+        remove(GITHUB)
+        remove(GITHUB_VIEWER)
+    }
+
+    override suspend fun gitHubViewer(): String? = read(GITHUB_VIEWER)?.str("login")?.takeIf { it.isNotBlank() }
+
+    override suspend fun saveGitHubViewer(login: String) {
+        val record =
+            buildJsonObject {
+                put(KEY_VERSION, VERSION)
+                put("login", login)
+            }
+        write(GITHUB_VIEWER, record)
+    }
 
     private suspend fun read(key: String): JsonObject? {
         val raw = guard("Could not read the saved connection") { store.get(key) } ?: return null
@@ -96,6 +113,7 @@ class KeyValueConnectionStore(
     private companion object {
         const val JIRA = "jira"
         const val GITHUB = "github"
+        const val GITHUB_VIEWER = "github-viewer"
         const val KEY_VERSION = "recordVersion"
         const val VERSION = 1
     }
