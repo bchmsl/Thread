@@ -3,6 +3,7 @@
   "short_name": "Thread",
   "start_url": "./",
   "scope": "./",
+  "display": "standalone",
   "background_color": "#0e1322",
   "theme_color": "#0e1322",
   "icons": [

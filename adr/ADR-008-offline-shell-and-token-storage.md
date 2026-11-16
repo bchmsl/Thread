@@ -6,6 +6,8 @@ Phase 4 review (2026-11-13, owner away): checked for consistency with the other 
 
 2026-11-14: the owner chose encrypted sync of the connections (option A). ADR-016 supersedes the "Never in Firestore" part of the Never row for the connection records only: with sync on, the account stores one encrypted copy that only the owner's passphrase opens. Everything else here still holds.
 
+2026-11-16: the manifest sets `"display": "standalone"`, so an installed Thread opens in its own window (D61, the owner's "Yes, own window"). See Consequences for the iPhone risk.
+
 ## Context
 
 - Thread must open with no network and show the last local content (D02, local-first). Until now a reload while offline gave the browser's error page.
@@ -66,6 +68,8 @@ The Note drafts (`thread-local`, `thread-drafts-*`) are separate databases. Clea
 - A deploy needs the production build with the generated `sw.js`. Hosting must not cache `sw.js` for long; browsers re-check it at least every 24 hours anyway.
 - Phase 4 decides the product scope of tokens and saved copies. This storage works for either choice. Phase 4 proposal (provisional, in the owner review queue): they stay per browser profile. A token is typed once per browser, and saved copies never follow the Firebase account. The alternative, per account, would need the tokens or copies in Firestore or a server, which D08 and the token rules rule out.
 - Superseded in part on 2026-11-14: with ADR-016's encrypted sync turned on, connections follow the account, encrypted with the owner's passphrase. Saved copies still stay per browser profile (D08).
+- Installed in its own window (D61): Chrome, Edge and Android open an installed Thread without the browser bar. It is the same browser profile, so the same sign-in, tokens and saved copies.
+- iPhone risk (D61), known but not tested: a Home Screen app on an iPhone keeps its storage separate from Safari. It needs its own Google sign-in and, with sync on, its own Unlock (ADR-016), or its own Jira and GitHub tokens. Sign-in uses a Google popup (`signInWithPopup`, ADR-005), and popups may not work in a Home Screen app. Since iOS 26, Safari opens any site added to the Home Screen as a web app by default (per WebKit), so this risk mostly predates D61; `standalone` adds older iOS versions. Safari in a normal tab is unchanged.
 
 ## Not verified
 
@@ -73,3 +77,4 @@ The Note drafts (`thread-local`, `thread-drafts-*`) are separate databases. Clea
 - Safari and Firefox. Only headless Chrome 157 ran S1 and S2.
 - Firebase hosting headers for `sw.js` (no deploy in this phase).
 - Behavior when the browser evicts storage under disk pressure. Thread does not yet ask for persistent storage.
+- The installed window on a real device (D61). Headless Chrome checked only that the manifest is valid and installable. Nothing ran on a real iPhone: its separate storage and the Google sign-in popup in a Home Screen app are untested.

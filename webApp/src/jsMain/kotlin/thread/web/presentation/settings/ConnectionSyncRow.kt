@@ -227,7 +227,8 @@ private fun statusOf(
                 Icon.CloudCheck,
                 "On. Saved to your account, encrypted",
                 "is-on",
-                "Only your passphrase opens it. A change here replaces the saved copy, and your other devices use it when they open Thread.",
+                "Only your passphrase opens it. A change here replaces the saved copy. " +
+                    "Your other devices use it within seconds while Thread is open, or when they open it.",
             )
         state is ConnectionSyncState.Locked && state.passphraseChanged ->
             SyncStatus(Icon.Lock, "The passphrase changed on another device", "is-warn", "Unlock with the new one to keep syncing. $FORGOT")
