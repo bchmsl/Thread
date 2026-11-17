@@ -35,9 +35,11 @@ import thread.domain.note.RichTextDocument
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.search.searchJiraCopies
+import thread.domain.search.searchMeetings
 import thread.domain.search.searchPullRequestCopies
 import thread.domain.search.searchWorkspace
 import thread.domain.task.Task
+import thread.domain.time.WallTime
 import thread.domain.topic.TopicId
 import thread.domain.topic.statusOf
 import thread.domain.workspace.ConversionBackup
@@ -49,6 +51,7 @@ import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
 import thread.web.presentation.calendar.MeetingTool
 import thread.web.presentation.calendar.MeetingsModel
+import thread.web.presentation.calendar.meetingSearchOptions
 import thread.web.presentation.external.BackgroundRefreshProbe
 import thread.web.presentation.external.BackgroundRefresher
 import thread.web.presentation.external.ConnectionSyncModel
@@ -300,7 +303,7 @@ private fun Workspace(
             }) {
                 when {
                     legacy != null -> Unit
-                    place.head == "topic" -> TopicScreen(workspace, jira, gitHub, placeTopicId, cards)
+                    place.head == "topic" -> TopicScreen(workspace, jira, gitHub, meetings, placeTopicId, cards)
                     view == View.Jira -> JiraScreen(jira, workspace, router, place)
                     view == View.Prs -> PrScreen(gitHub, workspace, router, place)
                     view == View.Today -> TodayScreen(workspace, gitHub, meetings, zone, place.param("add") == "1", openTask, openTarget)
@@ -450,7 +453,7 @@ private fun Workspace(
                     },
                 search = { query ->
                     val q = query.trim().lowercase()
-                    searchGroups(query, workspace, jira, gitHub, cards) { searchOpen = false } +
+                    searchGroups(query, workspace, jira, gitHub, meetings, now, cards) { searchOpen = false } +
                         SearchGroup(
                             "Go to",
                             View.entries.filter { it.label.lowercase().contains(q) }.map { target ->
@@ -470,15 +473,17 @@ private fun Workspace(
 }
 
 /**
- * The search groups of v3 openSearch for what is on this device: Topics, Tasks, Notes and the Jira tickets and pull
- * requests saved here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013, ADR-014). A pick closes search
- * ([onPicked]) and opens the item as a card, a Topic too (D70).
+ * The search groups of v3 openSearch for what is on this device: Topics, Tasks, Notes, meetings (D78 P5b) and the Jira
+ * tickets and pull requests saved here, nothing in Trash (adr/ADR-012-trash-and-search.md, ADR-013, ADR-014,
+ * ADR-020). A pick closes search ([onPicked]) and opens the item as a card, a Topic too (D70).
  */
 private fun searchGroups(
     query: String,
     workspace: WorkspaceModel,
     jira: JiraModel,
     gitHub: GitHubModel,
+    meetings: MeetingsModel,
+    now: WallTime,
     cards: CardOpener,
     onPicked: () -> Unit,
 ): List<SearchGroup> {
@@ -517,6 +522,13 @@ private fun searchGroups(
                     onPicked()
                     cards.openNote(note.id)
                 }
+            },
+        ),
+        SearchGroup(
+            "Meetings",
+            meetingSearchOptions(searchMeetings(query, meetings.meetings, now).orEmpty(), workspace::topicsOfSeries, now) { id ->
+                onPicked()
+                cards.openMeeting(id)
             },
         ),
         SearchGroup(

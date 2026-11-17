@@ -188,7 +188,7 @@ internal fun TodayScreen(
                     classes("today__rail")
                     attr("aria-label", if (sections.meetings) "Meetings, reminders and reviews" else "Reminders and reviews")
                 }) {
-                    if (sections.meetings) MeetingsRail(meetings, zone) { cards?.openMeeting(it.id) }
+                    if (sections.meetings) MeetingsRail(meetings, zone, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
                     if (sections.reminders) RemindersRail(workspace, reminders, onOpenTarget)
                     if (sections.review) ReviewRequestedRail(gitHub, reviews)
                 }

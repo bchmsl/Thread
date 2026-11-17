@@ -5,6 +5,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.SeriesKey
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
 import thread.domain.focus.FocusTarget
@@ -78,6 +80,8 @@ class WorkspaceWriteJsonTest {
     private val reference =
         ExternalReference(ExternalProvider.GitHub, "synthetic/repo", "7", LinkHref.parse("https://github.com/synthetic/repo/pull/7")!!)
 
+    private val series = SeriesKey("0123456789abcdef0123456789abcdef")
+
     private val focusSession =
         FocusSession(
             id = "f-run-1",
@@ -112,6 +116,8 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutExternalRef(reference),
             WorkspaceWrite.PutExternalLink(TopicExternalLink(topic.id, reference.id)),
             WorkspaceWrite.PutExternalLink(TopicExternalLink(topic.id, reference.id, linked = false, dismissed = true)),
+            WorkspaceWrite.PutMeetingLink(MeetingLink(topic.id, series, title = "Synthetic standup")),
+            WorkspaceWrite.PutMeetingLink(MeetingLink(topic.id, series, linked = false)),
             WorkspaceWrite.DeleteForever(TrashKind.Reminder, reminder.id.value, "Synthetic reminder"),
         )
 
@@ -169,5 +175,13 @@ class WorkspaceWriteJsonTest {
         assertNull(WorkspaceWriteJson.decode(JsonArray(listOf(good, unknown))))
         assertNull(WorkspaceWriteJson.decode(JsonArray(listOf(good, badDeadline))))
         assertNull(WorkspaceWriteJson.decode(JsonArray(emptyList())), "A change always has a write")
+    }
+
+    @Test
+    fun aMeetingLinkWithASeriesKeyThatIsNotAHashDropsTheWholeChange() {
+        val link = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutMeetingLink(MeetingLink(topic.id, series))))
+        val damaged = Json.parseToJsonElement(link.toString().replace(series.value, "NOT-A-HASH")).jsonArray
+
+        assertNull(WorkspaceWriteJson.decode(damaged))
     }
 }

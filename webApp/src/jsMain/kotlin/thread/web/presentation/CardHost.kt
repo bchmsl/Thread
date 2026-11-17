@@ -55,9 +55,14 @@ internal fun CardHost(
     var noteUnsaved by remember(item) { mutableStateOf(false) }
     var confirming by remember(item) { mutableStateOf(false) }
     if (closing) return
+    // Once only. When the browser forces a dialog closed on Escape (a cancel the page cannot stop, as after an earlier
+    // Escape with no click since), ModalDialog calls onDismiss and then onClose, and going back twice would leave the
+    // page under the card.
     val close = {
-        closing = true
-        router.closeCard()
+        if (!closing) {
+            closing = true
+            router.closeCard()
+        }
     }
     val page = router.place.withoutCards()
     // A link that names the item the page itself shows: show the page, so one Note never has two editors.
@@ -111,7 +116,7 @@ internal fun CardHost(
                         )
                     CardType.Topic ->
                         workspace.topic(item.id)?.let { topic ->
-                            TopicCard(workspace, jira, gitHub, topic, cards, backTo, cards::back, close)
+                            TopicCard(workspace, jira, gitHub, meetings, topic, cards, backTo, cards::back, close)
                         }
                     CardType.Jira ->
                         JiraIssueKey.parse(item.id)?.let { key ->
@@ -123,7 +128,7 @@ internal fun CardHost(
                         }
                     CardType.Meeting ->
                         meetings.meeting(item.id)?.let { meeting ->
-                            MeetingCard(meeting, backTo, cards::back, close)
+                            MeetingCard(workspace, meeting, backTo, cards::back, close)
                         }
                 }
             }

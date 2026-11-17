@@ -2,6 +2,7 @@ package thread.domain.workspace
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import thread.domain.calendar.MeetingLink
 import thread.domain.focus.FocusSession
 import thread.domain.focus.FocusSettings
 import thread.domain.note.NoteId
@@ -132,6 +133,14 @@ sealed interface WorkspaceWrite {
     ) : WorkspaceWrite
 
     /**
+     * Saves one Topic link to a meeting series (D78, adr/ADR-020-calendar-meetings-sync.md). Unlinking writes
+     * [MeetingLink.linked] false; nothing is deleted. A null [MeetingLink.title] leaves the stored snapshot as it is.
+     */
+    data class PutMeetingLink(
+        val link: MeetingLink,
+    ) : WorkspaceWrite
+
+    /**
      * Records one Focus session in the account's history (adr/ADR-019-focus-timer.md). A session never changes once
      * made, and its id comes from its run, so sending it again (Retry, or two tabs) stores it once.
      */
@@ -177,6 +186,8 @@ data class WorkspaceData(
     val externalRefs: List<ExternalReference> = emptyList(),
     /** Every stored Topic link to an external record, unlinked ones included. */
     val externalLinks: List<TopicExternalLink> = emptyList(),
+    /** Every stored Topic link to a meeting series, unlinked ones included. */
+    val meetingLinks: List<MeetingLink> = emptyList(),
     /** Notes deleted forever. Their documents are tombstones; their saved versions may still need deleting. */
     val purgedNotes: List<NoteId> = emptyList(),
     /** The newest Focus sessions, newest first, at most [FOCUS_HISTORY_LIMIT][thread.domain.focus.FOCUS_HISTORY_LIMIT]. */

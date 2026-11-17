@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.SeriesKey
 import thread.domain.focus.FocusSession
 import thread.domain.note.NoteId
 import thread.domain.note.NoteSaveState
@@ -73,12 +75,16 @@ import thread.domain.workspace.discardNote
 import thread.domain.workspace.discardTask
 import thread.domain.workspace.dismissReminder
 import thread.domain.workspace.linkExternal
+import thread.domain.workspace.linkMeeting
 import thread.domain.workspace.linkedTopicIdsOf
+import thread.domain.workspace.linkedTopicIdsOfSeries
 import thread.domain.workspace.referencesOf
 import thread.domain.workspace.savePrefs
 import thread.domain.workspace.seedWrites
 import thread.domain.workspace.setExternalLinks
+import thread.domain.workspace.setMeetingLinks
 import thread.domain.workspace.unlinkExternal
+import thread.domain.workspace.unlinkMeeting
 import thread.domain.workspace.workspaceSaveStates
 import thread.domain.note.inboxNotes as inboxNotesOf
 import thread.domain.trash.trashTopic as trashTopicEdit
@@ -437,6 +443,36 @@ internal class WorkspaceModel(
         reference: ExternalReference,
         topicId: TopicId,
     ): WorkspaceEdit? = data?.let { apply(unlinkExternal(reference, topicId, it)) }
+
+    /** The Topic links to meeting series (D78 P5). Links of Topics in Trash are left out. */
+    val meetingLinks: List<MeetingLink> get() = data?.meetingLinks.orEmpty()
+
+    /** The Topics the series [seriesKey] is linked to, in Topic order. Topics in Trash are left out. */
+    fun topicsOfSeries(seriesKey: SeriesKey): List<Topic> {
+        val ids = linkedTopicIdsOfSeries(seriesKey, meetingLinks).toSet()
+        return if (ids.isEmpty()) emptyList() else topics.filter { it.id in ids }
+    }
+
+    /**
+     * Makes [topicIds] the Topics of the series [seriesKey] (the Meeting card's "Link to Topic"); [title] is the snapshot
+     * a new link keeps. Links to Topics in Trash stay as they are. Returns the edit for Undo, or null when nothing changed.
+     */
+    fun setSeriesTopics(
+        seriesKey: SeriesKey,
+        title: String,
+        topicIds: List<TopicId>,
+    ): WorkspaceEdit? = data?.let { apply(setMeetingLinks(seriesKey, title, topicIds, it)) }
+
+    fun linkSeries(
+        seriesKey: SeriesKey,
+        title: String,
+        topicId: TopicId,
+    ): WorkspaceEdit? = data?.let { apply(linkMeeting(seriesKey, title, topicId, it)) }
+
+    fun unlinkSeries(
+        seriesKey: SeriesKey,
+        topicId: TopicId,
+    ): WorkspaceEdit? = data?.let { apply(unlinkMeeting(seriesKey, topicId, it)) }
 
     /** Everything in Trash, newest deletion first. */
     val trash: List<TrashEntry>

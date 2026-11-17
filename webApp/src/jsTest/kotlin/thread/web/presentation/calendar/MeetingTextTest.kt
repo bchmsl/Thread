@@ -113,6 +113,32 @@ class MeetingTextTest {
     }
 
     @Test
+    fun aRowNamesTheTopicsItsSeriesIsLinkedTo() {
+        assertEquals(
+            "11:30 to 12:00, Synthetic review, next, starts in 42 minutes, linked to Synthetic QR",
+            meetingRowLabel(row(review), now, listOf("Synthetic QR")),
+        )
+        assertEquals("linked to Synthetic A and Synthetic B", linkedToText(listOf("Synthetic A", "Synthetic B")))
+        assertEquals("linked to A, B and C", linkedToText(listOf("A", "B", "C")))
+        assertNull(linkedToText(emptyList()))
+    }
+
+    @Test
+    fun topicDetailsSayWhenALinkedSeriesMeetsNext() {
+        val thursday = today.plusDays(2)
+        assertEquals("Today, 11:30", nextOccurrenceText(review, now))
+        assertEquals("Now, until 11:00", nextOccurrenceText(planning, now))
+        assertEquals("Now, until tomorrow 00:30", nextOccurrenceText(nightCall, WallTime.of(today, 23, 45)))
+        assertEquals("Thu 19 Nov, 10:00", nextOccurrenceText(meeting(7, "Synthetic sync", timed(thursday, 10, 0, thursday, 11, 0)), now))
+        val trip = meeting(8, "Synthetic trip", MeetingTime.AllDay(today.plusDays(1), thursday))
+        assertEquals("Tomorrow, all day", nextOccurrenceText(trip, now))
+        val conference = meeting(9, "Synthetic conference", MeetingTime.AllDay(today.plusDays(-1), thursday))
+        assertEquals("Today, all day", nextOccurrenceText(conference, now), "an all-day one under way")
+        assertEquals("Yesterday, all day", occurrenceText(conference.time, today), "search shows when it starts")
+        assertEquals(NO_NEXT_MEETING, nextOccurrenceText(null, now))
+    }
+
+    @Test
     fun theChipNamesTheNextMeeting() {
         val soon = NextMeeting.Soon(review, 42)
         assertEquals("Synthetic review in 42 min", chipText(soon))

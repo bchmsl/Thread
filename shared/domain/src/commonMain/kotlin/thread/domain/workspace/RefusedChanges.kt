@@ -62,6 +62,7 @@ private fun documentOf(write: WorkspaceWrite): String =
         is WorkspaceWrite.PutNoteLink -> "noteLinks/${write.link.id}"
         is WorkspaceWrite.PutExternalRef -> "externalRefs/${write.reference.id}"
         is WorkspaceWrite.PutExternalLink -> "externalLinks/${write.link.id}"
+        is WorkspaceWrite.PutMeetingLink -> "meetingLinks/${write.link.id}"
         is WorkspaceWrite.PutFocusSession -> "focusSessions/${write.session.id}"
         is WorkspaceWrite.DeleteForever ->
             when (write.kind) {
@@ -88,6 +89,11 @@ private fun writtenFields(write: WorkspaceWrite): Map<String, Any?> =
                 put(LINKED, write.link.linked)
                 write.link.dismissed?.let { put(DISMISSED, it) }
             }
+        is WorkspaceWrite.PutMeetingLink ->
+            buildMap {
+                put(LINKED, write.link.linked)
+                write.link.title?.let { put(TITLE, it) }
+            }
         is WorkspaceWrite.PutFocusSession -> write.session.fields()
         is WorkspaceWrite.DeleteForever -> emptyMap()
     }
@@ -108,6 +114,8 @@ private fun storedFields(
         is WorkspaceWrite.PutExternalRef -> data.externalRefs.firstOrNull { it.id == write.reference.id }?.let { mapOf(URL to it.url) }
         is WorkspaceWrite.PutExternalLink ->
             data.externalLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked, DISMISSED to it.dismissed) }
+        is WorkspaceWrite.PutMeetingLink ->
+            data.meetingLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked, TITLE to it.title) }
         is WorkspaceWrite.PutFocusSession ->
             (data.focusSessions.firstOrNull { it.id == write.session.id } ?: write.session.takeIf { beyondHistory(it, data) })?.fields()
         is WorkspaceWrite.DeleteForever ->
@@ -200,4 +208,5 @@ private fun NoteSummary.filing(): Map<String, Any?> = mapOf("inbox" to inbox, "d
 
 private const val LINKED = "linked"
 private const val DISMISSED = "dismissed"
+private const val TITLE = "title"
 private const val URL = "url"

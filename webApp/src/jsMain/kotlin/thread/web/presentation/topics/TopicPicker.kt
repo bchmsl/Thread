@@ -187,6 +187,7 @@ internal fun ItemPickerDialog(
     empty: String,
     onPick: (String) -> Unit,
     onCancel: () -> Unit,
+    note: String = "Links the existing item. Nothing is copied.",
 ) {
     var pick by remember { mutableStateOf("") }
     ModalDialog(onClose = onCancel) { titleId ->
@@ -201,7 +202,7 @@ internal fun ItemPickerDialog(
                 classes("dlg__title")
                 id(titleId)
             }) { Text(title) }
-            P({ classes("dlg__text") }) { Text("Links the existing item. Nothing is copied.") }
+            P({ classes("dlg__text") }) { Text(note) }
             if (items.isEmpty()) {
                 P({ classes("dlg__text") }) { Text(empty) }
             } else {

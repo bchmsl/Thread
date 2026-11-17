@@ -16,6 +16,9 @@ import thread.data.external.KeyValueStore
 import thread.data.local.newJsObject
 import thread.data.workspace.WorkspaceOutbox
 import thread.domain.account.AccountId
+import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.isMeetingHash
 import thread.domain.focus.FOCUS_HISTORY_LIMIT
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
@@ -90,6 +93,10 @@ class WorkspaceReadException(
  *   schemaVersion: 1}`. Unlinking writes `linked: false`; nothing is deleted and the external record is never
  *   changed. `dismissed` is optional and written only when set: true means "not suggested in this Topic"
  *   (adr/ADR-017-topic-suggestions.md). A document without it reads as not dismissed.
+ * - `users/{uid}/topicMeetingLinks/{topicId}_{seriesKey}`: `{topicId, seriesKey, linked, title?, updatedAt,
+ *   schemaVersion: 1}` (adr/ADR-020-calendar-meetings-sync.md). One link covers a whole meeting series. Unlinking writes
+ *   `linked: false`; the rules allow no delete. `title` is the series title when it was linked, written only then, so
+ *   the Topic still names the series after it leaves the 16-day window. The meetings themselves are never written here.
  * - `users/{uid}/focusSessions/f-{runId}`: `{startedAt, endedAt, focusedMs, plannedMin, outcome, targetKind,
  *   targetId, schemaVersion: 1}` (adr/ADR-019-focus-timer.md). Times are epoch milliseconds from the device, never a
  *   server timestamp: a session is written whole, once, with fixed values, so a second identical write (Retry, or two
@@ -172,10 +179,12 @@ class FirestoreWorkspaceStore internal constructor(
             var links: QuerySnapshot? = null
             var externalRefs: QuerySnapshot? = null
             var externalLinks: QuerySnapshot? = null
+            var meetingLinks: QuerySnapshot? = null
             var focusSessions: QuerySnapshot? = null
             var prefs: DocumentSnapshot? = null
             val emitWhenComplete = {
-                val collections = listOf(statuses, topics, tasks, reminders, notes, links, externalRefs, externalLinks, focusSessions)
+                val collections =
+                    listOf(statuses, topics, tasks, reminders, notes, links, externalRefs, externalLinks, meetingLinks, focusSessions)
                 val p = prefs
                 if (p != null && collections.all { it != null }) {
                     val snapshots =
@@ -188,6 +197,7 @@ class FirestoreWorkspaceStore internal constructor(
                             links!!,
                             externalRefs!!,
                             externalLinks!!,
+                            meetingLinks!!,
                             focusSessions!!,
                             p,
                         )
@@ -240,6 +250,11 @@ class FirestoreWorkspaceStore internal constructor(
                     externalLinks = it
                     emitWhenComplete()
                 }, stop)
+            val stopMeetingLinks =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, MEETING_LINKS), options, {
+                    meetingLinks = it
+                    emitWhenComplete()
+                }, stop)
             // The newest sessions only: the history grows without end, and the panel shows a few (F3 A).
             val recentSessions =
                 query(
@@ -266,6 +281,7 @@ class FirestoreWorkspaceStore internal constructor(
                 stopLinks()
                 stopExternalRefs()
                 stopExternalLinks()
+                stopMeetingLinks()
                 stopFocusSessions()
                 stopPrefs()
             }
@@ -287,6 +303,7 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutNoteLink -> linkData(write.link)
                     is WorkspaceWrite.PutExternalRef -> externalRefData(write.reference)
                     is WorkspaceWrite.PutExternalLink -> externalLinkData(write.link)
+                    is WorkspaceWrite.PutMeetingLink -> meetingLinkData(write.link)
                     is WorkspaceWrite.PutFocusSession -> focusSessionData(write.session)
                     is WorkspaceWrite.DeleteForever -> tombstone()
                 }
@@ -314,6 +331,7 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutNoteLink -> doc(firestore, USERS, accountId.value, LINKS, write.link.id)
             is WorkspaceWrite.PutExternalRef -> doc(firestore, USERS, accountId.value, EXTERNAL_REFS, write.reference.id)
             is WorkspaceWrite.PutExternalLink -> doc(firestore, USERS, accountId.value, EXTERNAL_LINKS, write.link.id)
+            is WorkspaceWrite.PutMeetingLink -> doc(firestore, USERS, accountId.value, MEETING_LINKS, write.link.id)
             is WorkspaceWrite.PutFocusSession -> doc(firestore, USERS, accountId.value, FOCUS_SESSIONS, write.session.id)
             is WorkspaceWrite.DeleteForever -> {
                 val collection =
@@ -487,6 +505,18 @@ class FirestoreWorkspaceStore internal constructor(
         return data
     }
 
+    private fun meetingLinkData(link: MeetingLink): dynamic {
+        val data = newJsObject()
+        data.topicId = link.topicId.value
+        data.seriesKey = link.seriesKey.value
+        data.linked = link.linked
+        // Left out when not set, so the merge keeps the stored snapshot.
+        link.title?.let { data.title = it }
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
     /**
      * The whole session with no server timestamp, so writing it again stores the same document (see the class comment).
      * Times are whole milliseconds, which Firestore keeps as integers.
@@ -521,6 +551,7 @@ class FirestoreWorkspaceStore internal constructor(
         const val LINKS = "topicNoteLinks"
         const val EXTERNAL_REFS = "externalRefs"
         const val EXTERNAL_LINKS = "topicExternalLinks"
+        const val MEETING_LINKS = "topicMeetingLinks"
         const val FOCUS_SESSIONS = "focusSessions"
         const val PREFS_ID = "main"
         const val SCHEMA_VERSION = 1
@@ -536,6 +567,7 @@ private class Snapshots(
     val links: QuerySnapshot,
     val externalRefs: QuerySnapshot,
     val externalLinks: QuerySnapshot,
+    val meetingLinks: QuerySnapshot,
     val focusSessions: QuerySnapshot,
     val prefs: DocumentSnapshot,
 )
@@ -551,6 +583,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
     val decodedLinks = snapshots.links.docs.map(::decodeLink)
     val decodedRefs = snapshots.externalRefs.docs.map(::decodeExternalRef)
     val decodedExternalLinks = snapshots.externalLinks.docs.map(::decodeExternalLink)
+    val decodedMeetingLinks = snapshots.meetingLinks.docs.map(::decodeMeetingLink)
     val decodedFocusSessions = snapshots.focusSessions.docs.map(::decodeFocusSession)
     val all =
         listOf(
@@ -562,6 +595,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             snapshots.links,
             snapshots.externalRefs,
             snapshots.externalLinks,
+            snapshots.meetingLinks,
             snapshots.focusSessions,
         )
     val decoded =
@@ -574,6 +608,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             decodedLinks,
             decodedRefs,
             decodedExternalLinks,
+            decodedMeetingLinks,
             decodedFocusSessions,
         )
     return WorkspaceData(
@@ -585,6 +620,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
         noteLinks = decodedLinks.filterNotNull(),
         externalRefs = decodedRefs.filterNotNull(),
         externalLinks = decodedExternalLinks.filterNotNull(),
+        meetingLinks = decodedMeetingLinks.filterNotNull(),
         purgedNotes =
             snapshots.notes.docs
                 .filter(::isTombstone)
@@ -749,6 +785,18 @@ private fun decodeExternalLink(snapshot: DocumentSnapshot): TopicExternalLink? {
     val refId = stringOrNull(data.refId)?.takeIf { it.isNotBlank() } ?: return null
     val linked = booleanOrNull(data.linked) ?: return null
     return TopicExternalLink(TopicId(topicId), refId, linked, booleanOrNull(data.dismissed)).takeIf { it.id == snapshot.id }
+}
+
+/** The Topic link to a meeting series in [snapshot], or null when this app cannot read it or its id does not match. */
+private fun decodeMeetingLink(snapshot: DocumentSnapshot): MeetingLink? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val topicId = stringOrNull(data.topicId)?.takeIf { it.isNotBlank() } ?: return null
+    val seriesKey = stringOrNull(data.seriesKey)?.takeIf(::isMeetingHash) ?: return null
+    val linked = booleanOrNull(data.linked) ?: return null
+    // Missing, or not text: no snapshot. The link itself still reads.
+    val title = stringOrNull(data.title)
+    return MeetingLink(TopicId(topicId), SeriesKey(seriesKey), linked, title).takeIf { it.id == snapshot.id }
 }
 
 /** The Focus session in [snapshot], or null when this app cannot read it. The query orders sessions newest first. */

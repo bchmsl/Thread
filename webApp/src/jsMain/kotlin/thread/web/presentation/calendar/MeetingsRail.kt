@@ -20,12 +20,14 @@ import thread.domain.calendar.Meeting
 import thread.domain.calendar.MeetingPhase
 import thread.domain.calendar.MeetingTime
 import thread.domain.calendar.MeetingsState
+import thread.domain.calendar.SeriesKey
 import thread.domain.calendar.TodayMeeting
 import thread.domain.calendar.isJoinTime
 import thread.domain.calendar.joinServiceOf
 import thread.domain.calendar.todayMeetings
 import thread.domain.time.WallTime
 import thread.domain.time.clockText
+import thread.domain.topic.Topic
 import thread.web.platform.WallClock
 import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
@@ -33,6 +35,7 @@ import thread.web.presentation.IconView
 import thread.web.presentation.LocalNow
 import thread.web.presentation.SectionCard
 import thread.web.presentation.itemCard
+import thread.web.presentation.topics.PlainTopicTag
 
 /**
  * Today's Meetings card (D78, calendar-plan.md section 6): today's meetings from the Mac app, all-day first, then by
@@ -44,6 +47,7 @@ import thread.web.presentation.itemCard
 internal fun MeetingsRail(
     model: MeetingsModel,
     zone: String,
+    topicsOf: (SeriesKey) -> List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
     val now = LocalNow.current
@@ -79,7 +83,7 @@ internal fun MeetingsRail(
         }
         if (rows.isNotEmpty()) {
             Ul({ classes("tlist", "mtg-list") }) {
-                rows.forEach { row -> key(row.meeting.id.value) { MeetingRow(row, now, onOpen) } }
+                rows.forEach { row -> key(row.meeting.id.value) { MeetingRow(row, now, topicsOf(row.meeting.seriesKey), onOpen) } }
             }
         }
         if (lastSuccess != null && notice?.saysTime != true) {
@@ -107,13 +111,15 @@ private fun LoadingRows() {
 
 /**
  * One meeting: the time leads, like a calendar's block, then the title, then Now or Next with how long until it starts
- * or ends and the answer, then the place on one line. The title keeps the row's full width: the rail is narrow. The
- * row is one button whose name is the whole sentence ([meetingRowLabel]).
+ * or ends and the answer, then the place on one line, then the Topics its series is linked to ([topics], D78 P5). The
+ * title keeps the row's full width: the rail is narrow. The row is one button whose name is the whole sentence
+ * ([meetingRowLabel]), so the Topic tags inside it are not links.
  */
 @Composable
 private fun MeetingRow(
     row: TodayMeeting,
     now: WallTime,
+    topics: List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
     val meeting = row.meeting
@@ -131,7 +137,7 @@ private fun MeetingRow(
             Button({
                 type(ButtonType.Button)
                 classes("mrow__open")
-                attr("aria-label", meetingRowLabel(row, now))
+                attr("aria-label", meetingRowLabel(row, now, topics.map { it.name }))
                 onClick { onOpen(meeting) }
             }) {
                 Span({ classes("mrow__time") }) {
@@ -163,6 +169,9 @@ private fun MeetingRow(
                         }
                     }
                     meeting.location?.let { location -> Span({ classes("mrow__where") }) { Text(location) } }
+                    if (topics.isNotEmpty()) {
+                        Span({ classes("mrow__topics") }) { topics.forEach { PlainTopicTag(it) } }
+                    }
                 }
             }
             if (row.phase != MeetingPhase.Ended) JoinLink(meeting, now, small = true)

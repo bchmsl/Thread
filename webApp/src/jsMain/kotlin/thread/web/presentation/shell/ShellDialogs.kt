@@ -245,7 +245,7 @@ internal fun SearchPalette(
                 IconView(Icon.Search, 20)
                 SearchInput(query) {
                     classes("pal__input")
-                    placeholder("Search Topics, Tasks, Notes, Jira and PRs")
+                    placeholder("Search Topics, Tasks, Notes, meetings, Jira and PRs")
                     attr("aria-label", "Search this device")
                     attr("role", "combobox")
                     attr("aria-expanded", "true")
@@ -323,7 +323,10 @@ internal fun SearchPalette(
                 }
             }
             P({ classes("pal__foot") }) {
-                Text("Searches this device: Topics, Tasks, Notes and downloaded Jira and pull request details.")
+                Text(
+                    "Searches this device: Topics, Tasks, Notes, meetings from yesterday to 14 days ahead, " +
+                        "and downloaded Jira and pull request details.",
+                )
             }
         }
     }

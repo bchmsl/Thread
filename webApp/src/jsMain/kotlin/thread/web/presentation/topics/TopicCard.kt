@@ -15,6 +15,7 @@ import thread.web.presentation.IconView
 import thread.web.presentation.ItemCard
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.calendar.MeetingsModel
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.scopedId
@@ -29,6 +30,7 @@ internal fun TopicCard(
     workspace: WorkspaceModel,
     jira: JiraModel,
     gitHub: GitHubModel,
+    meetings: MeetingsModel,
     topic: Topic,
     cards: CardOpener,
     backTo: String?,
@@ -48,7 +50,7 @@ internal fun TopicCard(
         onClose = onClose,
     ) {
         Div({ classes("dcard__body", "dcard__body--topic") }) {
-            TopicDetails(workspace, jira, gitHub, topic, cards, inCard = true)
+            TopicDetails(workspace, jira, gitHub, meetings, topic, cards, inCard = true)
         }
         Footer({ classes("dcard__foot") }) {
             Button({

@@ -248,6 +248,17 @@
 .dmeet > .mjoin { align-self: flex-start; }
 .dmeet__where { overflow-wrap: anywhere; }
 .dmeet__foot { margin: 0; font-size: var(--fs-13); color: var(--text-3); }
+/* Topic links (P5): the Meeting card's Topics, the Today row's tags and the rows in a Topic's Meetings section. */
+/* Rows 8 px apart, so a chip's Unlink keeps its 40 px target next to the chips and Link to Topic above and below. */
+.dmeet__topics { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mrow__topics { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; margin-top: 1px; }
+.mrow__topics .ttag { max-width: 100%; }
+.tmeet .mjoin--row { margin: 0 4px 0 8px; }
+/* The small Link and Unlink buttons keep their size and take a 40 px target (plan section 6, accessibility). */
+:is(.lchip--hit .iconbtn, .tmeet > .iconbtn, .dmeet__link) { position: relative; }
+:is(.lchip--hit .iconbtn, .tmeet > .iconbtn, .dmeet__link)::after { content: ''; position: absolute; inset: -5px; }
+.lchip--hit .iconbtn::after { inset: -7px; }
+.dmeet__link::after { inset: -4px 0; }
 
 /* Suggestions (#11): quieter cards with a dashed edge. */
 .icard--sugg { background-color: transparent; border-style: dashed; border-color: var(--border-strong); }

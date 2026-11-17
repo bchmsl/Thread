@@ -30,8 +30,8 @@ import thread.domain.workspace.referencesOf
 
 /**
  * The workspace as every view shows it: each Topic in Trash is taken out, with its Tasks, the Reminders on it or on
- * those Tasks, and its Note, Jira and pull request links. Everything else stays as stored, Trash flags included, so
- * the Task, Note and Reminder rules keep working on it.
+ * those Tasks, and its Note, Jira, pull request and meeting links. Everything else stays as stored, Trash flags
+ * included, so the Task, Note and Reminder rules keep working on it.
  */
 fun visibleWorkspace(data: WorkspaceData): WorkspaceData {
     val trashed =
@@ -51,6 +51,7 @@ fun visibleWorkspace(data: WorkspaceData): WorkspaceData {
         reminders = data.reminders.filterNot { goesWithTopic(it, trashed, hiddenTasks) },
         noteLinks = data.noteLinks.filterNot { it.topicId in trashed },
         externalLinks = data.externalLinks.filterNot { it.topicId in trashed },
+        meetingLinks = data.meetingLinks.filterNot { it.topicId in trashed },
     )
 }
 

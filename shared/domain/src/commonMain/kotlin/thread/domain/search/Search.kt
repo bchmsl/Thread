@@ -1,9 +1,13 @@
 package thread.domain.search
 
+import thread.domain.calendar.Meeting
+import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.hasEnded
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.PullRequestSummary
 import thread.domain.note.NoteSummary
 import thread.domain.task.Task
+import thread.domain.time.WallTime
 import thread.domain.topic.Topic
 import thread.domain.topic.topicInfo
 
@@ -82,3 +86,36 @@ fun searchPullRequestCopies(
                 it.ref.number == number
         }.take(SEARCH_GROUP_LIMIT)
 }
+
+/** Most occurrences of one repeating meeting in the results, so a daily standup does not fill the list. */
+const val SEARCH_SERIES_LIMIT: Int = 3
+
+/**
+ * Searches the meetings on this device, yesterday to 14 days ahead (D78 P5b, adr/ADR-020-calendar-meetings-sync.md),
+ * on title or location, ignoring case. The join link is never matched: it may hold a passcode. Nearest to [now] first:
+ * those not over by start, then those over, the latest first. At most [SEARCH_SERIES_LIMIT] per series and
+ * [SEARCH_GROUP_LIMIT] in all. Returns null for a blank [query].
+ */
+fun searchMeetings(
+    query: String,
+    meetings: List<Meeting>,
+    now: WallTime,
+): List<Meeting>? {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return null
+
+    fun String?.has() = orEmpty().lowercase().contains(q)
+    val (over, ahead) = meetings.filter { it.title.has() || it.location.has() }.partition { hasEnded(it.time, now) }
+    val nearest =
+        ahead.sortedWith(compareBy<Meeting>({ it.time.startsAt }, { it.displayTitle }, { it.id.value })) +
+            over.sortedWith(LATEST_END_FIRST.then(compareBy({ it.displayTitle }, { it.id.value })))
+    val perSeries = mutableMapOf<SeriesKey, Int>()
+    return nearest
+        .filter { meeting ->
+            val shown = perSeries[meeting.seriesKey] ?: 0
+            perSeries[meeting.seriesKey] = shown + 1
+            shown < SEARCH_SERIES_LIMIT
+        }.take(SEARCH_GROUP_LIMIT)
+}
+
+private val LATEST_END_FIRST: Comparator<Meeting> = compareByDescending { it.time.endsAt }

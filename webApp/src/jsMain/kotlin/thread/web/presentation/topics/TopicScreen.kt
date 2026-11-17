@@ -72,6 +72,7 @@ import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.calendar.MeetingsModel
 import thread.web.presentation.cardKind
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
@@ -88,6 +89,7 @@ internal fun TopicScreen(
     workspace: WorkspaceModel,
     jira: JiraModel,
     gitHub: GitHubModel,
+    meetings: MeetingsModel,
     topicId: String?,
     cards: CardOpener,
 ) {
@@ -120,7 +122,7 @@ internal fun TopicScreen(
         IconView(Icon.ChevLeft, 16)
         Text(" Topics")
     }
-    TopicDetails(workspace, jira, gitHub, topic, cards, inCard = false) {
+    TopicDetails(workspace, jira, gitHub, meetings, topic, cards, inCard = false) {
         // Move to Trash is instant with Undo (v3, owner decision 2026-11-13). The page then shows what went with it.
         val edit = workspace.trashTopic(topic) ?: return@TopicDetails
         focusAfterSwitch = GONE_HEADING_ID
@@ -133,7 +135,7 @@ internal fun TopicScreen(
 
 /**
  * Topic Details (v3 topic.html): identity and status on top, "Additional information" (D52), then Tasks and Notes,
- * with Jira, pull requests and Reminders beside them. Every linked item opens as a card (D70).
+ * with Jira, pull requests, meetings (D78 P5) and Reminders beside them. Every linked item opens as a card (D70).
  *
  * The Topic's page shows it, and so does the Topic card ([inCard]). In the card the name is the card's heading, and
  * Move to Trash sits in the card's footer: [onTrash] is null there.
@@ -143,6 +145,7 @@ internal fun TopicDetails(
     workspace: WorkspaceModel,
     jira: JiraModel,
     gitHub: GitHubModel,
+    meetings: MeetingsModel,
     topic: Topic,
     cards: CardOpener,
     inCard: Boolean,
@@ -157,6 +160,7 @@ internal fun TopicDetails(
     var remindersOpen by remember(topic.id) { mutableStateOf(false) }
     var jiraOpen by remember(topic.id) { mutableStateOf(true) }
     var prsOpen by remember(topic.id) { mutableStateOf(true) }
+    var meetingsOpen by remember(topic.id) { mutableStateOf(true) }
     var focusAddTask by remember { mutableStateOf(0) }
     LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("${ids}td-new-task") }
     val statuses = workspace.statuses
@@ -249,6 +253,16 @@ internal fun TopicDetails(
             TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey, suggestions, cards::openJira)
             val openId = shown?.takeIf { it.type == CardType.Pr }?.id
             TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId, suggestions, cards::openPr)
+            val openMeeting = shown?.takeIf { it.type == CardType.Meeting }?.id
+            TopicMeetingsSection(
+                workspace,
+                meetings,
+                topic,
+                meetingsOpen,
+                { meetingsOpen = !meetingsOpen },
+                openMeeting,
+                cards::openMeeting,
+            )
             TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, cards::openTarget)
         }
     }

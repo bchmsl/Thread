@@ -1,5 +1,6 @@
 package thread.web.presentation.calendar
 
+import thread.domain.calendar.Meeting
 import thread.domain.calendar.MeetingPhase
 import thread.domain.calendar.MeetingResponse
 import thread.domain.calendar.MeetingSourceState
@@ -138,11 +139,12 @@ private fun rowTimeWords(
 
 /**
  * The row as one sentence, its accessible name: "10:00 to 11:00, Sprint planning, now, ends in 12 minutes". Then the
- * answer and the place, when there are any.
+ * answer, the place and the Topics its series is linked to ([topics], names), when there are any.
  */
 internal fun meetingRowLabel(
     row: TodayMeeting,
     now: WallTime,
+    topics: List<String> = emptyList(),
 ): String {
     val phase =
         when (row.phase) {
@@ -158,7 +160,51 @@ internal fun meetingRowLabel(
         rowRelativeWords(row, now),
         responseText(row.meeting.response)?.lowercase(),
         row.meeting.location,
+        linkedToText(topics),
     ).joinToString(", ")
+}
+
+/** "linked to QR payments", "linked to A and B", "linked to A, B and C", or null for no Topic. */
+internal fun linkedToText(topics: List<String>): String? =
+    when (topics.size) {
+        0 -> null
+        1 -> "linked to ${topics[0]}"
+        else -> "linked to ${topics.dropLast(1).joinToString(", ")} and ${topics.last()}"
+    }
+
+/**
+ * When an occurrence starts, for Topic Details and search: "Today, 10:00", "Thu 20 Nov, 10:00", "Tomorrow, all day".
+ * [today] is the workspace's day.
+ */
+internal fun occurrenceText(
+    time: MeetingTime,
+    today: LocalDay,
+): String =
+    when (time) {
+        is MeetingTime.AllDay -> "${dayText(time.firstDay, today)}, all day"
+        is MeetingTime.Timed -> "${dayText(time.start.day, today)}, ${clockText(time.start.minuteOfDay)}"
+    }
+
+/** Shown for a linked series with no occurrence ahead in the window. */
+internal const val NO_NEXT_MEETING: String = "None in the next 14 days"
+
+/**
+ * A linked series' next occurrence on Topic Details: "Now, until 10:30" while it runs, "Today, all day" for an all-day
+ * one that includes today, else [occurrenceText], or [NO_NEXT_MEETING].
+ */
+internal fun nextOccurrenceText(
+    next: Meeting?,
+    now: WallTime,
+): String {
+    if (next == null) return NO_NEXT_MEETING
+    val time = next.time
+    if (time is MeetingTime.AllDay && time.firstDay <= now.day) return "Today, all day"
+    if (time is MeetingTime.Timed && time.start <= now) {
+        val end = time.end
+        val clock = clockText(end.minuteOfDay)
+        return "Now, until ${if (end.day == now.day) clock else "${dayText(end.day, now.day, mid = true)} $clock"}"
+    }
+    return occurrenceText(time, now.day)
 }
 
 /** The status line chip's text: "Standup in 12 min" or "Standup now". */

@@ -39,7 +39,8 @@ class WorkspaceEditsTest {
                     is WorkspaceWrite.PutTopic -> topics = topics.filterNot { it.id == write.topic.id } + write.topic
                     is WorkspaceWrite.PutPrefs, is WorkspaceWrite.PutTask, is WorkspaceWrite.PutReminder,
                     is WorkspaceWrite.PutNote, is WorkspaceWrite.PutNoteLink, is WorkspaceWrite.DeleteForever,
-                    is WorkspaceWrite.PutExternalRef, is WorkspaceWrite.PutExternalLink, is WorkspaceWrite.PutFocusSession,
+                    is WorkspaceWrite.PutExternalRef, is WorkspaceWrite.PutExternalLink, is WorkspaceWrite.PutMeetingLink,
+                    is WorkspaceWrite.PutFocusSession,
                     -> Unit
                 }
             }

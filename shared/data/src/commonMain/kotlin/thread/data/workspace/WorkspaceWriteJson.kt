@@ -12,6 +12,9 @@ import thread.data.external.int
 import thread.data.external.long
 import thread.data.external.obj
 import thread.data.external.str
+import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.isMeetingHash
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
 import thread.domain.focus.FocusSettings
@@ -70,6 +73,7 @@ internal object WorkspaceWriteJson {
             is WorkspaceWrite.PutNoteLink -> put("noteLink", noteLink(write.link))
             is WorkspaceWrite.PutExternalRef -> put("externalRef", externalRef(write.reference))
             is WorkspaceWrite.PutExternalLink -> put("externalLink", externalLink(write.link))
+            is WorkspaceWrite.PutMeetingLink -> put("meetingLink", meetingLink(write.link))
             is WorkspaceWrite.PutFocusSession -> put("focusSession", focusSession(write.session))
             is WorkspaceWrite.DeleteForever ->
                 put(
@@ -109,6 +113,7 @@ internal object WorkspaceWriteJson {
             "noteLink" -> WorkspaceWrite.PutNoteLink(noteLink(value) ?: return null)
             "externalRef" -> WorkspaceWrite.PutExternalRef(externalRef(value) ?: return null)
             "externalLink" -> WorkspaceWrite.PutExternalLink(externalLink(value) ?: return null)
+            "meetingLink" -> WorkspaceWrite.PutMeetingLink(meetingLink(value) ?: return null)
             "focusSession" -> WorkspaceWrite.PutFocusSession(focusSession(value) ?: return null)
             "deleteForever" -> {
                 val kind = TrashKind.entries.firstOrNull { it.name == value.str("kind") } ?: return null
@@ -326,6 +331,22 @@ internal object WorkspaceWriteJson {
             referenceId = json.str("referenceId") ?: return null,
             linked = json.bool("linked") ?: return null,
             dismissed = json.bool("dismissed"),
+        )
+
+    private fun meetingLink(link: MeetingLink): JsonObject =
+        buildJsonObject {
+            put("topicId", link.topicId.value)
+            put("seriesKey", link.seriesKey.value)
+            put("linked", link.linked)
+            link.title?.let { put("title", it) }
+        }
+
+    private fun meetingLink(json: JsonObject): MeetingLink? =
+        MeetingLink(
+            topicId = TopicId(json.str("topicId")?.takeIf { it.isNotBlank() } ?: return null),
+            seriesKey = SeriesKey(json.str("seriesKey")?.takeIf(::isMeetingHash) ?: return null),
+            linked = json.bool("linked") ?: return null,
+            title = json.str("title"),
         )
 
     private fun focusSession(session: FocusSession): JsonObject =

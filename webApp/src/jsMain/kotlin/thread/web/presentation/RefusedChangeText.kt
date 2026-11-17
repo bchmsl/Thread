@@ -65,6 +65,11 @@ private fun WorkspaceModel.subjectOf(write: WorkspaceWrite): Pair<String, Place?
                 }
             what to topic?.let(::topicPlace)
         }
+        is WorkspaceWrite.PutMeetingLink -> {
+            val topic = storedTopic(write.link.topicId.value)
+            val name = topic?.name?.let { "“$it”" } ?: "a Topic"
+            "the link between ${meetingName(write)} and $name" to topic?.let(::topicPlace)
+        }
         is WorkspaceWrite.DeleteForever -> "“${write.title}”" to View.Trash.place
         // A refused session is not in the Focus panel's list, so there is nothing to open.
         is WorkspaceWrite.PutFocusSession -> "the focus session that ended ${endedText(write.session)}" to null
@@ -129,6 +134,11 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
                 }
             listOf(line)
         }
+        is WorkspaceWrite.PutMeetingLink -> {
+            val topic = storedTopic(write.link.topicId.value)?.name ?: "a Topic"
+            val how = if (write.link.linked) "linked to" else "unlinked from"
+            listOf("${meetingName(write).capitalized()} $how $topic")
+        }
         is WorkspaceWrite.DeleteForever -> listOf("Delete forever: ${write.title}")
         is WorkspaceWrite.PutFocusSession -> {
             val session = write.session
@@ -151,6 +161,13 @@ private fun lineOf(
 ): String? = if (value.isBlank()) null else "$label: $value"
 
 private fun WorkspaceModel.noteTitle(id: String): String = note(id)?.title?.ifBlank { null } ?: UNTITLED_NOTE
+
+/** “Standup” from the write's snapshot, else the stored one, else "a meeting". */
+private fun WorkspaceModel.meetingName(write: WorkspaceWrite.PutMeetingLink): String {
+    val storedLink = stored?.meetingLinks?.firstOrNull { it.id == write.link.id }
+    val title = write.link.title?.takeIf { it.isNotBlank() } ?: storedLink?.title?.takeIf { it.isNotBlank() }
+    return title?.let { "“$it”" } ?: "a meeting"
+}
 
 private fun String.capitalized(): String = replaceFirstChar { it.uppercaseChar() }
 
