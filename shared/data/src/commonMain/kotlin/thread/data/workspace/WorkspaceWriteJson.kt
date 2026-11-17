@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import thread.data.external.arr
 import thread.data.external.bool
 import thread.data.external.int
 import thread.data.external.long
@@ -40,10 +41,18 @@ import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicId
 import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
+import thread.domain.workspace.DEFAULT_TODAY_TOPIC_CATEGORIES
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.MyPrsGroupBy
+import thread.domain.workspace.PAST_MEETINGS_MAX
+import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayGroupBy
+import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TopicExternalLink
+import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspacePrefs
@@ -183,7 +192,30 @@ internal object WorkspaceWriteJson {
             put("breakMin", prefs.focusBreakMinutes)
             put("hideEmptySections", prefs.hideEmptySections)
             put("meetingsLayout", prefs.meetingsLayout.id)
+            put("todayTopicsView", prefs.todayTopicsView?.id)
+            put("todayHideEmpty", prefs.todayHideEmpty?.let { ids(it) { section -> section.id } } ?: JsonNull)
+            put("todayGroupBy", prefs.todayGroupBy.id)
+            put("todayPastMeetings", prefs.todayPastMeetings)
+            put("todayTopicCategories", ids(prefs.todayTopicCategories) { it.id })
+            put("inboxShowCompleted", prefs.inboxShowCompleted)
+            put("inboxShowNotes", prefs.inboxShowNotes)
+            put("inboxGroupBy", prefs.inboxGroupBy.id)
+            put("topicShowCompleted", prefs.topicShowCompleted)
+            put("topicHideEmpty", ids(prefs.topicHideEmpty) { it.id })
+            put("topicGroupByDue", prefs.topicGroupByDue)
+            put("jiraCurrentSprintOnly", prefs.jiraCurrentSprintOnly)
+            put("prsMineGroupBy", prefs.prsMineGroupBy.id)
+            put("prsReviewGroupBy", prefs.prsReviewGroupBy.id)
         }
+
+    private fun <E : Enum<E>> ids(
+        choices: Set<E>,
+        id: (E) -> String,
+    ): JsonArray = buildJsonArray { choices.sortedBy { it.ordinal }.forEach { add(JsonPrimitive(id(it))) } }
+
+    /** The strings in [key]'s list, or null when it holds no list. */
+    private fun JsonObject.strings(key: String): List<String>? =
+        arr(key)?.mapNotNull { (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.content }
 
     private fun prefs(json: JsonObject): WorkspacePrefs? =
         WorkspacePrefs(
@@ -198,6 +230,24 @@ internal object WorkspaceWriteJson {
             hideEmptySections = json.bool("hideEmptySections") ?: false,
             // Absent in changes saved by builds before D79: vertical.
             meetingsLayout = MeetingsLayout.fromId(json.str("meetingsLayout")) ?: MeetingsLayout.Vertical,
+            // Absent in changes saved by builds before D83, so those leave these preferences alone: the defaults, and
+            // not set where a value can be not set. A value this build does not know reads the same way.
+            todayTopicsView = TopicsView.fromId(json.str("todayTopicsView")),
+            todayHideEmpty = json.strings("todayHideEmpty")?.mapNotNull(TodayHideableSection::fromId)?.toSet(),
+            todayGroupBy = TodayGroupBy.fromId(json.str("todayGroupBy")) ?: TodayGroupBy.DueDate,
+            todayPastMeetings = json.int("todayPastMeetings")?.takeIf { it in 0..PAST_MEETINGS_MAX },
+            todayTopicCategories =
+                json.strings("todayTopicCategories")?.mapNotNull(StatusCategory::fromId)?.toSet()
+                    ?: DEFAULT_TODAY_TOPIC_CATEGORIES,
+            inboxShowCompleted = json.bool("inboxShowCompleted") ?: true,
+            inboxShowNotes = json.bool("inboxShowNotes") ?: true,
+            inboxGroupBy = InboxGroupBy.fromId(json.str("inboxGroupBy")) ?: InboxGroupBy.None,
+            topicShowCompleted = json.bool("topicShowCompleted") ?: true,
+            topicHideEmpty = json.strings("topicHideEmpty")?.mapNotNull(TopicHideableSection::fromId)?.toSet() ?: emptySet(),
+            topicGroupByDue = json.bool("topicGroupByDue") ?: false,
+            jiraCurrentSprintOnly = json.bool("jiraCurrentSprintOnly"),
+            prsMineGroupBy = MyPrsGroupBy.fromId(json.str("prsMineGroupBy")) ?: MyPrsGroupBy.Repository,
+            prsReviewGroupBy = ReviewPrsGroupBy.fromId(json.str("prsReviewGroupBy")) ?: ReviewPrsGroupBy.Repository,
         )
 
     private fun task(task: Task): JsonObject =

@@ -34,8 +34,14 @@ import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.MyPrsGroupBy
+import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayGroupBy
+import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TopicExternalLink
+import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspacePrefs
@@ -95,6 +101,25 @@ class WorkspaceWriteJsonTest {
             target = FocusTarget(FocusTargetKind.Topic, topic.id.value),
         )
 
+    /** Every per-screen preference (D83) away from its default. */
+    private val screenPrefs =
+        WorkspacePrefs(
+            todayTopicsView = TopicsView.Board,
+            todayHideEmpty = setOf(TodayHideableSection.ReviewRequested, TodayHideableSection.Meetings),
+            todayGroupBy = TodayGroupBy.Topic,
+            todayPastMeetings = 0,
+            todayTopicCategories = setOf(StatusCategory.Done, StatusCategory.Planned),
+            inboxShowCompleted = false,
+            inboxShowNotes = false,
+            inboxGroupBy = InboxGroupBy.DueDate,
+            topicShowCompleted = false,
+            topicHideEmpty = TopicHideableSection.entries.toSet(),
+            topicGroupByDue = true,
+            jiraCurrentSprintOnly = false,
+            prsMineGroupBy = MyPrsGroupBy.ReviewStatus,
+            prsReviewGroupBy = ReviewPrsGroupBy.Author,
+        )
+
     private val everyWrite =
         listOf(
             WorkspaceWrite.PutTopic(topic, isNew = true),
@@ -109,6 +134,9 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutPrefs(WorkspacePrefs(focusWorkMinutes = 50, focusBreakMinutes = 10)),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(hideEmptySections = true), before = WorkspacePrefs()),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(meetingsLayout = MeetingsLayout.Horizontal), before = WorkspacePrefs()),
+            WorkspaceWrite.PutPrefs(screenPrefs, before = WorkspacePrefs()),
+            // Back to not set, and an empty pick, which is not the same as not set.
+            WorkspaceWrite.PutPrefs(WorkspacePrefs(todayHideEmpty = emptySet(), todayTopicCategories = emptySet()), before = screenPrefs),
             WorkspaceWrite.PutFocusSession(focusSession),
             WorkspaceWrite.PutFocusSession(focusSession.copy(id = "f-run-2", outcome = FocusOutcome.Stopped, target = null)),
             WorkspaceWrite.PutTask(task, isNew = true),
@@ -180,6 +208,59 @@ class WorkspaceWriteJsonTest {
     }
 
     @Test
+    fun aPreferencesChangeSavedBeforeTheScreenPreferencesLeavesThemAlone() {
+        // An older build wrote neither the value's nor the before value's D83 fields. Both read as the defaults, so
+        // the store, which writes only what differs from before, leaves the stored choices alone.
+        val stored =
+            WorkspaceWriteJson
+                .encode(listOf(WorkspaceWrite.PutPrefs(screenPrefs, before = screenPrefs.copy(topicsView = TopicsView.Board))))
+                .single()
+                .jsonObject
+        val older =
+            JsonObject(
+                stored +
+                    ("value" to JsonObject(stored.getValue("value").jsonObject - SCREEN_PREF_KEYS)) +
+                    ("before" to JsonObject(stored.getValue("before").jsonObject - SCREEN_PREF_KEYS)),
+            )
+
+        val decoded = WorkspaceWriteJson.decode(JsonArray(listOf(older)))?.single()
+
+        assertEquals(WorkspaceWrite.PutPrefs(WorkspacePrefs(), before = WorkspacePrefs(topicsView = TopicsView.Board)), decoded)
+    }
+
+    @Test
+    fun screenPreferencesThisBuildDoesNotKnowReadAsTheirDefaults() {
+        val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(screenPrefs))).single().jsonObject
+        val later =
+            JsonObject(
+                stored.getValue("value").jsonObject +
+                    mapOf(
+                        "todayTopicsView" to JsonPrimitive("grid"),
+                        "todayHideEmpty" to JsonArray(listOf(JsonPrimitive("meetings"), JsonPrimitive("later"), JsonPrimitive(1))),
+                        "todayGroupBy" to JsonPrimitive("weekly"),
+                        "todayPastMeetings" to JsonPrimitive(21),
+                        "todayTopicCategories" to JsonPrimitive("active"),
+                        "inboxShowNotes" to JsonPrimitive("no"),
+                        "prsMineGroupBy" to JsonPrimitive("author"),
+                    ),
+            )
+
+        val decoded = WorkspaceWriteJson.decode(JsonArray(listOf(JsonObject(stored + ("value" to later)))))?.single()
+
+        val expected =
+            screenPrefs.copy(
+                todayTopicsView = null,
+                todayHideEmpty = setOf(TodayHideableSection.Meetings),
+                todayGroupBy = TodayGroupBy.DueDate,
+                todayPastMeetings = null,
+                todayTopicCategories = setOf(StatusCategory.Active, StatusCategory.Paused),
+                inboxShowNotes = true,
+                prsMineGroupBy = MyPrsGroupBy.Repository,
+            )
+        assertEquals(WorkspaceWrite.PutPrefs(expected), decoded)
+    }
+
+    @Test
     fun aWriteThisVersionCannotReadDropsTheWholeChange() {
         val good = WorkspaceWriteJson.encode(everyWrite.take(1)).single()
         val unknown = Json.parseToJsonElement("""{"type":"later","value":{}}""")
@@ -203,5 +284,26 @@ class WorkspaceWriteJsonTest {
         val damaged = Json.parseToJsonElement(link.toString().replace(series.value, "NOT-A-HASH")).jsonArray
 
         assertNull(WorkspaceWriteJson.decode(damaged))
+    }
+
+    private companion object {
+        /** The per-screen preference keys (D83), which builds before D83 did not write. */
+        val SCREEN_PREF_KEYS =
+            listOf(
+                "todayTopicsView",
+                "todayHideEmpty",
+                "todayGroupBy",
+                "todayPastMeetings",
+                "todayTopicCategories",
+                "inboxShowCompleted",
+                "inboxShowNotes",
+                "inboxGroupBy",
+                "topicShowCompleted",
+                "topicHideEmpty",
+                "topicGroupByDue",
+                "jiraCurrentSprintOnly",
+                "prsMineGroupBy",
+                "prsReviewGroupBy",
+            )
     }
 }

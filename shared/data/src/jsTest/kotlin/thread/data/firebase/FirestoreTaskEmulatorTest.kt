@@ -1,5 +1,6 @@
 package thread.data.firebase
 
+import kotlinx.coroutines.await
 import kotlinx.coroutines.flow.first
 import thread.domain.reminder.ReminderId
 import thread.domain.reminder.ReminderTarget
@@ -11,9 +12,18 @@ import thread.domain.task.newTask
 import thread.domain.time.DEFAULT_WORKSPACE_ZONE
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
+import thread.domain.topic.StatusCategory
 import thread.domain.topic.TopicId
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.MyPrsGroupBy
+import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayGroupBy
+import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TopicHideableSection
+import thread.domain.workspace.TopicsView
+import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.createReminderWrite
 import thread.domain.workspace.createTaskWrite
 import thread.domain.workspace.discardTask
@@ -21,6 +31,7 @@ import thread.domain.workspace.dismissReminder
 import thread.domain.workspace.editTask
 import thread.domain.workspace.savePrefs
 import thread.domain.workspace.seedWrites
+import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.toggleTask
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -230,6 +241,70 @@ class FirestoreTaskEmulatorTest {
 
                 storeA.write(listOfNotNull(savePrefs(saved, saved.prefs.copy(meetingsLayout = MeetingsLayout.Vertical))))
                 storeB.observe().first { it.prefs.meetingsLayout == MeetingsLayout.Vertical }
+                assertTrue(storeA.refused.value.isEmpty())
+            } finally {
+                deviceA.backend.close()
+                deviceB.backend.close()
+            }
+        }
+
+    @Test
+    fun theScreenPreferencesSyncAndADocumentFromBeforeKeepsTheOldBehaviour() =
+        emulatorTest {
+            val subject = syntheticSubject()
+            val deviceA = EmulatedDevice.signIn(subject)
+            val deviceB = EmulatedDevice.signIn(subject)
+            val storeA = FirestoreWorkspaceStore(deviceA.backend, deviceA.accountId)
+            val storeB = FirestoreWorkspaceStore(deviceB.backend, deviceB.accountId)
+            try {
+                // A document saved before D83, with the old Today switch on.
+                val main = doc(deviceA.backend.firestore, "users", deviceA.accountId.value, "prefs", "main")
+                val old =
+                    jsObject(
+                        "topicsView" to "board",
+                        "captureType" to "task",
+                        "hideEmptySections" to true,
+                        "updatedAt" to serverTimestamp(),
+                        "schemaVersion" to 1,
+                    )
+                setDoc(main, old).await()
+                val older = storeA.observe().first { it.prefsStored && !it.pendingWrites }
+                assertEquals(WorkspacePrefs(TopicsView.Board, hideEmptySections = true), older.prefs, "Each new field reads as its default")
+                assertEquals(setOf(TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested), older.prefs.todayHiddenWhenEmpty)
+
+                val picked =
+                    older.prefs.copy(
+                        todayTopicsView = TopicsView.Board,
+                        todayHideEmpty = setOf(TodayHideableSection.Meetings),
+                        todayGroupBy = TodayGroupBy.Topic,
+                        todayPastMeetings = 3,
+                        todayTopicCategories = setOf(StatusCategory.Planned, StatusCategory.Done),
+                        inboxShowCompleted = false,
+                        inboxShowNotes = false,
+                        inboxGroupBy = InboxGroupBy.Type,
+                        topicShowCompleted = false,
+                        topicHideEmpty = setOf(TopicHideableSection.Notes, TopicHideableSection.Info),
+                        topicGroupByDue = true,
+                        jiraCurrentSprintOnly = true,
+                        prsMineGroupBy = MyPrsGroupBy.ReviewStatus,
+                        prsReviewGroupBy = ReviewPrsGroupBy.Author,
+                    )
+                storeA.write(listOfNotNull(savePrefs(older, picked)))
+                val saved = storeA.observe().first { !it.pendingWrites && it.prefs.todayGroupBy == TodayGroupBy.Topic }
+                assertEquals(picked, saved.prefs)
+                val followed = storeB.observe().first { it.prefs.todayGroupBy == TodayGroupBy.Topic }
+                assertEquals(picked, followed.prefs, "The other device follows")
+
+                // Back to not set, and every past meeting: stored as null, and read as before.
+                val cleared =
+                    saved.prefs.copy(
+                        todayTopicsView = null,
+                        todayHideEmpty = null,
+                        todayPastMeetings = null,
+                        jiraCurrentSprintOnly = null,
+                    )
+                storeA.write(listOfNotNull(savePrefs(saved, cleared)))
+                assertEquals(cleared, storeB.observe().first { it.prefs.todayPastMeetings == null }.prefs)
                 assertTrue(storeA.refused.value.isEmpty())
             } finally {
                 deviceA.backend.close()

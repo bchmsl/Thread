@@ -175,6 +175,20 @@ private fun WorkspacePrefs.fields(): Map<String, Any?> =
         "breakMin" to focusBreakMinutes,
         "hideEmptySections" to hideEmptySections,
         "meetingsLayout" to meetingsLayout,
+        "todayTopicsView" to todayTopicsView,
+        "todayHideEmpty" to todayHideEmpty,
+        "todayGroupBy" to todayGroupBy,
+        "todayPastMeetings" to todayPastMeetings,
+        "todayTopicCategories" to todayTopicCategories,
+        "inboxShowCompleted" to inboxShowCompleted,
+        "inboxShowNotes" to inboxShowNotes,
+        "inboxGroupBy" to inboxGroupBy,
+        "topicShowCompleted" to topicShowCompleted,
+        "topicHideEmpty" to topicHideEmpty,
+        "topicGroupByDue" to topicGroupByDue,
+        "jiraCurrentSprintOnly" to jiraCurrentSprintOnly,
+        "prsMineGroupBy" to prsMineGroupBy,
+        "prsReviewGroupBy" to prsReviewGroupBy,
     )
 
 private fun Task.fields(): Map<String, Any?> =

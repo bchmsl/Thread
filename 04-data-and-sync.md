@@ -301,6 +301,32 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 - **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the layout (changing it, or the first preferences save of a new account).
 - The timeline itself stores nothing: it is drawn from the meetings already on the device (D78).
 
+## Per-screen preferences (D83, 2026-11-17)
+
+- **Settings:** `users/{uid}/prefs/main` gets 14 optional fields, one per new choice in the per-screen Settings blocks. Each default is the behaviour from before D83.
+
+| Field | Values | Default (absent) |
+| --- | --- | --- |
+| `todayTopicsView` | `list`, `board`, null | not set: this device's `thread.today.activeLayout` (D59), else `list` |
+| `todayHideEmpty` | list of `meetings`, `reminders`, `review`; null | not set: from `hideEmptySections`, true = `reminders` + `review`, false = none |
+| `todayGroupBy` | `none`, `topic`, `due` | `due` |
+| `todayPastMeetings` | 0 to 20, null | null: every past meeting |
+| `todayTopicCategories` | list of `planned`, `active`, `paused`, `done` | `active`, `paused` (D59) |
+| `inboxShowCompleted`, `inboxShowNotes` | bool | true |
+| `inboxGroupBy` | `none`, `type`, `due` | `none` |
+| `topicShowCompleted` | bool | true |
+| `topicHideEmpty` | list of `notes`, `jira`, `prs`, `meetings`, `info` | none |
+| `topicGroupByDue` | bool | false |
+| `jiraCurrentSprintOnly` | bool, null | not set: this device's `thread.jira.currentSprintOnly` (D50), else false |
+| `prsMineGroupBy` | `repo`, `topic`, `review` | `repo` (D62) |
+| `prsReviewGroupBy` | `repo`, `author`, `review` | `repo` (D62) |
+
+- **Reading:** absent, or a value this build does not know, reads as the default; a list drops ids this build does not know. The "not set" fallbacks are pure domain readers (`todayTopicsLayout`, `todayHiddenWhenEmpty`, `currentSprintOnly` in `ScreenPrefs.kt`); the web passes the device value.
+- **Writing:** like the other preferences, only changed fields are written, through the outbox. A value set back to not set (or to every past meeting) is written as null; a new document leaves not-set values out. Settings writes `hideEmptySections` until the Today block (P3) replaces that switch with `todayHideEmpty`; the old field stays valid.
+- **Older builds:** a change saved in the outbox by a build before D83 has none of these fields; it reads them as the defaults on both sides of the change, so it leaves the stored choices alone. A build before D83 changing its own fields in a document that has these keeps them (merge).
+- **Rules:** `validPrefs` allows the 14 keys. Strings must be one of their values; bools are bools; `todayPastMeetings` is an int 0 to 20 or null; a list holds known ids only, without repeats (which also bounds its size). Only `todayTopicsView`, `todayHideEmpty`, `todayPastMeetings` and `jiraCurrentSprintOnly` may be null.
+- **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores any of these: changing one (from P2), the first preferences save of a new account, or a save on a device before the account's preferences document has reached it; the last two write every set field. It stays in the sync panel with Retry; nothing is lost.
+
 ## Calendar meetings (D78, 2026-11-17)
 
 Details: ADR-020 (Accepted). Plan: `calendar-plan.md` v2.2 in the session notes.

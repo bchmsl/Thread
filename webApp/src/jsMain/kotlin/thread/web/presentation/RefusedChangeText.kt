@@ -7,6 +7,7 @@ import thread.domain.note.NoteSaveState
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.topic.topicInfo
 import thread.domain.workspace.RefusedChange
+import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceWrite
 import thread.web.platform.WallClock
 import thread.web.presentation.notes.notePlace
@@ -102,7 +103,7 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
                     "focus ${write.prefs.focusWorkMinutes} min, break ${write.prefs.focusBreakMinutes} min, " +
                     "hide empty sections in Today ${if (write.prefs.hideEmptySections) "on" else "off"}, " +
                     "meetings layout ${write.prefs.meetingsLayout.id}",
-            )
+            ) + screenPrefsLines(write.prefs)
         is WorkspaceWrite.PutTask ->
             listOfNotNull(
                 "Task: ${write.task.title}",
@@ -154,6 +155,33 @@ private fun WorkspaceModel.endedText(session: FocusSession): String {
     val zone = prefs.timeZone
     return whenText(WallClock.wallTimeAt(session.endedAtMillis.toDouble(), zone), WallClock.now(zone).day, mid = true)
 }
+
+/** The per-screen preferences (D83), one line per screen. */
+private fun screenPrefsLines(prefs: WorkspacePrefs): List<String> {
+    fun onOff(value: Boolean?): String =
+        when (value) {
+            null -> NOT_SET
+            true -> "on"
+            false -> "off"
+        }
+
+    fun listed(ids: List<String>?): String = ids?.joinToString(", ")?.ifEmpty { "none" } ?: NOT_SET
+    return listOf(
+        "Today: Topics open as ${prefs.todayTopicsView?.id ?: NOT_SET}, tasks grouped by ${prefs.todayGroupBy.id}, " +
+            "past meetings ${prefs.todayPastMeetings ?: "all"}, " +
+            "Topics shown ${listed(prefs.todayTopicCategories.sortedBy { it.ordinal }.map { it.id })}, " +
+            "hidden when empty ${listed(prefs.todayHideEmpty?.sortedBy { it.ordinal }?.map { it.id })}",
+        "Inbox: completed tasks ${onOff(prefs.inboxShowCompleted)}, notes ${onOff(prefs.inboxShowNotes)}, " +
+            "grouped by ${prefs.inboxGroupBy.id}",
+        "Topic Details: completed tasks ${onOff(prefs.topicShowCompleted)}, " +
+            "tasks grouped by due date ${onOff(prefs.topicGroupByDue)}, " +
+            "hidden when empty ${listed(prefs.topicHideEmpty.sortedBy { it.ordinal }.map { it.id })}",
+        "Jira: current sprint only ${onOff(prefs.jiraCurrentSprintOnly)}",
+        "Pull requests: mine grouped by ${prefs.prsMineGroupBy.id}, review requested grouped by ${prefs.prsReviewGroupBy.id}",
+    )
+}
+
+private const val NOT_SET = "not set"
 
 /** "Label: value", or null for an empty value. */
 private fun lineOf(

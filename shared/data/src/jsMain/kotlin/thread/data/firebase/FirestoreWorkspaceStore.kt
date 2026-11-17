@@ -46,11 +46,19 @@ import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicId
 import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
+import thread.domain.workspace.DEFAULT_TODAY_TOPIC_CATEGORIES
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.MyPrsGroupBy
+import thread.domain.workspace.PAST_MEETINGS_MAX
 import thread.domain.workspace.RefusedChange
+import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayGroupBy
+import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TopicExternalLink
+import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
 import thread.domain.workspace.WorkspaceData
@@ -83,7 +91,12 @@ class WorkspaceReadException(
  *   hideEmptySections?, meetingsLayout?, updatedAt, schemaVersion: 1}`. The Focus timer lengths are optional; a document
  *   without them reads as 25 and 5. `hideEmptySections` (D77) is optional too; without it, empty Today sections show.
  *   So is `meetingsLayout` (D79), `vertical` or `horizontal`; without it, or with a value this build does not know,
- *   Today's meetings are vertical.
+ *   Today's meetings are vertical. The per-screen preferences (D83) are optional too: `todayTopicsView?`,
+ *   `todayHideEmpty?` (list), `todayGroupBy?`, `todayPastMeetings?` (0 to 20), `todayTopicCategories?` (list),
+ *   `inboxShowCompleted?`, `inboxShowNotes?`, `inboxGroupBy?`, `topicShowCompleted?`, `topicHideEmpty?` (list),
+ *   `topicGroupByDue?`, `jiraCurrentSprintOnly?`, `prsMineGroupBy?`, `prsReviewGroupBy?`. Each reads as its default
+ *   without it or with a value this build does not know; a list drops the ids it does not know. `todayTopicsView`,
+ *   `todayHideEmpty`, `todayPastMeetings` and `jiraCurrentSprintOnly` may be null: not set, or all past meetings.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -403,6 +416,23 @@ class FirestoreWorkspaceStore internal constructor(
         if (before == null || before.focusBreakMinutes != prefs.focusBreakMinutes) data.breakMin = prefs.focusBreakMinutes
         if (before == null || before.hideEmptySections != prefs.hideEmptySections) data.hideEmptySections = prefs.hideEmptySections
         if (before == null || before.meetingsLayout != prefs.meetingsLayout) data.meetingsLayout = prefs.meetingsLayout.id
+
+        // D83. A value not set is left out of a new document; one set back to not set is stored as null.
+        fun writes(field: (WorkspacePrefs) -> Any?): Boolean = if (before == null) field(prefs) != null else field(before) != field(prefs)
+        if (writes { it.todayTopicsView }) data.todayTopicsView = prefs.todayTopicsView?.id
+        if (writes { it.todayHideEmpty }) data.todayHideEmpty = prefs.todayHideEmpty?.ids { it.id }
+        if (writes { it.todayGroupBy }) data.todayGroupBy = prefs.todayGroupBy.id
+        if (writes { it.todayPastMeetings }) data.todayPastMeetings = prefs.todayPastMeetings
+        if (writes { it.todayTopicCategories }) data.todayTopicCategories = prefs.todayTopicCategories.ids { it.id }
+        if (writes { it.inboxShowCompleted }) data.inboxShowCompleted = prefs.inboxShowCompleted
+        if (writes { it.inboxShowNotes }) data.inboxShowNotes = prefs.inboxShowNotes
+        if (writes { it.inboxGroupBy }) data.inboxGroupBy = prefs.inboxGroupBy.id
+        if (writes { it.topicShowCompleted }) data.topicShowCompleted = prefs.topicShowCompleted
+        if (writes { it.topicHideEmpty }) data.topicHideEmpty = prefs.topicHideEmpty.ids { it.id }
+        if (writes { it.topicGroupByDue }) data.topicGroupByDue = prefs.topicGroupByDue
+        if (writes { it.jiraCurrentSprintOnly }) data.jiraCurrentSprintOnly = prefs.jiraCurrentSprintOnly
+        if (writes { it.prsMineGroupBy }) data.prsMineGroupBy = prefs.prsMineGroupBy.id
+        if (writes { it.prsReviewGroupBy }) data.prsReviewGroupBy = prefs.prsReviewGroupBy.id
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -840,7 +870,33 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         focusBreakMinutes = minutesOrNull(data.breakMin, FocusSettings.BREAK_MINUTES) ?: FocusSettings.DEFAULT_BREAK_MINUTES,
         hideEmptySections = booleanOrNull(data.hideEmptySections) ?: false,
         meetingsLayout = MeetingsLayout.fromId(stringOrNull(data.meetingsLayout)) ?: MeetingsLayout.Vertical,
+        todayTopicsView = TopicsView.fromId(stringOrNull(data.todayTopicsView)),
+        todayHideEmpty = stringsOrNull(data.todayHideEmpty)?.mapNotNull(TodayHideableSection::fromId)?.toSet(),
+        todayGroupBy = TodayGroupBy.fromId(stringOrNull(data.todayGroupBy)) ?: TodayGroupBy.DueDate,
+        todayPastMeetings = wholeOrNull(data.todayPastMeetings)?.takeIf { it in 0..PAST_MEETINGS_MAX }?.toInt(),
+        todayTopicCategories =
+            stringsOrNull(data.todayTopicCategories)?.mapNotNull(StatusCategory::fromId)?.toSet()
+                ?: DEFAULT_TODAY_TOPIC_CATEGORIES,
+        inboxShowCompleted = booleanOrNull(data.inboxShowCompleted) ?: true,
+        inboxShowNotes = booleanOrNull(data.inboxShowNotes) ?: true,
+        inboxGroupBy = InboxGroupBy.fromId(stringOrNull(data.inboxGroupBy)) ?: InboxGroupBy.None,
+        topicShowCompleted = booleanOrNull(data.topicShowCompleted) ?: true,
+        topicHideEmpty = stringsOrNull(data.topicHideEmpty)?.mapNotNull(TopicHideableSection::fromId)?.toSet() ?: emptySet(),
+        topicGroupByDue = booleanOrNull(data.topicGroupByDue) ?: false,
+        jiraCurrentSprintOnly = booleanOrNull(data.jiraCurrentSprintOnly),
+        prsMineGroupBy = MyPrsGroupBy.fromId(stringOrNull(data.prsMineGroupBy)) ?: MyPrsGroupBy.Repository,
+        prsReviewGroupBy = ReviewPrsGroupBy.fromId(stringOrNull(data.prsReviewGroupBy)) ?: ReviewPrsGroupBy.Repository,
     )
+}
+
+/** The ids of [this] in declaration order, as a stored list. */
+private fun <E : Enum<E>> Set<E>.ids(id: (E) -> String): Array<String> = sortedBy { it.ordinal }.map(id).toTypedArray()
+
+/** The strings in a stored list, or null when the value is not a list. Entries that are not strings are left out. */
+private fun stringsOrNull(value: dynamic): List<String>? {
+    val isList: Boolean = js("Array").isArray(value).unsafeCast<Boolean>()
+    if (!isList) return null
+    return value.unsafeCast<Array<Any?>>().mapNotNull { stringOrNull(it) }
 }
 
 private fun minutesOrNull(

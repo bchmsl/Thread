@@ -12,6 +12,7 @@ import thread.domain.note.NoteTopicLink
 import thread.domain.reminder.Reminder
 import thread.domain.task.Task
 import thread.domain.time.DEFAULT_WORKSPACE_ZONE
+import thread.domain.topic.StatusCategory
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicStatus
 
@@ -58,7 +59,11 @@ enum class CaptureKind(
     }
 }
 
-/** The workspace preferences stored with the account (04-data-and-sync.md, "Preferences"). */
+/**
+ * The workspace preferences stored with the account (04-data-and-sync.md, "Preferences"). The per-screen ones, from
+ * [todayTopicsView] on (D83), each start with the behaviour from before them. A null one is not set yet: its reader in
+ * ScreenPrefs.kt says what that means.
+ */
 data class WorkspacePrefs(
     val topicsView: TopicsView = TopicsView.List,
     val captureType: CaptureKind = CaptureKind.Task,
@@ -70,10 +75,41 @@ data class WorkspacePrefs(
     val focusWorkMinutes: Int = FocusSettings.DEFAULT_WORK_MINUTES,
     /** The Focus timer's break length in minutes, 1 to 30 (FD1). */
     val focusBreakMinutes: Int = FocusSettings.DEFAULT_BREAK_MINUTES,
-    /** Settings, "Hide empty sections in Today" (D77). Off by default. */
+    /**
+     * Settings, "Hide empty sections in Today" (D77). Off by default. Since D83 it is also the starting value of
+     * [todayHideEmpty]: see [todayHiddenWhenEmpty].
+     */
     val hideEmptySections: Boolean = false,
     /** Settings, "Meetings layout" (D79). Vertical by default, as before D79. */
     val meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
+    /** Today, "Topics open as". Not set: see [todayTopicsLayout]. */
+    val todayTopicsView: TopicsView? = null,
+    /** Today, "Hide when empty". Not set: see [todayHiddenWhenEmpty]. */
+    val todayHideEmpty: Set<TodayHideableSection>? = null,
+    /** Today, "Group tasks by". Due date by default. */
+    val todayGroupBy: TodayGroupBy = TodayGroupBy.DueDate,
+    /** Today, past meetings the Vertical card shows, 0 to [PAST_MEETINGS_MAX]. Null shows them all, the default. */
+    val todayPastMeetings: Int? = null,
+    /** Today, the status categories whose Topics show. Active and Paused by default (D59). */
+    val todayTopicCategories: Set<StatusCategory> = DEFAULT_TODAY_TOPIC_CATEGORIES,
+    /** Inbox, "Show completed tasks". On by default. */
+    val inboxShowCompleted: Boolean = true,
+    /** Inbox, "Show notes". On by default. */
+    val inboxShowNotes: Boolean = true,
+    /** Inbox, "Group by". None by default. */
+    val inboxGroupBy: InboxGroupBy = InboxGroupBy.None,
+    /** Topic Details, "Show completed tasks". On by default. */
+    val topicShowCompleted: Boolean = true,
+    /** Topic Details, "Hide when empty". None by default. */
+    val topicHideEmpty: Set<TopicHideableSection> = emptySet(),
+    /** Topic Details, "Group tasks by due date". Off by default. */
+    val topicGroupByDue: Boolean = false,
+    /** Jira, "Current sprint only". Not set: see [currentSprintOnly]. */
+    val jiraCurrentSprintOnly: Boolean? = null,
+    /** Pull requests, how "My pull requests" is grouped. By repository by default (D62). */
+    val prsMineGroupBy: MyPrsGroupBy = MyPrsGroupBy.Repository,
+    /** Pull requests, how "Review requested" is grouped. By repository by default (D62). */
+    val prsReviewGroupBy: ReviewPrsGroupBy = ReviewPrsGroupBy.Repository,
 ) {
     /** The Focus timer's durations. A value outside its limits reads as kept inside them. */
     val focusSettings: FocusSettings

@@ -10,6 +10,7 @@ import thread.domain.note.NoteTopicLink
 import thread.domain.task.Task
 import thread.domain.task.TaskId
 import thread.domain.topic.SEED_STATUSES
+import thread.domain.topic.StatusCategory
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicColor
 import thread.domain.topic.TopicId
@@ -224,6 +225,43 @@ class RefusedChangesTest {
 
         assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
         assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
+    }
+
+    @Test
+    fun theScreenPreferencesAreComparedLikeOtherPreferences() {
+        val stored =
+            WorkspacePrefs(
+                todayTopicsView = TopicsView.Board,
+                todayHideEmpty = setOf(TodayHideableSection.Meetings),
+                todayGroupBy = TodayGroupBy.Topic,
+                todayPastMeetings = 3,
+                todayTopicCategories = setOf(StatusCategory.Planned),
+                inboxShowCompleted = false,
+                inboxShowNotes = false,
+                inboxGroupBy = InboxGroupBy.Type,
+                topicShowCompleted = false,
+                topicHideEmpty = setOf(TopicHideableSection.Info),
+                topicGroupByDue = true,
+                jiraCurrentSprintOnly = true,
+                prsMineGroupBy = MyPrsGroupBy.Topic,
+                prsReviewGroupBy = ReviewPrsGroupBy.Author,
+            )
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutPrefs(stored, before = WorkspacePrefs())))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
+        // One field the server did not keep is enough.
+        val partly = stored.copy(inboxShowNotes = true)
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = partly)).size)
+    }
+
+    @Test
+    fun aPreferenceSetBackToNotSetIsCompared() {
+        val before = WorkspacePrefs(todayPastMeetings = 3, jiraCurrentSprintOnly = true)
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutPrefs(WorkspacePrefs(), before = before)))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = before)).size)
     }
 
     @Test

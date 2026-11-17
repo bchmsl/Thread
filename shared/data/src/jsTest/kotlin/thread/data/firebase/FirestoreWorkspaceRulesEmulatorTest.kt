@@ -2,6 +2,7 @@ package thread.data.firebase
 
 import kotlinx.coroutines.await
 import thread.domain.topic.TopicColor
+import kotlin.js.Promise
 import kotlin.test.Test
 
 /**
@@ -242,4 +243,128 @@ class FirestoreWorkspaceRulesEmulatorTest {
             val stranger = env.authenticatedContext(other).firestore()
             assertFails(setDoc(prefsRef(stranger, owner), prefs("meetingsLayout" to "horizontal"))).await()
         }
+
+    /** Every per-screen preference (D83) away from its default. Lists are JavaScript arrays, as the app stores them. */
+    private val screenPrefs =
+        arrayOf<Pair<String, Any?>>(
+            "todayTopicsView" to "board",
+            "todayHideEmpty" to arrayOf("meetings", "review"),
+            "todayGroupBy" to "topic",
+            "todayPastMeetings" to 3,
+            "todayTopicCategories" to arrayOf("planned", "done"),
+            "inboxShowCompleted" to false,
+            "inboxShowNotes" to false,
+            "inboxGroupBy" to "type",
+            "topicShowCompleted" to false,
+            "topicHideEmpty" to arrayOf("notes", "jira", "prs", "meetings", "info"),
+            "topicGroupByDue" to true,
+            "jiraCurrentSprintOnly" to true,
+            "prsMineGroupBy" to "review",
+            "prsReviewGroupBy" to "author",
+        )
+
+    @Test
+    fun theScreenPreferencesAreOptionalAndTakeEachOfTheirValues() =
+        rulesTest { env, owner, _ ->
+            val db = env.authenticatedContext(owner).firestore()
+
+            // A document from before D83, with the old Today switch, then every new field in one change.
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs("hideEmptySections" to true))).await()
+            mergeSet(prefsRef(db, owner), jsObject(*screenPrefs, "updatedAt" to serverTimestamp()), db)
+            // A build from before D83 still changes its own fields, the old switch included, in a document that has them.
+            val olderChange = jsObject("hideEmptySections" to false, "keepCompleted" to false, "updatedAt" to serverTimestamp())
+            mergeSet(prefsRef(db, owner), olderChange, db)
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs(*screenPrefs, "hideEmptySections" to true))).await()
+
+            val accepted =
+                listOf<Pair<String, List<Any?>>>(
+                    "todayTopicsView" to listOf("list", "board", null),
+                    "todayHideEmpty" to listOf(arrayOf<String>(), arrayOf("reminders"), arrayOf("meetings", "reminders", "review"), null),
+                    "todayGroupBy" to listOf("none", "topic", "due"),
+                    "todayPastMeetings" to listOf(0, 1, 20, null),
+                    "todayTopicCategories" to listOf(arrayOf<String>(), arrayOf("active"), arrayOf("planned", "active", "paused", "done")),
+                    "inboxShowCompleted" to listOf(true, false),
+                    "inboxShowNotes" to listOf(true, false),
+                    "inboxGroupBy" to listOf("none", "type", "due"),
+                    "topicShowCompleted" to listOf(true, false),
+                    "topicHideEmpty" to listOf(arrayOf<String>(), arrayOf("info", "notes")),
+                    "topicGroupByDue" to listOf(true, false),
+                    "jiraCurrentSprintOnly" to listOf(true, false, null),
+                    "prsMineGroupBy" to listOf("repo", "topic", "review"),
+                    "prsReviewGroupBy" to listOf("repo", "author", "review"),
+                )
+            // Each change names only its own field, as the app's do. Throws when refused.
+            for ((field, values) in accepted) {
+                for (value in values) mergeSet(prefsRef(db, owner), jsObject(field to value, "updatedAt" to serverTimestamp()), db)
+            }
+        }
+
+    @Test
+    fun theScreenPreferencesRefuseOtherValuesAndOtherAccounts() =
+        rulesTest { env, owner, other ->
+            val db = env.authenticatedContext(owner).firestore()
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs())).await()
+
+            val refused =
+                listOf<Pair<String, List<Any?>>>(
+                    "todayTopicsView" to listOf("grid", "Board", "", true, 1),
+                    "todayHideEmpty" to
+                        listOf(
+                            "meetings",
+                            true,
+                            arrayOf("meetings", "meetings"),
+                            arrayOf("notes"),
+                            arrayOf("Meetings"),
+                            arrayOf(1),
+                            arrayOf("meetings", "reminders", "review", "review"),
+                        ),
+                    "todayGroupBy" to listOf("repo", "Due", "", true, null),
+                    "todayPastMeetings" to listOf(-1, 21, 2.5, "3", true),
+                    "todayTopicCategories" to
+                        listOf(
+                            null,
+                            "active",
+                            arrayOf("active", "active"),
+                            arrayOf("blocked"),
+                            arrayOf("planned", "active", "paused", "done", "done"),
+                        ),
+                    "inboxShowCompleted" to listOf("yes", 1, null),
+                    "inboxShowNotes" to listOf("no", 0, null),
+                    "inboxGroupBy" to listOf("topic", "", null),
+                    "topicShowCompleted" to listOf("on", null),
+                    "topicHideEmpty" to
+                        listOf(
+                            null,
+                            "notes",
+                            arrayOf("notes", "notes"),
+                            arrayOf("reminders"),
+                            arrayOf("notes", "jira", "prs", "meetings", "info", "info"),
+                        ),
+                    "topicGroupByDue" to listOf("true", 1, null),
+                    "jiraCurrentSprintOnly" to listOf("on", 1),
+                    "prsMineGroupBy" to listOf("author", "repository", "", null),
+                    "prsReviewGroupBy" to listOf("topic", "Repo", null),
+                )
+            for ((field, values) in refused) {
+                for (value in values) {
+                    assertFails(setDoc(prefsRef(db, owner), prefs(field to value))).await()
+                    val change = jsObject(field to value, "updatedAt" to serverTimestamp())
+                    assertFails(mergeSetPromise(prefsRef(db, owner), change, db)).await()
+                }
+            }
+            val stranger = env.authenticatedContext(other).firestore()
+            assertFails(setDoc(prefsRef(stranger, owner), prefs(*screenPrefs))).await()
+            val strangerChange = jsObject("inboxShowNotes" to false, "updatedAt" to serverTimestamp())
+            assertFails(mergeSetPromise(prefsRef(stranger, owner), strangerChange, stranger)).await()
+        }
+
+    private fun mergeSetPromise(
+        reference: DocumentReference,
+        data: dynamic,
+        db: Firestore,
+    ): Promise<Unit> {
+        val batch = writeBatch(db)
+        batch.set(reference, data, jsObject("merge" to true))
+        return batch.commit()
+    }
 }
