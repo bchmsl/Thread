@@ -672,6 +672,14 @@ main:has(.md--wide) { max-width: 1520px; }
 }
 /* Additional information, while viewing: the text as written, line breaks kept. */
 .info-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* D92: a Topic's Tasks grouped by due date. Each group has a small heading (its mark, name and count) like a
+   "Suggested" one, with its rows under it. Completed is the same heading with the fold's chevron. */
+.tdue__h { display: flex; align-items: center; gap: 6px; margin: 14px 4px 6px; }
+.tdue__h .n { font-weight: 500; font-variant-numeric: tabular-nums; }
+.tdue--completed > .tdue__h { margin: 6px 4px 2px; }
+/* D92: with every side section hidden or absent, the side column is empty and the main one takes the width. */
+.td-side:empty { display: none; }
+.td-grid:has(> .td-side:empty) { grid-template-columns: minmax(0, 1fr); }
 
 /* ---------- Edit Topic (D71, owner change #17): a small Topic card ---------- */
 /* The same dialog from the Topic page and from a Topic card. Its top edge and band take the color being picked, and

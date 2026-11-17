@@ -15,7 +15,9 @@ import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.B
 import org.jetbrains.compose.web.dom.Button
+import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Form
+import org.jetbrains.compose.web.dom.H3
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Li
 import org.jetbrains.compose.web.dom.P
@@ -28,13 +30,17 @@ import thread.domain.note.UNTITLED_NOTE
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.reminder.remindersFor
+import thread.domain.task.DueGroup
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
 import thread.domain.task.topicTasks
 import thread.domain.topic.Topic
 import thread.domain.workspace.linkNote
+import thread.domain.workspace.topicTaskParts
 import thread.domain.workspace.trashReminder
 import thread.domain.workspace.unlinkNote
+import thread.web.platform.readDeviceText
+import thread.web.platform.writeDeviceText
 import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
@@ -52,6 +58,8 @@ import thread.web.presentation.onPlainClick
 import thread.web.presentation.scopedId
 import thread.web.presentation.taskProblemText
 import thread.web.presentation.tasks.TaskRow
+import thread.web.presentation.tasks.dueGroupLook
+import thread.web.presentation.tasks.dueGroupTitle
 import thread.web.presentation.tasks.focusNow
 import thread.web.presentation.whenText
 
@@ -80,7 +88,11 @@ internal fun TopicSection(
     )
 }
 
-/** The Topic's own Tasks: an add line, the open ones, and the completed ones behind a toggle. */
+/**
+ * The Topic's own Tasks: an add line, then the list by Settings > Topic Details (D92). Grouping off: the open ones, then
+ * the completed ones behind a toggle. "Group tasks by due date" on: the shared rule's groups, Completed being that
+ * toggle (A8). "Show completed tasks" off leaves Completed out. The rows look the same in both modes.
+ */
 @Composable
 internal fun TopicTasksSection(
     workspace: WorkspaceModel,
@@ -90,13 +102,14 @@ internal fun TopicTasksSection(
     onOpenTask: (Task) -> Unit,
 ) {
     val toasts = LocalToasts.current
+    val now = LocalNow.current
     val newTaskId = scopedId("td-new-task")
+    val prefs = workspace.prefs
     val tasks = topicTasks(topic.id, workspace.storedTasks)
-    val openTasks = tasks.filter { !it.done }
-    val doneTasks = tasks.filter { it.done }
-    var showDone by remember(topic.id) { mutableStateOf(false) }
+    val openCount = tasks.count { !it.done }
+    val parts = topicTaskParts(tasks, prefs.topicShowCompleted, prefs.topicGroupByDue, now, workspace.taskReminderTimes)
     var title by remember(topic.id) { mutableStateOf("") }
-    TopicSection("tasks", CardKind.Task, "Tasks", "${openTasks.size} open", open, onToggle) {
+    TopicSection("tasks", CardKind.Task, "Tasks", "$openCount open", open, onToggle) {
         Form(attrs = {
             classes("addtask")
             attr("autocomplete", "off")
@@ -126,34 +139,121 @@ internal fun TopicTasksSection(
                 classes("btn", "btn--line")
             }) { Text("Add") }
         }
-        if (openTasks.isNotEmpty()) {
-            Ul({ classes("tlist") }) {
-                openTasks.forEach { task ->
-                    key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask, hideTopic = true, showPlanned = true) }
-                }
-            }
-        } else {
-            P({ classes("sect__empty") }) { Text(if (doneTasks.isNotEmpty()) "All tasks are done." else "No tasks yet.") }
+        if (openCount == 0) {
+            P({ classes("sect__empty") }) { Text(if (tasks.isNotEmpty()) "All tasks are done." else "No tasks yet.") }
         }
-        if (doneTasks.isNotEmpty()) {
-            Button({
-                type(ButtonType.Button)
-                classes("btn", "btn--text", "btn--sm")
-                attr("aria-expanded", showDone.toString())
-                onClick { showDone = !showDone }
-            }) {
-                IconView(if (showDone) Icon.ChevDown else Icon.ChevRight, 15)
-                Text(" Completed ")
-                Span({ classes("n") }) { Text(doneTasks.size.toString()) }
-            }
-            if (showDone) {
-                Ul({ classes("tlist") }) {
-                    doneTasks.forEach { task -> key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask, hideTopic = true) } }
+        parts.forEach { part ->
+            val due = part.due
+            key(due?.name ?: "open") {
+                when (due) {
+                    null -> TopicTaskList(part.tasks, workspace, onOpenTask)
+                    DueGroup.Completed -> CompletedTasks(part.tasks, workspace, onOpenTask, grouped = prefs.topicGroupByDue)
+                    else -> TopicDueGroup(due, part.tasks, workspace, onOpenTask)
                 }
             }
         }
     }
 }
+
+/**
+ * A list of the Topic's Task rows. Open rows say when a Task is planned, today too; completed rows, as before D92, do
+ * not say "Planned today".
+ */
+@Composable
+private fun TopicTaskList(
+    tasks: List<Task>,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+    showPlanned: Boolean = true,
+) {
+    val toasts = LocalToasts.current
+    Ul({ classes("tlist") }) {
+        tasks.forEach { task ->
+            key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask, hideTopic = true, showPlanned = showPlanned) }
+        }
+    }
+}
+
+/**
+ * One due-date group of a Topic's Tasks (D92): a small heading with the group's mark, name and count, then its rows. The
+ * Tasks section opens and closes as a whole, so these groups do not.
+ */
+@Composable
+private fun TopicDueGroup(
+    group: DueGroup,
+    tasks: List<Task>,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+) {
+    val key = group.name.lowercase()
+    val headingId = scopedId("tdg-$key")
+    Div({
+        classes("tdue", "tdue--$key")
+        attr("role", "group")
+        attr("aria-labelledby", headingId)
+    }) {
+        H3({
+            classes("sect__sub", "tdue__h")
+            id(headingId)
+        }) {
+            IconView(dueGroupLook(group).first, 14)
+            Text(" ${dueGroupTitle(group)} ")
+            Span({ classes("n") }) { Text(tasks.size.toString()) }
+        }
+        TopicTaskList(tasks, workspace, onOpenTask)
+    }
+}
+
+/**
+ * The Topic's completed Tasks behind a toggle, closed at first. This device remembers whether it is open, for every
+ * Topic (A8). Grouping off it follows the open Tasks, as before D92; [grouped], it is the due-date groups' Completed
+ * group, first as in the shared rule, with a heading like theirs.
+ */
+@Composable
+private fun CompletedTasks(
+    tasks: List<Task>,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+    grouped: Boolean,
+) {
+    var showDone by remember { mutableStateOf(readDeviceText(COMPLETED_OPEN_NAME) == "1") }
+    val listId = scopedId("td-done-list")
+    val toggle: @Composable () -> Unit = {
+        Button({
+            type(ButtonType.Button)
+            if (grouped) classes("sugg__toggle", "tdue__toggle") else classes("btn", "btn--text", "btn--sm")
+            attr("aria-expanded", showDone.toString())
+            attr("aria-controls", listId)
+            onClick {
+                showDone = !showDone
+                writeDeviceText(COMPLETED_OPEN_NAME, if (showDone) "1" else "0")
+            }
+        }) {
+            if (grouped) {
+                Span({ classes("chev") }) { IconView(Icon.ChevDown, 16) }
+            } else {
+                IconView(if (showDone) Icon.ChevDown else Icon.ChevRight, 15)
+            }
+            Text(" Completed ")
+            Span({ classes("n") }) { Text(tasks.size.toString()) }
+        }
+    }
+    Div({
+        classes("tdone")
+        if (grouped) classes("tdue", "tdue--completed")
+    }) {
+        if (grouped) H3({ classes("sect__sub", "tdue__h") }) { toggle() } else toggle()
+        Div({
+            id(listId)
+            if (!showDone) attr("hidden", "")
+        }) {
+            if (showDone) TopicTaskList(tasks, workspace, onOpenTask, showPlanned = false)
+        }
+    }
+}
+
+/** Where this device keeps whether a Topic's Completed tasks are open: `1` or `0`, for every Topic (A8). Not synced. */
+private const val COMPLETED_OPEN_NAME = "thread.topic.open.completed"
 
 /**
  * The Notes linked to the Topic (v3 notesSection): "New note" makes one linked here and opens it for writing; "Link

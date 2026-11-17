@@ -164,6 +164,11 @@ One page with collapsible sections, not a primary tab layout:
 - Meetings (D78): one row per linked meeting series with its next occurrence, or "None in the next 14 days". Join when that occurrence is today, and Unlink. "Link" picks a series. Shown once meetings are set up on this device, or while the Topic has a link.
 - Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click. The "Suggested" heading folds the group away; each device remembers it per Topic (D65).
 
+Topic Details preferences (D92, synced), in Settings > Topic Details. They apply on the Topic page and in the Topic card:
+- Show completed tasks (on by default): completed Tasks show under "Completed", closed at first; each device remembers whether it is open, for every Topic. Off hides them; the "N open" count stays.
+- Hide empty sections (none checked by default): Notes, Jira, Pull requests, Meetings and Additional information. A checked section shows only while it holds something. Jira and Pull requests also show for a suggestion (Q7). Tasks never hide. While Additional information is hidden, Edit Topic has a field for it; text saved there brings the section back.
+- Group tasks by due date (off by default): its own switch. On, the Tasks show under Today's groups (Completed while shown, Today, Tomorrow and Upcoming, D90), with Completed first and holding every completed Task of the Topic. Empty groups hide. Off, the open Tasks come oldest first, then Completed, as before.
+
 ## Integrations in v1
 
 - Jira page: assigned tickets, search for other accessible tickets, link to existing Topic or create Topic.

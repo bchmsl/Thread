@@ -173,21 +173,29 @@ fun moveTopic(
     return topicChange(topic, topic.copy(statusId = statusId))
 }
 
-/** The Edit Topic dialog: name (required), goal and sticker color. Text is trimmed, as in v3. */
+/**
+ * The Edit Topic dialog: name (required), goal and sticker color. Text is trimmed, as in v3. [info] is its Additional
+ * information field, there only while that section is hidden (D92, A9): null leaves the text as it is.
+ */
 fun editTopic(
     topic: Topic,
     name: String,
     goal: String,
     color: TopicColor,
+    info: String? = null,
 ): EditResult {
     val trimmedName = name.trim()
     val trimmedGoal = goal.trim()
+    val trimmedInfo = info?.trim()
     when {
         trimmedName.isEmpty() -> return EditResult.Refused(EditProblem.BlankName)
         trimmedName.length > TOPIC_NAME_MAX_LENGTH -> return EditResult.Refused(EditProblem.NameTooLong)
         trimmedGoal.length > TOPIC_TEXT_MAX_LENGTH -> return EditResult.Refused(EditProblem.TextTooLong)
+        trimmedInfo != null && trimmedInfo.length > TOPIC_INFO_MAX_LENGTH -> return EditResult.Refused(EditProblem.TextTooLong)
     }
-    return topicChange(topic, topic.copy(name = trimmedName, goal = trimmedGoal, color = color))
+    // As in editInfo: text equal to what the section shows keeps the stored value, so the old text is not frozen.
+    val nextInfo = if (trimmedInfo == null || trimmedInfo == topicInfo(topic)) topic.info else trimmedInfo
+    return topicChange(topic, topic.copy(name = trimmedName, goal = trimmedGoal, color = color, info = nextInfo))
 }
 
 /**

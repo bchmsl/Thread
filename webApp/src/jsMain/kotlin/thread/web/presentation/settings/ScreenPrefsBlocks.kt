@@ -18,6 +18,7 @@ import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.PAST_MEETINGS_MAX
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.todayTopicsLayout
@@ -31,8 +32,8 @@ import thread.web.presentation.tasks.deviceTodayTopicsView
 import thread.web.presentation.topics.categoryLabel
 
 /*
- * The preferences, one block per screen (owner change #25, D84). Every one syncs to the workspace (Q6). Later phases
- * add Topic Details and Pull requests blocks and more controls in these.
+ * The preferences, one block per screen (owner change #25, D84). Every one syncs to the workspace (Q6). A later phase
+ * adds a Pull requests block.
  */
 
 /**
@@ -238,6 +239,76 @@ internal fun TopicsPrefsBlock(workspace: WorkspaceModel) {
         ) { workspace.setPrefs(workspace.prefs.copy(topicsView = it)) }
     }
 }
+
+/**
+ * Settings > Topic Details (D92), in the owner's order: Show completed tasks, Hide empty sections, Group tasks by due
+ * date. The Topic's page and the Topic card (D70) follow them.
+ */
+@Composable
+internal fun TopicDetailsPrefsBlock(workspace: WorkspaceModel) {
+    SettingsBlock("topic-details", "Topic Details", null) {
+        val prefs = workspace.prefs
+        SwitchPref("pref-td-done", "Show completed tasks", TOPIC_COMPLETED_HINT, prefs.topicShowCompleted) { on ->
+            workspace.setPrefs(workspace.prefs.copy(topicShowCompleted = on))
+        }
+        TopicHideEmptyPref(workspace)
+        SwitchPref("pref-td-due", "Group tasks by due date", TOPIC_DUE_HINT, prefs.topicGroupByDue) { on ->
+            workspace.setPrefs(workspace.prefs.copy(topicGroupByDue = on))
+        }
+    }
+}
+
+/** Hide empty sections in Topic Details (D92): a checkbox per section that can hide. Each change saves the whole set. */
+@Composable
+private fun TopicHideEmptyPref(workspace: WorkspaceModel) {
+    val hidden = workspace.prefs.topicHideEmpty
+    Div({ classes("pref", "pref--checks") }) {
+        Div {
+            P({
+                classes("pref__label")
+                id("tdh-l")
+            }) { Text("Hide empty sections") }
+            P({
+                classes("pref__hint")
+                id("tdh-hint")
+            }) { Text(TOPIC_HIDE_EMPTY_HINT) }
+        }
+        Div({
+            classes("pref-checks")
+            attr("role", "group")
+            attr("aria-labelledby", "tdh-l")
+            attr("aria-describedby", "tdh-hint")
+        }) {
+            TopicHideableSection.entries.forEach { section ->
+                val id = "tdh-${section.id}"
+                Span({ classes("pref-check") }) {
+                    CheckBox(section in hidden, label = null, id = id) { on ->
+                        val now = workspace.prefs.topicHideEmpty
+                        workspace.setPrefs(workspace.prefs.copy(topicHideEmpty = if (on) now + section else now - section))
+                    }
+                    Label(id) { Text(topicHideableLabel(section)) }
+                }
+            }
+        }
+    }
+}
+
+private const val TOPIC_COMPLETED_HINT = "Under Completed, closed at first. Off hides them; the open count stays."
+
+private const val TOPIC_HIDE_EMPTY_HINT =
+    "A checked section shows only when it has something. Jira and Pull requests also show for suggestions. " +
+        "While Additional information hides, Edit Topic has a field for it."
+
+private const val TOPIC_DUE_HINT = "Completed (when completed tasks show), Today, Tomorrow and Upcoming. Empty groups hide."
+
+private fun topicHideableLabel(section: TopicHideableSection): String =
+    when (section) {
+        TopicHideableSection.Notes -> "Notes"
+        TopicHideableSection.Jira -> "Jira"
+        TopicHideableSection.PullRequests -> "Pull requests"
+        TopicHideableSection.Meetings -> "Meetings"
+        TopicHideableSection.Info -> "Additional information"
+    }
 
 /**
  * Settings > Jira. "Current sprint only" is the Jira page checkbox (D50), synced since D84. It cannot change without a

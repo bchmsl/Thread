@@ -228,6 +228,21 @@ class WorkspaceEditsTest {
     }
 
     @Test
+    fun editTopicSavesAdditionalInformationOnlyWhenItsFieldIsThere() {
+        val t = topic("a", planned)
+        // D92, A9: the field shows while the section is hidden. Its text saves with the rest, as one change.
+        val edit = editTopic(t, "Renamed", "", t.color, info = "  Context and links ").edit()
+        val write = edit.writes.single() as WorkspaceWrite.PutTopic
+        assertEquals(Pair("Renamed", "Context and links"), Pair(write.topic.name, write.topic.info))
+        assertEquals(t, (edit.undo.single() as WorkspaceWrite.PutTopic).topic, "one Undo takes back both")
+        // No field (null) leaves the text alone; so does text equal to what the section shows.
+        val old = t.copy(leftOff = "Halfway")
+        assertEquals(EditResult.Unchanged, editTopic(old, old.name, "", old.color))
+        assertEquals(EditResult.Unchanged, editTopic(old, old.name, "", old.color, info = " Where I left off: Halfway "))
+        assertEquals(EditProblem.TextTooLong, editTopic(t, t.name, "", t.color, info = "x".repeat(TOPIC_INFO_MAX_LENGTH + 1)).problem())
+    }
+
+    @Test
     fun additionalInformationIsTrimmedAndOnlyAnEditStoresIt() {
         val old = topic("a", planned).copy(leftOff = "Halfway", nextStep = "Call the backend team")
         // A blur without typing sends the shown text back. It must not freeze the old text into `info`.

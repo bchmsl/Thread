@@ -64,6 +64,7 @@ private val SECTIONS =
         "today" to "Today",
         "inbox" to "Inbox",
         "topics" to "Topics",
+        "topic-details" to "Topic Details",
         "jira" to "Jira",
         "general" to "General",
         "appearance" to "Appearance",

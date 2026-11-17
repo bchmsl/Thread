@@ -3,9 +3,9 @@ package thread.domain.task
 import thread.domain.time.WallTime
 import thread.domain.topic.Topic
 
-// The shared task-group rule (D90): how a list of Tasks is ordered and grouped. Today and Inbox (D91,
-// `workspace/InboxGroups`) use it; Topic Details is to use it too (#25 P7). A screen picks which Tasks it lists; this
-// file orders and groups them, the same way everywhere. Days are the workspace's (A12), as every [WallTime] is.
+// The shared task-group rule (D90): how a list of Tasks is ordered and grouped. Today, Inbox (D91,
+// `workspace/InboxGroups`) and Topic Details (D92, `workspace/TopicDetailsView`) use it. A screen picks which Tasks it
+// lists; this file orders and groups them, the same way everywhere. Days are the workspace's (A12), as every [WallTime] is.
 
 /** The due-date groups (D90, owner answer Q1), in the order a screen shows them. Each Task is in exactly one. */
 enum class DueGroup {

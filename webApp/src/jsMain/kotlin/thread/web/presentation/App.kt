@@ -82,6 +82,7 @@ import thread.web.presentation.settings.JiraPrefsBlock
 import thread.web.presentation.settings.SettingsScreen
 import thread.web.presentation.settings.StatusesBlock
 import thread.web.presentation.settings.TodayPrefsBlock
+import thread.web.presentation.settings.TopicDetailsPrefsBlock
 import thread.web.presentation.settings.TopicsPrefsBlock
 import thread.web.presentation.shell.CaptureDestination
 import thread.web.presentation.shell.CaptureState
@@ -343,6 +344,7 @@ private fun Workspace(
                             TodayPrefsBlock(workspace)
                             InboxPrefsBlock(workspace)
                             TopicsPrefsBlock(workspace)
+                            TopicDetailsPrefsBlock(workspace)
                             JiraPrefsBlock(jira)
                             GeneralPrefsBlock(workspace, capture)
                         }

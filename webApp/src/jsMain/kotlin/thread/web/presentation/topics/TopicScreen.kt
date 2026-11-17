@@ -45,6 +45,7 @@ import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLHeadingElement
 import org.w3c.dom.HTMLTextAreaElement
 import org.w3c.dom.events.KeyboardEvent
+import thread.domain.calendar.meetingsForTopic
 import thread.domain.topic.StatusId
 import thread.domain.topic.TOPIC_INFO_MAX_LENGTH
 import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
@@ -56,8 +57,12 @@ import thread.domain.topic.topicInfo
 import thread.domain.trash.TrashEntry
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.ExternalProvider
+import thread.domain.workspace.TopicHideableSection
+import thread.domain.workspace.TopicSectionItems
 import thread.domain.workspace.editInfo
 import thread.domain.workspace.editTopic
+import thread.domain.workspace.hiddenTopicSections
 import thread.domain.workspace.moveTopic
 import thread.web.presentation.CardKind
 import thread.web.presentation.CardOpener
@@ -66,6 +71,7 @@ import thread.web.presentation.EmptyState
 import thread.web.presentation.Icon
 import thread.web.presentation.IconView
 import thread.web.presentation.LocalIdScope
+import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.SectionCard
@@ -137,6 +143,10 @@ internal fun TopicScreen(
  * Topic Details (v3 topic.html): identity and status on top, "Additional information" (D52), then Tasks and Notes,
  * with Jira, pull requests, meetings (D78 P5) and Reminders beside them. Every linked item opens as a card (D70).
  *
+ * Settings > Topic Details (D92) picks how the Tasks list and which sections hide while they hold nothing
+ * ([hiddenTopicSections]). A hidden section's actions go with it; while Additional information is hidden, Edit Topic
+ * has a field for it (A9).
+ *
  * The Topic's page shows it, and so does the Topic card ([inCard]). In the card the name is the card's heading, and
  * Move to Trash sits in the card's footer: [onTrash] is null there.
  */
@@ -165,6 +175,29 @@ internal fun TopicDetails(
     LaunchedEffect(focusAddTask) { if (focusAddTask > 0) focusById("${ids}td-new-task") }
     val statuses = workspace.statuses
     val status = statusOf(topic, statuses)
+    val now = LocalNow.current
+    // Suggestions are computed once here, for both the Jira and the pull request section, and for what they hold.
+    val suggestions = rememberTopicSuggestions(workspace, jira, gitHub, topic)
+    val hidden =
+        hiddenTopicSections(
+            workspace.prefs.topicHideEmpty,
+            TopicSectionItems(
+                notes = workspace.notesFor(topic.id).size,
+                jira = workspace.externalsOf(topic.id, ExternalProvider.Jira).size,
+                jiraSuggested = if (jira.connected) suggestions.jira.size else 0,
+                prs = workspace.externalsOf(topic.id, ExternalProvider.GitHub).size,
+                prsSuggested = if (gitHub.connected) suggestions.pulls.size else 0,
+                meetings = meetingsForTopic(topic.id, workspace.meetingLinks, meetings.meetings, now).size,
+                info = topicInfo(topic),
+            ),
+        )
+    // A section that hides while focus is in it (its last item unlinked, say) takes focus with it: Edit gets it.
+    var hiddenBefore by remember(topic.id) { mutableStateOf(hidden) }
+    LaunchedEffect(hidden) {
+        val focusLost = document.activeElement.let { it == null || it == document.body }
+        if (focusLost && !hiddenBefore.containsAll(hidden)) focusById("${ids}$EDIT_ID")
+        hiddenBefore = hidden
+    }
 
     Header({
         classes("td-head")
@@ -208,6 +241,7 @@ internal fun TopicDetails(
             Button({
                 type(ButtonType.Button)
                 classes("btn", "btn--line")
+                id(ids + EDIT_ID)
                 onClick { editing = true }
             }) {
                 IconView(Icon.Edit, 16)
@@ -235,39 +269,45 @@ internal fun TopicDetails(
             }
         }
     }
-    InfoSection(workspace, topic)
-    // Suggestions are computed once here, for both the Jira and the pull request section.
-    val suggestions = rememberTopicSuggestions(workspace, jira, gitHub, topic)
+    InfoSection(workspace, topic, hidden = TopicHideableSection.Info in hidden)
     // The card on top, if it shows one of this Topic's tickets or pull requests: that one asks for its own update.
     val shown = cards.shown
     Div({ classes("td-grid") }) {
         Div({ classes("td-main") }) {
             TopicTasksSection(workspace, topic, tasksOpen, { tasksOpen = !tasksOpen }) { cards.openTask(it.id) }
-            TopicNotesSection(workspace, topic, notesOpen, { notesOpen = !notesOpen }) { id, edit -> cards.openNote(id, edit) }
+            if (TopicHideableSection.Notes !in hidden) {
+                TopicNotesSection(workspace, topic, notesOpen, { notesOpen = !notesOpen }) { id, edit -> cards.openNote(id, edit) }
+            }
         }
         Aside({
             classes("td-side")
             attr("aria-label", "Linked work and reminders")
         }) {
-            val openKey = shown?.takeIf { it.type == CardType.Jira }?.id
-            TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey, suggestions, cards::openJira)
-            val openId = shown?.takeIf { it.type == CardType.Pr }?.id
-            TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId, suggestions, cards::openPr)
-            val openMeeting = shown?.takeIf { it.type == CardType.Meeting }?.id
-            TopicMeetingsSection(
-                workspace,
-                meetings,
-                topic,
-                meetingsOpen,
-                { meetingsOpen = !meetingsOpen },
-                openMeeting,
-                cards::openMeeting,
-            )
+            if (TopicHideableSection.Jira !in hidden) {
+                val openKey = shown?.takeIf { it.type == CardType.Jira }?.id
+                TopicJiraSection(workspace, jira, topic, jiraOpen, { jiraOpen = !jiraOpen }, openKey, suggestions, cards::openJira)
+            }
+            if (TopicHideableSection.PullRequests !in hidden) {
+                val openId = shown?.takeIf { it.type == CardType.Pr }?.id
+                TopicPrSection(workspace, gitHub, topic, prsOpen, { prsOpen = !prsOpen }, openId, suggestions, cards::openPr)
+            }
+            if (TopicHideableSection.Meetings !in hidden) {
+                val openMeeting = shown?.takeIf { it.type == CardType.Meeting }?.id
+                TopicMeetingsSection(
+                    workspace,
+                    meetings,
+                    topic,
+                    meetingsOpen,
+                    { meetingsOpen = !meetingsOpen },
+                    openMeeting,
+                    cards::openMeeting,
+                )
+            }
             TopicRemindersSection(workspace, topic, remindersOpen, { remindersOpen = !remindersOpen }, cards::openTarget)
         }
     }
     if (editing) {
-        EditTopicDialog(topic, workspace) { editing = false }
+        EditTopicDialog(topic, workspace, infoHidden = TopicHideableSection.Info in hidden) { editing = false }
     }
 }
 
@@ -354,25 +394,33 @@ private fun count(
 private const val TOPIC_NAME_ID = "td-name"
 private const val GONE_HEADING_ID = "gone-h"
 
+/** The Edit button in the Topic's header: where focus goes when the section it was in hides (D92). */
+private const val EDIT_ID = "td-edit"
+
 /**
  * "Additional information" (D52). It shows as text, with a small Edit in its header that turns it into the text box
  * (D70, owner request #3); Done or Esc turns it back. The text saves as it is typed, so there is no Cancel.
+ *
+ * [hidden]: Settings > Topic Details hides it while it has no text (D92). It stays while its text box is open, so
+ * clearing the text does not take the box away; Done then hides it, and focus goes to the Topic's Edit.
  */
 @Composable
 private fun InfoSection(
     workspace: WorkspaceModel,
     topic: Topic,
+    hidden: Boolean,
 ) {
     val ids = LocalIdScope.current
     var editing by remember(topic.id) { mutableStateOf(false) }
     var toggle by remember { mutableStateOf<HTMLElement?>(null) }
     var wasEditing by remember { mutableStateOf(false) }
-    // Back to the text: focus returns to the Edit button, where Done was.
+    // Back to the text: focus returns to the Edit button, where Done was, or to the Topic's Edit when the section hid.
     LaunchedEffect(editing) {
-        if (wasEditing && !editing) toggle?.focus()
+        if (wasEditing && !editing) (toggle ?: document.getElementById(ids + EDIT_ID) as? HTMLElement)?.focus()
         wasEditing = editing
     }
     val text = topicInfo(topic)
+    if (hidden && !editing) return
     SectionCard(
         kind = CardKind.Info,
         headingId = "pu-h",
@@ -400,7 +448,7 @@ private fun InfoSection(
                 InfoField(
                     labelledBy = "${ids}pu-h",
                     value = text,
-                    placeholder = "Context, links, decisions: anything worth keeping with this Topic",
+                    placeholder = INFO_PLACEHOLDER,
                     onDone = { editing = false },
                 ) { typed -> workspace.topic(topic.id.value)?.let { workspace.apply(editInfo(it, typed)) } }
             text.isNotEmpty() -> P({ classes("info-text") }) { Text(text) }
@@ -483,21 +531,29 @@ private fun InfoField(
 
 private const val SAVE_AFTER_TYPING_MS = 1000L
 
+private const val INFO_PLACEHOLDER = "Context, links, decisions: anything worth keeping with this Topic"
+
 /**
  * The v3 Edit Topic dialog: name, goal and sticker color, laid out as a Topic card (D71). Its band and top edge take
  * the color being picked, and the sticker in the band shows the name's monogram as it is typed, so the change shows
  * before it is saved. Nothing is saved until Save changes.
+ *
+ * [infoHidden]: the Additional information section is hidden while empty (D92). The dialog then has a field for it
+ * (A9), decided when it opens; text saved there brings the section back.
  */
 @Composable
 private fun EditTopicDialog(
     topic: Topic,
     workspace: WorkspaceModel,
+    infoHidden: Boolean,
     onClose: () -> Unit,
 ) {
     val toasts = LocalToasts.current
     var name by remember { mutableStateOf(topic.name) }
     var goal by remember { mutableStateOf(topic.goal) }
     var color by remember { mutableStateOf(topic.color) }
+    val withInfo = remember { infoHidden }
+    var info by remember { mutableStateOf("") }
     ModalDialog(classes = listOf("dlg--tedit"), onClose = onClose) { titleId ->
         Form(attrs = {
             classes("tedit")
@@ -506,7 +562,7 @@ private fun EditTopicDialog(
             onSubmit { event ->
                 event.preventDefault()
                 val current = workspace.topic(topic.id.value) ?: topic
-                when (val result = editTopic(current, name, goal, color)) {
+                when (val result = editTopic(current, name, goal, color, info.takeIf { withInfo && it.isNotBlank() })) {
                     is EditResult.Changed -> {
                         workspace.apply(result)
                         onClose()
@@ -547,6 +603,22 @@ private fun EditTopicDialog(
                         rows(2)
                         maxLength(TOPIC_TEXT_MAX_LENGTH)
                         onInput { goal = it.value }
+                    }
+                }
+                if (withInfo) {
+                    Label(attrs = { classes("field") }) {
+                        Span({ classes("field__label") }) {
+                            Text("Additional information")
+                            Span({ classes("field__aside") }) { Text("optional") }
+                        }
+                        TextArea(info) {
+                            classes("input", "tedit__info")
+                            name("info")
+                            rows(3)
+                            placeholder(INFO_PLACEHOLDER)
+                            maxLength(TOPIC_INFO_MAX_LENGTH)
+                            onInput { info = it.value }
+                        }
                     }
                 }
                 Fieldset({ classes("field", "colors") }) {
