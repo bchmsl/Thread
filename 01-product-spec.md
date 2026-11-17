@@ -74,6 +74,7 @@ Category colors are the agreed baseline; arbitrary color overrides are not requi
 - One Note may be linked to multiple Topics or none.
 - Personal Tasks can be standalone or belong to one Topic.
 - Reminders attach to a Task or a Note (D54, superseding D14 in part). Reminders an older build put on a Topic move onto a Task of their own in that Topic, with Undo.
+- One meeting series may be linked to multiple Topics (D78). One link covers every occurrence of a repeating meeting.
 - Removing a link must not delete the linked object.
 - Removing an Inbox entry means triaged, not deleted.
 
@@ -90,6 +91,15 @@ Always show Topic context when relevant.
 
 Groups (D37): Overdue, Today, and Earlier planned in the main column.
 Reminders and Review requested sit in a side column.
+
+Meetings (D78, ADR-020) head the side column once meetings are set up:
+- Today's work meetings from Apple Calendar on the owner's Mac, all-day ones first, then by start. Ended ones stay, greyed.
+- Each row shows the time, the title, Now or Next, "Tentative" or "Not answered", the place, the linked Topics, and Join for a Teams, Zoom, Google Meet or Webex link.
+- Declined and cancelled meetings are not shown.
+- The card says when the Mac last uploaded. After an hour without an upload it asks whether the Mac is awake. "No meetings today." shows only after an upload that covered today.
+- "Hide empty sections in Today" (D77) never hides it.
+- A row opens a read-only Meeting card: when, where, your answer, Join, and its Topics with Link to Topic and Unlink.
+- The status line names the next meeting in the hour before it starts ("Standup in 12 min") and opens its card.
 
 Two more groups follow Earlier planned (D53):
 - Upcoming: open Tasks whose planned day or deadline is after today, by day.
@@ -141,6 +151,7 @@ One page with collapsible sections, not a primary tab layout:
 - Notes.
 - Related Jira tickets and PRs. Task rows show their next reminder (D54); "Topic reminders" lists only Topic reminders not moved yet or kept by Undo. Linked Jira tickets nest under their linked Jira parent (D64).
 - Tasks, Notes, Jira tickets and pull requests open as cards on top of Topic Details, which stays as it was (D70).
+- Meetings (D78): one row per linked meeting series with its next occurrence, or "None in the next 14 days". Join when that occurrence is today, and Unlink. "Link" picks a series. Shown once meetings are set up on this device, or while the Topic has a link.
 - Suggested Jira tickets and PRs (D49, ADR-017): under the linked rows of the Jira and Pull requests sections. Found by fixed rules, not AI: keys and PR links written in the Topic (name, goal, Additional information), its Tasks and Note previews; Jira issue links of linked tickets; Jira keys in linked PRs. Each row says why. Link is one click with Undo. "Don't suggest" hides the item in that Topic until it is restored from "Not suggested here"; Unlink does the same. Nothing is linked without a click. The "Suggested" heading folds the group away; each device remembers it per Topic (D65).
 
 ## Integrations in v1
@@ -150,10 +161,11 @@ One page with collapsible sections, not a primary tab layout:
 - Show external details even if not linked to a Topic.
 - Read-only: opening originals is supported.
 - Posting comments, changing status, merging, and other external mutations are deferred.
+- Calendar (D78, ADR-020): the owner's work calendar (Outlook, synced into Apple Calendar on the Mac). The "Thread Calendar" menu bar app reads one calendar and uploads its meetings to Firebase, so every device shows them, also while the Mac sleeps, as of its last upload. Read-only: neither app changes a meeting. Window: yesterday to 14 days ahead. Attendees, organizer and meeting notes are not uploaded. Microsoft Graph is not used: it needs admin consent.
 
 ## Search and quick capture
 
-- Cmd+K global search: Topics, Tasks, Notes, downloaded Jira/PR information.
+- Cmd+K global search: Topics, Tasks, Notes, downloaded Jira/PR information, and meetings from yesterday to 14 days ahead by title or place (D78). Picking a meeting opens its card.
 - Create a Task, Note or Topic from the capture field in the status line (D35). It replaces the earlier plus button.
 - Inside a Topic, creation defaults to that Topic.
 - Elsewhere, Task/Note defaults to Inbox with optional Topic selection.

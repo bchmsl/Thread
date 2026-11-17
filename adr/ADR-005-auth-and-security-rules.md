@@ -4,6 +4,8 @@ Status: Proposed (2026-11-13). Written in Phase 2 (M1-B), emulator only. Evidenc
 
 Phase 4 review (2026-11-13, owner away): checked for consistency with the other ADRs. Still Proposed; the owner review is queued. Later phases add a collection only together with its rules and rules tests (see "Consequences").
 
+Update 2026-11-17 (D78, ADR-020): a second client, the "Thread Calendar" Mac app, and the first content deletes. See "Second client (D78)".
+
 ## Context
 
 The web app talks to Firestore straight from the browser. There is no app server, so Firebase Auth and the Firestore security rules are the whole security boundary. The owner chose Google sign-in (O3, relayed by the orchestrator session). Phase 2 runs only against the local emulators with the `demo-thread` project: no `firebase login`, no real project, no billing.
@@ -66,10 +68,24 @@ Rules tests, `FirestoreRulesEmulatorTest`, 8 passed against the Firestore emulat
 
 Isolation is also checked through the real client: `FirestoreNoteSyncEmulatorTest.anotherAccountCannotListenOrWrite`, and the browser check `isolation-other-account` (two accounts, each sees only its own Note).
 
+## Second client (D78, 2026-11-17)
+
+Details: `adr/ADR-020-calendar-meetings-sync.md`.
+
+- **Who:** "Thread Calendar", a native Mac app in `macCompanion/`, writes the owner's work meetings. It uses no Firebase SDK: Firestore and Auth REST only.
+- **Sign-in:** the same Google account and the same uid as the web. A Google "Desktop app" OAuth client (loopback redirect, PKCE, `openid email`) gives an id token, and Firebase `signInWithIdp` turns it into a Firebase session. The Desktop client id is safelisted in Firebase Authentication's Google provider. The refresh token sits in the Mac's login keychain; the client id and secret come from the untracked `macCompanion/oauth-desktop.properties` and never reach git.
+- **Paths:** `users/{uid}/meetings/{32 hex}`, `users/{uid}/meetingSource/main` and `users/{uid}/topicMeetingLinks/{topicId}_{seriesKey}`, owner only, with the shapes in ADR-020.
+- **First content deletes:** the owner may delete meetings and `meetingSource/main`, so the Mac app can remove what leaves the window and "Stop syncing" can clear everything. Before D78 only the versions of a Note deleted forever and the vault could be deleted. Topic links are never deleted.
+- **Not enforceable:** the rules cannot tell the Mac app from the browser. Both are the same uid and provider, and custom claims would need a server. "Only the Mac app writes meetings, and the web writes only Topic links" is a code rule, backed by tests on both sides.
+- **Window:** a timed meeting must end after request time minus 3 days and start before request time plus 16 days. All-day meetings have no window check; the Mac app's deletes still apply.
+- **Tests:** `FirestoreMeetingRulesEmulatorTest` (every rules-side case of the spike's U9 run: refused shapes, UTF-16 sizes, owner updates and deletes, other accounts refused, a 250-write commit), the Mac app's Swift tests against the emulators, and `FirestoreMeetingStoreEmulatorTest` and `FirestoreMeetingLinksEmulatorTest` through the web client.
+- **Real sign-in:** the owner signed in once on the Mac (P3). The app's writes were accepted and still are more than an hour later.
+
 ## Consequences
 
 - No credential exists in the repository, the config, the logs or the emulator data.
 - The rules are the only server-side check. Every new collection needs its own rules and rules tests before the client writes to it.
+- Since D78 a second client holds a full-account token on the owner's Mac (ADR-020). Which client writes is a code rule, not a rules check.
 
 ## Known limits
 

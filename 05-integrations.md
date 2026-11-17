@@ -109,6 +109,37 @@ Proposed data policy: API authority + device-local detailed cache; cloud stores 
 Do not store diffs or repository contents just to display PR metadata.
 Full diff review tooling is not a v1 requirement.
 
+## Calendar (Mac), D78
+
+Details: ADR-020 (Accepted), the Mac app's guide `macCompanion/README.md`, and `calendar-plan.md` v2.2 in the session notes.
+
+Source and path:
+- The work calendar is Outlook (Exchange). Microsoft Graph needs admin consent, so Thread does not use it.
+- The calendar already syncs into Apple Calendar on the owner's Mac. "Thread Calendar", a menu bar app in `macCompanion/`, reads one picked calendar with EventKit and uploads its meetings to the owner's Firestore over REST. Thread web reads them from Firestore on every device.
+- Read-only at both ends: the Mac app never changes an event (a build fails if an EventKit write call appears), and the web never writes a meeting.
+
+What goes up:
+- Yesterday to 14 days ahead, in the workspace zone: title, all-day or start and end, your answer (accepted, tentative, not answered, or none needed), place, and a join link on the allowlist (Teams, Zoom, Google Meet, Webex).
+- Never: declined or cancelled meetings, attendees, organizer, meeting notes, e-mail addresses or raw calendar ids.
+
+Access the owner grants, once:
+- macOS Calendars full access for Thread Calendar (the only level that can read events).
+- Google sign-in through a "Desktop app" OAuth client with `openid email` only, then Firebase `signInWithIdp`: the same account as the web. The client belongs to the Thread project in Google Cloud and is safelisted in Firebase Authentication's Google provider; its id and secret sit in the untracked `macCompanion/oauth-desktop.properties`, never in git.
+- Start at login, as a macOS login item.
+
+When it uploads: on a calendar change (after 30 s of quiet), every 15 minutes, on wake, at the day change and when the network comes back. A pass with no change sends nothing.
+
+Errors: a 401 renews the token once, then asks to sign in again, deleting nothing. A 403 says "Upload refused: update Thread Calendar" and waits for Sync now. Other failures wait 1, 5, then 15 minutes. Another Mac that uploaded in the last 24 hours stops the pass until the owner approves a takeover.
+
+Risks:
+- Apple Calendar's Exchange sync uses EWS, which Microsoft shuts down in Exchange Online on 1 Apr 2027. The source may stop then.
+- Work meeting data, and passcodes inside join links, live in the owner's Firebase project and browser caches. Only the owner's account can read them.
+- The Mac holds a refresh token with full access to the account, in the login keychain.
+
+Checked live (2026-11-17): Today matches Outlook on the Mac and the phone. Not checked on real meetings: Join and Safe Links unwrapping (the owner has no Teams meetings), a decline and a reply change (the diagnostics will show them), start at login and a night running.
+
+Later: a Focus timer warning when a meeting starts during focus (Q7); trying the App Sandbox (spike U12 was not run; the app ships unsandboxed).
+
 ## External writes: explicitly deferred
 
 Remember these features for later:
@@ -151,4 +182,9 @@ These are reference starting points, not a claim of compatibility testing:
 - https://github.com/GitLiveApp/firebase-kotlin-sdk
 - https://code.claude.com/docs/en/remote-control
 - https://code.claude.com/docs/en/monitoring-usage
+- https://developer.apple.com/documentation/technotes/tn3152-migrating-to-the-latest-calendar-access-levels
+- https://developers.google.com/identity/protocols/oauth2/native-app
+- https://firebase.google.com/docs/reference/rest/auth
+- https://firebase.google.com/docs/firestore/use-rest-api
+- https://techcommunity.microsoft.com/blog/exchange/exchange-online-ews-your-time-is-almost-up/4492361
 

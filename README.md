@@ -47,6 +47,7 @@ Confirmed product behavior takes precedence over proposed technical details. Whe
 - Jira Cloud at your-site.atlassian.net; detailed read-only integration in v1.
 - Jira content fetched from its API and cached on each device, not mirrored into Firestore.
 - Notes may be stored in Firebase. User confirmed local Jira caching and work Notes are permitted.
+- Work meetings come from Outlook through Apple Calendar on the owner's Mac. The "Thread Calendar" Mac app uploads them to Firebase, read-only, so every device shows them (D78, [ADR-020](adr/ADR-020-calendar-meetings-sync.md)). They are the one external content Firebase holds.
 - Airy, Apple Notes-inspired first UI; optional Compact density later.
 - The pilot build is implemented and live at https://bchmsl.github.io/Thread/ (see Deploy). The pilot is closed with no fixes (D55, [pilot/PILOT-RESULTS.md](pilot/PILOT-RESULTS.md)). The approved visual reference stays the v3 prototype.
 
@@ -70,11 +71,23 @@ After an approved decision changes, update its authoritative document and add a 
 - GitHub Pages cannot set HTTP headers, so `frame-ancestors`, `X-Content-Type-Options` and `Referrer-Policy` stay unset (adr/ADR-015-pilot-hardening.md).
 - Paths are relative, so the same build runs at / on 127.0.0.1 and at /Thread/ on Pages.
 
+## Calendar from your Mac (D78)
+
+Meetings reach Thread through "Thread Calendar", a menu bar app in [macCompanion/](macCompanion/README.md). Its README has every step; in short:
+
+1. The Firestore rules for meetings must be live first (`firebase/firestore.rules`).
+2. In the Google Cloud console of the Thread project, create an OAuth client ID of type **Desktop app**. Safelist its client ID in Firebase console › Authentication › Sign-in method › Google.
+3. Copy `macCompanion/oauth-desktop.example.properties` to `macCompanion/oauth-desktop.properties` and fill in `clientId` and `clientSecret`. The file is git-ignored; never commit it or paste its values anywhere. The build also reads `apiKey` and `projectId` from `firebase/web-config.properties`.
+4. Build and install with `macCompanion/scripts/build-app.sh --install`. It needs an Apple Development certificate; the build writes the values into the app bundle only, without printing them.
+5. Open the app, allow full calendar access, pick the work calendar, sign in with the Google account used for Thread, and turn on Start at login.
+
+Thread web needs no setup: Today shows the Meetings card once the Mac app has uploaded, and Settings › "Calendar from your Mac" shows its state. Syncing starts, pauses and stops in the Mac app.
+
 ## What comes next
 
 The [v3 prototype](design/claude-pilot-prototype-v3/README.md) is the approved design reference for all pilot surfaces (D33). It replaces the v0.5 baseline. The pilot boundary is confirmed (D34): read-only Jira and GitHub are in the pilot, and the Focus timer comes after it.
 
-Done: the M1 feasibility slice, the pilot build (Phases 0 to 12) and the owner's changes D47 to D54. The pilot (Phase 13) is closed with no fixes (D55). Phase 14 adds the Focus timer (D56, [ADR-019](adr/ADR-019-focus-timer.md)); its Firestore rules must be live before its build.
+Done: the M1 feasibility slice, the pilot build (Phases 0 to 12) and the owner's changes D47 to D54. The pilot (Phase 13) is closed with no fixes (D55). Phase 14 adds the Focus timer (D56, [ADR-019](adr/ADR-019-focus-timer.md)); its Firestore rules must be live before its build. Work meetings from the owner's Mac (D78, [ADR-020](adr/ADR-020-calendar-meetings-sync.md)) are built and live. The owner's live check passed; a decline, a reply change, start at login and a night running are still to show in the Mac app's diagnostics.
 
 Next steps:
 1. Use Prompt 3 with the v3 prototype for UI work, one named set of screens at a time.

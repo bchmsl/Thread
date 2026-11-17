@@ -40,6 +40,7 @@ webApp/                   # Kotlin/JS + Compose HTML
   platform/
   di/
 iosApp/                   # future SwiftUI application
+macCompanion/             # "Thread Calendar", the Mac menu bar app that uploads meetings (D78, ADR-020)
 integrationService/       # optional Kotlin/Ktor, only when justified
 docs/                     # these documents if paths are updated
 
@@ -100,9 +101,25 @@ If custom storage/outbox is selected, document the authority and acknowledgment 
 - Firestore for app-owned records and associations.
 - Security Rules enforcing per-user ownership.
 - Hosting for the compiled web application.
+- A second writer since D78: the Mac app writes meetings over Firestore REST as the same account (see below).
 - A server-side component only for integration requirements that cannot safely/reliably live in the client.
 
 Firebase is a backend; it does not eliminate backend concerns.
+
+## Calendar: the Mac app (D78, ADR-020)
+
+The work calendar reaches Thread through the owner's Mac, not through a server:
+
+```
+Outlook (Exchange) -> Apple Calendar on the Mac -> Thread Calendar (EventKit, read-only)
+  -> Firestore REST, users/{uid}/meetings and meetingSource/main
+  -> Thread web on every device (Firestore SDK, read-only), plus topicMeetingLinks written by the web
+```
+
+- `macCompanion/` is a Swift package with no dependencies: `ThreadCalendarKit` (ids, mapper, join links, differ, Firestore and Auth REST, sign-in, Keychain, sync engine, diagnostics), the `ThreadCalendar` menu bar app (menu, EventKit reader, triggers) and `ThreadCalendarKitTests`. `scripts/build-app.sh` builds, signs and installs it. It is not part of the Gradle build and shares no code with Kotlin; the shared contract is the rules' field list and join-link pattern, checked by tests on both sides.
+- Sign-in: a Google "Desktop app" OAuth client (loopback redirect, PKCE), then Firebase `signInWithIdp`, the same uid as the web. No Firebase SDK. The refresh token sits in the login keychain. The client comes from the untracked `macCompanion/oauth-desktop.properties`, read at build time into the app bundle.
+- Domain: `thread.domain.calendar` holds `Meeting`, `MeetingSource`, `MeetingLink` and the rules for Today, the status line and Topics, with no platform types. `MeetingStore` is the port the web reads through; `FirestoreMeetingStore` in `shared/data` implements it and never writes. Topic links are workspace writes (`PutMeetingLink`, ADR-009).
+- The Mac app needs no server and no billing. The rules cannot tell it from the browser (ADR-005); "only the Mac app writes meetings" is a code rule backed by tests.
 
 ## Optional integration service
 

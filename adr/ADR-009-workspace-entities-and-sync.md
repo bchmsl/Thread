@@ -1,6 +1,6 @@
 # ADR-009: Workspace entities and their sync (statuses, Topics, preferences)
 
-Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Built on ADR-002 (Firestore persistent cache as the device store) and ADR-005 (per-user rules). Checked with the emulator tests in `shared/data/src/jsTest/.../FirestoreWorkspace*EmulatorTest.kt` and the Phase 6 browser checks (96 of 96). The owner review is queued (owner-review-queue.md, Phase 6 items). Updated in Phase 12: refused changes are kept on the device (Q14), checked with `WorkspaceOutboxTest`, `RefusedChangesTest` and the emulator tests.
+Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Built on ADR-002 (Firestore persistent cache as the device store) and ADR-005 (per-user rules). Checked with the emulator tests in `shared/data/src/jsTest/.../FirestoreWorkspace*EmulatorTest.kt` and the Phase 6 browser checks (96 of 96). The owner review is queued (owner-review-queue.md, Phase 6 items). Updated in Phase 12: refused changes are kept on the device (Q14), checked with `WorkspaceOutboxTest`, `RefusedChangesTest` and the emulator tests. Updated 2026-11-17 (D78, ADR-020): Topic links to meetings join the workspace store; meetings themselves stay outside it (see "Meetings (D78)").
 
 ## Context
 
@@ -33,7 +33,20 @@ Status: Proposed (2026-11-13). Written in Phase 6 while the owner was away. Buil
   - Each batch is recorded as sent before it goes out. The server's accept deletes the record. A refusal marks it refused.
   - The store lists refused changes in `refused`, also after a reload, until the person acts. The chip shows Sync failed. The sync panel names the change with a link and offers Retry (writes the same change again), Copy (puts the change as text on the clipboard) and Discard (with Undo).
   - A change still marked sent when the next page starts lost its answer in the reload: Firestore resends it from its own queue, and the answer reaches no callback. The store waits for `waitForPendingWrites`, which settles on accepts and refusals alike, then compares each such change with the stored data, field by field (`unconfirmedChanges` in the domain). A later write to the same field hides an earlier one. If the data does not show the change, the panel lists it as "Could not confirm".
-  - This covers every workspace write: Topics, statuses, preferences, Tasks, Reminders, Note filing and links, and Jira and GitHub links. Note text has its own revisions (ADR-004).
+  - This covers every workspace write: Topics, statuses, preferences, Tasks, Reminders, Note filing and links, Jira and GitHub links, Focus sessions (ADR-019) and meeting links (D78). Note text has its own revisions (ADR-004).
+
+### Meetings (D78, 2026-11-17)
+
+| Path | Writer | In the workspace store |
+|---|---|---|
+| `users/{uid}/topicMeetingLinks/{topicId}_{seriesKey}` | Thread web | Yes: `PutMeetingLink`, with `topicId`, `seriesKey`, `linked`, optional `title` (up to 300), `updatedAt`, `schemaVersion: 1` |
+| `users/{uid}/meetings/{id}` | The Mac app only | No: the web reads them through `MeetingStore` (`FirestoreMeetingStore`) and never writes |
+| `users/{uid}/meetingSource/main` | The Mac app only | No: read with the meetings |
+
+- One link per Topic and meeting series: the id comes from the pair, so linking twice is one document, like Note and external links.
+- Linking writes `linked: true` and `title`, the series title at that moment, so the Topic still names a series that left the window. Unlinking writes `linked: false` and no title. Nothing is deleted; every change has Undo.
+- A link has the pending, saved and refused states of every other write. The outbox JSON carries it, so a pending link survives a reload; a damaged series key is dropped.
+- A Topic in Trash hides its meeting links, like its other links (ADR-012); Restore brings them back.
 
 ### Seeding
 

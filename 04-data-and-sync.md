@@ -19,6 +19,9 @@ Names are illustrative, not existing classes.
 | FocusSession | id `f-<runId>`, startedAt, endedAt, time focused, planned minutes, outcome (completed or stopped), optional target (D56) |
 | Preferences | timezone, last Topics view, focus and break minutes (D56), future density |
 | ExternalSnapshot | device-local payload, field/completeness metadata, refreshedAt |
+| Meeting (D78) | id, seriesKey, title, all-day or timed span, response, location, joinUrl; written by the Mac app only (ADR-020) |
+| MeetingSource (D78) | the Mac app's last pass: state, calendar name, days covered, zone, uploader, app version, lastSuccessAt |
+| TopicMeetingLink (D78) | topicId, seriesKey, linked, title snapshot; unique pair |
 | SyncOperation | proposed only if custom outbox selected: operationId, target, baseRevision, payload, retry state |
 
 ## Relationship invariants
@@ -26,6 +29,7 @@ Names are illustrative, not existing classes.
 - Topic has many personal Tasks; Task has zero or one Topic.
 - Topic <-> Note is many-to-many.
 - Topic <-> ExternalReference is many-to-many.
+- Topic <-> meeting series is many-to-many (D78). A link names the series, so it covers every occurrence and survives the meeting leaving the window.
 - ExternalReference identifies an external object once, across Topics.
 - Reminder has one typed target: Task or Note (D54). `topic` is still read for reminders older builds made; those move onto a Task of their own (ADR-018 part B).
 - FocusSession has at most one direct Task/Topic association; a Task can resolve its Topic.
@@ -44,11 +48,14 @@ Names are illustrative, not existing classes.
 | External identifiers and canonical links | Proposed minimal Firebase references | Yes |
 | Jira descriptions, comments, detailed fields | Do not mirror into Firebase | API-derived cache |
 | GitHub detailed payloads | Proposed: same API + local-cache model | Yes |
+| Work meetings and the Mac app's source record (D78) | Yes, written only by the Mac app: yesterday to 14 days ahead, no attendees, organizer or notes | Firestore cache |
+| Topic links to meeting series (D78) | Firebase | Durable working copy/cache |
 | Integration credentials | Optional: one encrypted record, `users/{uid}/vault/connections`, sealed in the browser with the owner's passphrase (ADR-016); never plain text | Per browser profile (`thread-connections`, ADR-008); the sync key in `thread-vault-{uid}` |
 
 Jira API + local cache is explicitly confirmed.
 GitHub cache policy and exact minimal cloud metadata fields are proposed; settle before implementation.
 User confirmed local Jira caching and no restrictions on work Notes.
+Meetings are the one external content kept in Firebase (D78, ADR-020, owner change #19): the owner asked for the calendar to be "synced across devices thoroughly". Only the fields and the window above go up.
 This approval does not instruct storing secrets or all external payloads in Firestore.
 
 ## Read path
@@ -123,6 +130,7 @@ Index app-owned local content and downloaded external snapshots.
 Search must not upload cached Jira payloads merely to power full-text search.
 Firestore must not be assumed to supply arbitrary full-text search.
 Remote Jira search has explicit online behavior and separate permissions.
+Meetings (D78) are searched on the device by title and place, over the meetings the Firestore cache holds (yesterday to 14 days ahead). The join link is never searched.
 
 ## Pomodoro persistence
 
@@ -284,3 +292,16 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 - It saves like the other preferences: only a changed value is written, through the outbox, and a refused save stays in the sync panel with Retry.
 - **Rules:** `validPrefs` allows the key; when present it must be a bool.
 - **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the setting (turning it on or off, or the first preferences save of a new account).
+
+## Calendar meetings (D78, 2026-11-17)
+
+Details: ADR-020 (Accepted). Plan: `calendar-plan.md` v2.2 in the session notes.
+
+- **Collections** under `users/{uid}`, owner only: `meetings/{32 hex}` and `meetingSource/main`, written by the Mac app over Firestore REST; `topicMeetingLinks/{topicId}_{seriesKey}`, written by the web. The ids are SHA-256 hashes of the calendar's ids, so no raw calendar id is stored.
+- **Writer:** the Mac app diffs what it read against a local index on the Mac and writes only changes, at most 250 a commit, with `meetingSource/main` last. A quiet pass writes nothing; the source is rewritten at most every 30 minutes as a heartbeat. The web never writes meetings or the source.
+- **Retention:** the Mac app deletes what leaves the window (yesterday to 14 days ahead, in the workspace zone), and declined and cancelled meetings. The rules refuse a timed meeting outside the window. No TTL policy: it needs billing. "Stop syncing" in the Mac app deletes every meeting and the source; Topic links stay.
+- **Deletes:** meetings and the source are the first content collections the owner may delete (ADR-005). Topic links are never deleted: unlinking writes `linked: false`.
+- **Read:** `FirestoreMeetingStore` listens to both and maps times to wall-clock times in the workspace zone. The Firestore cache keeps the last copy offline; the card says when the Mac last uploaded.
+- **Links** go through the workspace store (`PutMeetingLink`, ADR-009): the outbox, the sync status and the refused-change list cover them. Linking writes the series title as it is then, so a Topic can name a series that left the window.
+- **Device only:** whether this browser has seen meetings set up (`thread.meetings.seen`, so the card does not flash in or out on load), and on the Mac the index, the keychain item and the diagnostics (counts and codes only).
+- **Rules** were deployed by the owner before the clients shipped ("Deployed"). Until then the Mac app's writes and the web's listeners were refused, and the web kept the error inside the Meetings card.
