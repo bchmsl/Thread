@@ -563,6 +563,11 @@ html:has(dialog:modal) { overflow: hidden; background-color: color-mix(in srgb, 
 }
 
 /* ---------------- Today ---------------- */
+/* D87: Today with the Horizontal meetings timeline (D79, loading included) gets a wider page, so an hour has more room:
+   165 px at 1600 (125 at 1240), where a 30-minute meeting's long title lies flat with 4.6 px to spare (D85's edge is
+   78 px; at the boards' 1520 it is 0.1 px). The Vertical layout, whose meetings sit in the 340 px rail, and every other
+   page keep their width. */
+main:has(.scard--tl) { max-width: 1600px; }
 .today { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px 56px; align-items: start; }
 .today__main { min-width: 0; }
 .today__rail { display: flex; flex-direction: column; gap: 36px; min-width: 0; }
