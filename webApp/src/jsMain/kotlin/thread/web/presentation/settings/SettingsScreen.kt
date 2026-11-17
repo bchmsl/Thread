@@ -12,18 +12,22 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H2
+import org.jetbrains.compose.web.dom.Nav
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Text
+import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountException
 import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
 import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
+import thread.web.presentation.Place
 
 /** One Settings block (v3 settings.js `block`). */
 @Composable
@@ -39,9 +43,11 @@ internal fun SettingsBlock(
         attr("aria-labelledby", "$id-h")
     }) {
         Div {
+            // Takes focus from script only, when a link at the top jumps here.
             H2({
                 classes("set__h")
                 id("$id-h")
+                tabIndex(-1)
             }) { Text(title) }
             if (text != null) P({ classes("set__p") }) { Text(text) }
         }
@@ -49,9 +55,26 @@ internal fun SettingsBlock(
     }
 }
 
+/** The blocks in page order with their short names, for the row of links at the top (D84). */
+private val SECTIONS =
+    listOf(
+        "connections" to "Connections",
+        "calendar" to "Calendar",
+        "statuses" to "Topic statuses",
+        "today" to "Today",
+        "topics" to "Topics",
+        "jira" to "Jira",
+        "general" to "General",
+        "appearance" to "Appearance",
+        "account" to "Account",
+    )
+
+/** The block a `#/settings/<segment>` link opens. The Preferences block from before D84 became Today and the rest. */
+internal fun settingsSection(segment: String?): String? = if (segment == "prefs") "today" else segment
+
 /**
  * Settings (v3 settings.html). [section] scrolls to that block once, for deep links such as `#/settings/statuses`.
- * Later phases add Connections, Topic statuses and Preferences above Appearance and Account.
+ * A row of links at the top jumps to each block (D84).
  */
 @Composable
 internal fun SettingsScreen(
@@ -62,15 +85,38 @@ internal fun SettingsScreen(
     blocks: @Composable () -> Unit,
 ) {
     PageHeader("Settings", "Applies to your workspace on every device, unless a block says this device.")
+    Nav({
+        classes("set-jump")
+        attr("aria-label", "Settings sections")
+    }) {
+        SECTIONS.forEach { (id, label) ->
+            A(Place.of("settings", id).hash, {
+                classes("chip")
+                onClick { event ->
+                    // A plain click stays on this page; a modified one opens the link as usual.
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return@onClick
+                    event.preventDefault()
+                    showSection(id)
+                }
+            }) { Text(label) }
+        }
+    }
     blocks()
     SettingsBlock("appearance", "Appearance", null) {
         P({ classes("pref__label") }) { Text("Dark") }
         P({ classes("pref__hint") }) { Text("Dark is the only theme in the pilot.") }
     }
     SettingsBlock("account", "Account", null) { AccountBlock(signedIn, account, usesEmulators) }
-    LaunchedEffect(section) {
-        if (section != null) document.getElementById(section)?.asDynamic()?.scrollIntoView()
+    val target = settingsSection(section)
+    LaunchedEffect(target) {
+        if (target != null) document.getElementById(target)?.asDynamic()?.scrollIntoView()
     }
+}
+
+/** Scrolls to block [id] and moves focus to its heading, so Tab continues inside it. */
+private fun showSection(id: String) {
+    document.getElementById(id)?.asDynamic()?.scrollIntoView()
+    (document.getElementById("$id-h") as? HTMLElement)?.asDynamic()?.focus(js("({ preventScroll: true })"))
 }
 
 @Composable

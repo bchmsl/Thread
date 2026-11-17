@@ -37,17 +37,13 @@ import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
 import thread.domain.topic.TopicStatus
 import thread.domain.topic.useCount
-import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
-import thread.domain.workspace.MeetingsLayout
-import thread.domain.workspace.TopicsView
 import thread.domain.workspace.addStatus
 import thread.domain.workspace.changeStatusCategory
 import thread.domain.workspace.deleteStatus
 import thread.domain.workspace.moveStatus
 import thread.domain.workspace.renameStatus
-import thread.web.presentation.CheckBox
 import thread.web.presentation.ConfirmDialog
 import thread.web.presentation.Icon
 import thread.web.presentation.IconButton
@@ -55,8 +51,6 @@ import thread.web.presentation.LocalToasts
 import thread.web.presentation.ModalDialog
 import thread.web.presentation.SelectBox
 import thread.web.presentation.WorkspaceModel
-import thread.web.presentation.shell.CaptureState
-import thread.web.presentation.shell.CaptureType
 import thread.web.presentation.topics.StatusLabel
 import thread.web.presentation.topics.Swatch
 import thread.web.presentation.topics.categoryHint
@@ -322,97 +316,3 @@ private fun statusProblemText(problem: EditProblem): String =
         EditProblem.NotReady -> "Statuses are still loading. Try again in a moment."
         else -> "That change could not be made"
     }
-
-/** Settings > Preferences (v3 settings.js `prefs`). "Keep completed tasks in Today" comes with Tasks. */
-@Composable
-internal fun PreferencesBlock(
-    workspace: WorkspaceModel,
-    capture: CaptureState,
-) {
-    SettingsBlock("prefs", "Preferences", null) {
-        val prefs = workspace.prefs
-        Div({ classes("pref") }) {
-            Div {
-                P({
-                    classes("pref__label")
-                    id("pv-l")
-                }) { Text("Topics opens as") }
-                P({ classes("pref__hint") }) { Text("You can switch any time on the Topics page.") }
-            }
-            Div({
-                classes("seg")
-                attr("role", "radiogroup")
-                attr("aria-labelledby", "pv-l")
-            }) {
-                TopicsView.entries.forEach { option ->
-                    Button({
-                        type(ButtonType.Button)
-                        attr("role", "radio")
-                        attr("aria-checked", (prefs.topicsView == option).toString())
-                        onClick { workspace.setPrefs(workspace.prefs.copy(topicsView = option)) }
-                    }) { Text(if (option == TopicsView.List) "List" else "Board") }
-                }
-            }
-        }
-        Div({ classes("pref") }) {
-            Div {
-                Label("pref-keep", { classes("pref__label") }) { Text("Keep completed tasks in Today") }
-                P({ classes("pref__hint") }) { Text("They stay, struck through, until the end of the day.") }
-            }
-            CheckBox(prefs.keepCompleted, label = null, classes = listOf("switch"), id = "pref-keep", switch = true) { on ->
-                workspace.setPrefs(workspace.prefs.copy(keepCompleted = on))
-            }
-        }
-        Div({ classes("pref") }) {
-            Div {
-                Label("pref-hide", { classes("pref__label") }) { Text("Hide empty sections in Today") }
-                P({ classes("pref__hint") }) { Text("Today, Reminders and Review requested show only when they have something.") }
-            }
-            CheckBox(prefs.hideEmptySections, label = null, classes = listOf("switch"), id = "pref-hide", switch = true) { on ->
-                workspace.setPrefs(workspace.prefs.copy(hideEmptySections = on))
-            }
-        }
-        // D79: where Today shows the meetings.
-        Div({ classes("pref") }) {
-            Div {
-                P({
-                    classes("pref__label")
-                    id("ml-l")
-                }) { Text("Meetings layout") }
-                P({ classes("pref__hint") }) {
-                    Text("Vertical lists today's meetings on the right. Horizontal draws a timeline across the top.")
-                }
-            }
-            Div({
-                classes("seg")
-                attr("role", "radiogroup")
-                attr("aria-labelledby", "ml-l")
-            }) {
-                MeetingsLayout.entries.forEach { option ->
-                    Button({
-                        type(ButtonType.Button)
-                        attr("role", "radio")
-                        attr("aria-checked", (prefs.meetingsLayout == option).toString())
-                        onClick { workspace.setPrefs(workspace.prefs.copy(meetingsLayout = option)) }
-                    }) { Text(if (option == MeetingsLayout.Vertical) "Vertical" else "Horizontal") }
-                }
-            }
-        }
-        Div({ classes("pref") }) {
-            Div {
-                Label("pref-cap", { classes("pref__label") }) { Text("Capture starts as") }
-                P({ classes("pref__hint") }) { Text("The type picked in the bottom bar when a page opens.") }
-            }
-            SelectBox(
-                value = prefs.captureType.id,
-                options = CaptureKind.entries.map { it.id to it.id.replaceFirstChar(Char::uppercaseChar) },
-                id = "pref-cap",
-                classes = listOf("input"),
-            ) { picked ->
-                val kind = CaptureKind.fromId(picked) ?: return@SelectBox
-                workspace.setPrefs(workspace.prefs.copy(captureType = kind))
-                capture.type = CaptureType.of(kind)
-            }
-        }
-    }
-}

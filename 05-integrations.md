@@ -62,7 +62,7 @@ Handle pagination, permission loss, 401/403, 429/backoff, and partial data expli
 - No issue-type filter. Every type shows, including custom types and items with no type.
 - Up to 10 pages (500 rows). When Jira has more, the list says "Showing the latest N" and search finds the rest.
 - "Current sprint only" adds `AND sprint in openSprints()`. It shows only when the site has a Sprint field: `GET /rest/api/3/field`, custom schema `com.pyxis.greenhopper.jira:gh-sprint`, asked at most once a day and saved on the device.
-- The checkbox is kept on this device (browser storage), like the Jira connection. Syncing it through the account would need a Firestore rules change.
+- The choice syncs with the account (`jiraCurrentSprintOnly`, D84) and is also in Settings > Jira. Until it is first changed, a device uses the one it kept in browser storage before (D50).
 - Each list (all, current sprint) is saved apart on the device, so either one shows its own saved copy offline.
 - Only items where the owner is the assignee show. Items where the owner is in another user field (for example a custom "Developer" field) need a different JQL; not in v1.
 - Status lozenges use the status category (`new`, `indeterminate`, `done`), never the status name, so custom workflows color correctly. An unknown category keeps the neutral style.

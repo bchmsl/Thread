@@ -382,7 +382,7 @@ private fun AssignedPanel(
     }
 }
 
-/** "Current sprint only" (D50): kept on this device, like the Jira connection. */
+/** "Current sprint only" (D50): the same synced choice as Settings > Jira (D84). */
 @Composable
 private fun SprintFilter(jira: JiraModel) {
     Div({ classes("jl-filter") }) {

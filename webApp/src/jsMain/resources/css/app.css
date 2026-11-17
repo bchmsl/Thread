@@ -200,6 +200,7 @@ select.input--sm { padding-right: 28px; background-position: right 8px center; }
 }
 .switch:checked { background: var(--fog-200); }
 .switch:checked::after { transform: translateX(18px); background: var(--ink-900); }
+.switch:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* ---------------- Topic identity: hex sticker ---------------- */
 .hex { display: block; overflow: visible; }
@@ -970,6 +971,9 @@ main:has(.board) { max-width: 1520px; }
 .set__h { font: 500 var(--fs-20) var(--font-display); }
 .set__p { color: var(--text-2); font-size: var(--fs-14); margin-top: 6px; }
 .set__body { min-width: 0; }
+/* Links to each block, under the page header (D84). */
+.set-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 28px; }
+.set-jump .chip { text-decoration: none; }
 .conn { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .conn:first-child { padding-top: 0; }
 .conn__icon { width: 40px; height: 40px; border-radius: 10px; background: var(--ink-800); display: grid; place-items: center; color: var(--text-2); }

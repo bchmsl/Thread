@@ -48,6 +48,8 @@ import thread.domain.topic.TopicStatus
 import thread.domain.topic.statusOf
 import thread.domain.topic.todayStatuses
 import thread.domain.topic.todayTopicGroups
+import thread.domain.workspace.TopicsView
+import thread.domain.workspace.todayTopicsLayout
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
 import thread.web.presentation.CardKind
@@ -205,8 +207,8 @@ internal fun TodayScreen(
     ActiveTopics(workspace)
 }
 
-/** Where the empty state sends the person: Settings, at Preferences. */
-private val PREFERENCES_PLACE = Place.of("settings", "prefs")
+/** Where the empty state sends the person: Settings, at Today (D84). */
+private val PREFERENCES_PLACE = Place.of("settings", "today")
 
 /**
  * With "Hide empty sections in Today" on and every section it names empty (D77), one line says so in their place.
@@ -435,25 +437,14 @@ private fun RemindersRail(
     }
 }
 
-/** How Today lays out its Topics (owner change #1). This device remembers the choice, like the open groups (D53). */
-internal enum class ActiveLayout(
-    val id: String,
-    val label: String,
-) {
-    List("list", "List"),
-    Board("board", "Board"),
-}
-
-/** Where this device keeps the Topics layout. Not synced. */
+/**
+ * Where this device kept Today's Topics layout before it synced (owner change #1, D84). Only read now: until the
+ * synced choice is first set, this device's old pick is the starting value.
+ */
 internal const val ACTIVE_LAYOUT_NAME = "thread.today.activeLayout"
 
-/** The layout last picked on this device, else List, also when storage is blocked. */
-internal fun activeLayout(): ActiveLayout {
-    val stored = readDeviceText(ACTIVE_LAYOUT_NAME)
-    return ActiveLayout.entries.firstOrNull { it.id == stored } ?: ActiveLayout.List
-}
-
-internal fun keepActiveLayout(layout: ActiveLayout) = writeDeviceText(ACTIVE_LAYOUT_NAME, layout.id)
+/** The layout picked on this device before D84, or null when none was picked, it is unknown or storage is blocked. */
+internal fun deviceTodayTopicsView(): TopicsView? = TopicsView.fromId(readDeviceText(ACTIVE_LAYOUT_NAME))
 
 /**
  * Active and paused Topics (owner change #1): only Topics whose status is in the Active or Paused category, grouped by
@@ -468,7 +459,9 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
     val groups = todayTopicGroups(workspace.topics, statuses)
     val count = groups.sumOf { it.topics.size }
     val grouped = shownStatuses.size > 1
-    var layout by remember { mutableStateOf(activeLayout()) }
+    // List or Board syncs with Settings > Today (D84).
+    val onThisDevice = remember { deviceTodayTopicsView() }
+    val layout = workspace.prefs.todayTopicsLayout(onThisDevice)
     // Grouped, the headings name the statuses, so the hint would only repeat them.
     val hint =
         if (grouped) {
@@ -488,10 +481,7 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
         actions =
             if (count > 0) {
                 {
-                    LayoutSwitch(layout) { picked ->
-                        layout = picked
-                        keepActiveLayout(picked)
-                    }
+                    LayoutSwitch(layout) { picked -> workspace.setPrefs(workspace.prefs.copy(todayTopicsView = picked)) }
                 }
             } else {
                 null
@@ -505,9 +495,9 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
             return@SectionCard
         }
         when {
-            layout == ActiveLayout.List && grouped ->
+            layout == TopicsView.List && grouped ->
                 groups.forEach { group -> key(group.status.id.value) { ActiveGroup(group, workspace) } }
-            layout == ActiveLayout.List -> ActiveRows(groups.single().topics, workspace)
+            layout == TopicsView.List -> ActiveRows(groups.single().topics, workspace)
             grouped -> ActiveBoard(shownStatuses, groups, workspace)
             else -> ActiveCards(groups.single().topics, workspace, showStatus = true)
         }
@@ -516,23 +506,23 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
 
 @Composable
 private fun LayoutSwitch(
-    layout: ActiveLayout,
-    onPick: (ActiveLayout) -> Unit,
+    layout: TopicsView,
+    onPick: (TopicsView) -> Unit,
 ) {
     Div({
         classes("seg")
         attr("role", "radiogroup")
         attr("aria-label", "Active and paused Topics layout")
     }) {
-        ActiveLayout.entries.forEach { option ->
+        TopicsView.entries.forEach { option ->
             Button({
                 type(ButtonType.Button)
                 attr("role", "radio")
                 attr("aria-checked", (option == layout).toString())
                 onClick { onPick(option) }
             }) {
-                IconView(if (option == ActiveLayout.List) Icon.List else Icon.Topics, 16)
-                Text(" ${option.label}")
+                IconView(if (option == TopicsView.List) Icon.List else Icon.Topics, 16)
+                Text(if (option == TopicsView.List) " List" else " Board")
             }
         }
     }

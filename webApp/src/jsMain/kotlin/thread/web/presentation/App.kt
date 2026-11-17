@@ -76,9 +76,12 @@ import thread.web.presentation.notes.NotesScreen
 import thread.web.presentation.notes.launchNoteWrite
 import thread.web.presentation.settings.CalendarBlock
 import thread.web.presentation.settings.ConnectionsBlock
-import thread.web.presentation.settings.PreferencesBlock
+import thread.web.presentation.settings.GeneralPrefsBlock
+import thread.web.presentation.settings.JiraPrefsBlock
 import thread.web.presentation.settings.SettingsScreen
 import thread.web.presentation.settings.StatusesBlock
+import thread.web.presentation.settings.TodayPrefsBlock
+import thread.web.presentation.settings.TopicsPrefsBlock
 import thread.web.presentation.shell.CaptureDestination
 import thread.web.presentation.shell.CaptureState
 import thread.web.presentation.shell.CaptureType
@@ -172,7 +175,17 @@ private fun Workspace(
         }
     // Lists load in the workspace's scope, so leaving a page does not cancel a refresh; signing out stops them all.
     val workspaceScope = rememberCoroutineScope()
-    val jira = remember { JiraModel(services.jira, workspaceScope, services.showProbe) }
+    val jira =
+        remember {
+            // "Current sprint only" is a synced preference (D84).
+            JiraModel(
+                services = services.jira,
+                scope = workspaceScope,
+                prefs = { workspace.prefs },
+                savePrefs = workspace::setPrefs,
+                probe = services.showProbe,
+            )
+        }
     val gitHub = remember { GitHubModel(services.gitHub, workspaceScope, services.showProbe) }
     val focus =
         remember {
@@ -326,7 +339,10 @@ private fun Workspace(
                             ConnectionsBlock(jira, gitHub, connectionSync)
                             CalendarBlock(meetings, zone)
                             StatusesBlock(workspace)
-                            PreferencesBlock(workspace, capture)
+                            TodayPrefsBlock(workspace)
+                            TopicsPrefsBlock(workspace)
+                            JiraPrefsBlock(jira)
+                            GeneralPrefsBlock(workspace, capture)
                         }
                     else -> NotBuiltYet(view)
                 }

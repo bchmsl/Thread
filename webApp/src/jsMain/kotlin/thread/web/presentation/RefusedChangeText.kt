@@ -40,7 +40,8 @@ private fun WorkspaceModel.subjectOf(write: WorkspaceWrite): Pair<String, Place?
     when (write) {
         is WorkspaceWrite.PutTopic -> "Topic “${write.topic.name}”" to topicPlace(write.topic)
         is WorkspaceWrite.PutStatus -> "status “${write.status.name}”" to Place.of("settings", "statuses")
-        is WorkspaceWrite.PutPrefs -> "the preferences change" to Place.of("settings", "prefs")
+        // Preferences sit in one block per screen (D84); the top of Settings links to each.
+        is WorkspaceWrite.PutPrefs -> "the preferences change" to Place.of("settings")
         is WorkspaceWrite.PutTask ->
             "Task “${write.task.title}”" to if (write.isNew) null else taskPlace(View.Today.place, write.task.id)
         is WorkspaceWrite.PutReminder -> "reminder “${write.reminder.text}”" to null

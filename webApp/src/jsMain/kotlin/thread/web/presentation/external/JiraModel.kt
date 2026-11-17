@@ -32,12 +32,13 @@ import thread.domain.external.Saved
 import thread.domain.external.ShowRefresh
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.WorkspacePrefs
+import thread.domain.workspace.currentSprintOnly
 import thread.domain.workspace.jiraReference
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
 import thread.web.platform.readDeviceFlag
 import thread.web.platform.readDeviceText
-import thread.web.platform.writeDeviceFlag
 import thread.web.platform.writeDeviceText
 
 /**
@@ -79,6 +80,8 @@ internal class JiraSiteInfo(
 internal class JiraModel(
     val services: JiraServices,
     scope: CoroutineScope,
+    private val prefs: () -> WorkspacePrefs,
+    private val savePrefs: (WorkspacePrefs) -> Unit,
     private val probe: ShowRefreshProbe? = null,
 ) {
     val name: String get() = services.name
@@ -90,9 +93,11 @@ internal class JiraModel(
     /** The assigned lists, shared by the Jira page and the background refresh (D51). */
     val lists = ExternalListFeed(listLoader, scope, ::nowMillis) { _, view -> observeList(view) }
 
-    /** "Current sprint only" on the Jira page. Kept on this device, like the Jira connection and its copies (D50). */
-    var currentSprintOnly: Boolean by mutableStateOf(readDeviceFlag(CURRENT_SPRINT_FLAG))
-        private set
+    /** This device's "Current sprint only" from before it synced (D50): the starting value until the synced one is set. */
+    private val sprintOnlyOnThisDevice = readDeviceFlag(CURRENT_SPRINT_FLAG)
+
+    /** "Current sprint only" on the Jira page and in Settings > Jira. Synced with the workspace preferences (D84). */
+    val currentSprintOnly: Boolean get() = prefs().currentSprintOnly(sprintOnlyOnThisDevice)
 
     /** Whether the connected site has sprints; null until known. The checkbox hides when it has none. */
     var sprints: Boolean? by mutableStateOf(null)
@@ -197,10 +202,7 @@ internal class JiraModel(
         version++
     }
 
-    fun setCurrentSprintOnly(on: Boolean) {
-        currentSprintOnly = on
-        writeDeviceFlag(CURRENT_SPRINT_FLAG, on)
-    }
+    fun setCurrentSprintOnly(on: Boolean) = savePrefs(prefs().copy(jiraCurrentSprintOnly = on))
 
     /** Learns whether the site has sprints: from this device, and from Jira at most once a day when it can ask. */
     suspend fun checkSprints() {
@@ -333,7 +335,7 @@ internal class JiraModel(
         reference.provider == ExternalProvider.Jira && reference.instance == site?.cloudId?.value
 }
 
-/** The device setting behind "Current sprint only" (D50). */
+/** Where this device kept "Current sprint only" before it synced (D50, D84). Only read now. */
 private const val CURRENT_SPRINT_FLAG = "thread.jira.currentSprintOnly"
 
 /** Where [JiraModel.isNotATicket] keeps its keys on this device: `KEY:millis` pairs, comma separated. */

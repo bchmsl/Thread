@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.browser.document
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.InputType
+import org.jetbrains.compose.web.attributes.disabled
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
@@ -132,6 +133,8 @@ internal fun CheckBox(
     id: String? = null,
     indeterminate: Boolean = false,
     switch: Boolean = false,
+    enabled: Boolean = true,
+    describedBy: String? = null,
     onChange: (Boolean) -> Unit,
 ) {
     var element by remember { mutableStateOf<HTMLInputElement?>(null) }
@@ -140,6 +143,8 @@ internal fun CheckBox(
         if (id != null) id(id)
         if (switch) attr("role", "switch")
         if (label != null) attr("aria-label", label)
+        if (describedBy != null) attr("aria-describedby", describedBy)
+        if (!enabled) disabled()
         ref {
             element = it
             onDispose { element = null }

@@ -97,8 +97,8 @@ Meetings (D78, ADR-020) head the side column once meetings are set up:
 - Each row shows the time, the title, Now or Next, "Tentative" or "Not answered", the place, the linked Topics, and Join for a Teams, Zoom, Google Meet or Webex link.
 - Declined and cancelled meetings are not shown.
 - The card says when the Mac last uploaded. After an hour without an upload it asks whether the Mac is awake. "No meetings today." shows only after an upload that covered today.
-- "Hide empty sections in Today" (D77) never hides it.
-- Settings > Preferences, "Meetings layout" (D79, synced): Vertical, the default, is the card described here. Horizontal moves the same card across the page under the heading, above both columns, as a timeline of today's hours: all-day meetings above, timed ones as blocks by start and end, overlaps in rows, a line at now, and Join for the meeting now and the next one in the card's head.
+- "Hide empty sections" in Settings > Today (D77) never hides it.
+- Settings > Today, "Meetings layout" (D79, synced): Vertical, the default, is the card described here. Horizontal moves the same card across the page under the heading, above both columns, as a timeline of today's hours: all-day meetings above, timed ones as blocks by start and end, overlaps in rows, a line at now, and Join for the meeting now and the next one in the card's head.
 - A row opens a read-only Meeting card: when, where, your answer, Join, and its Topics with Link to Topic and Unlink.
 - The status line names the next meeting in the hour before it starts ("Standup in 12 min") and opens its card.
 
@@ -108,7 +108,7 @@ Two more groups follow Earlier planned (D53):
 
 Every group opens and closes from its heading. Upcoming and No date start closed, and each device remembers the choice.
 
-Below the Tasks, Today shows the Topics whose status is in the Active or Paused category, grouped by status in Settings order (D59). Planned and Done Topics are not shown. A List / Board switch picks the layout; List is the default. On wide screens the Board, like the Topics Board, uses more width and then narrower lanes before it scrolls sideways (D66).
+Below the Tasks, Today shows the Topics whose status is in the Active or Paused category, grouped by status in Settings order (D59). Planned and Done Topics are not shown. A List / Board switch picks the layout; List is the default. The choice syncs and is also in Settings > Today (D84); until it is first changed, a device keeps the layout it showed before. On wide screens the Board, like the Topics Board, uses more width and then narrower lanes before it scrolls sideways (D66).
 
 A Task added from Today without a Topic is planned for today and also waits in Inbox until it is filed (D38).
 
