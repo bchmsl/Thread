@@ -11,26 +11,24 @@ const val TIMELINE_FIRST_HOUR: Int = 8
 const val TIMELINE_LAST_HOUR: Int = 18
 
 /**
- * A meeting whose part of today is shorter than this, in minutes, draws as a one-line chip this long (D80): a block
- * at its real length would be too narrow for its title. The chip starts at the meeting's start, or ends at 24:00 when
- * that start is less than this before midnight, and shows the real length inside it.
+ * The room a meeting shorter than this takes on the timeline, in minutes. Its block keeps a size that can be clicked,
+ * so the next meeting in the same row starts no earlier than this after it, and the hours shown hold it.
  */
-const val TIMELINE_CHIP_MINUTES: Int = 60
+const val TIMELINE_MIN_ROOM_MINUTES: Int = 25
 
 /**
  * Today's meetings on a timeline (D79, Settings "Meetings layout: Horizontal"). It shows the hours from [startMinute]
  * to [endMinute], minutes of the day on whole hours: [TIMELINE_FIRST_HOUR] to [TIMELINE_LAST_HOUR], widened to hold
- * every timed meeting as drawn. [allDay] sit above the hours. [blocks] are the timed meetings in time order, each in a
- * row (D80): a chip takes one row and a block two, and a meeting goes to the first rows free at the start of its drawn
- * part, so nothing drawn overlaps. [rows] counts the rows in use. [nowMinute] is now, or null while now is outside the
- * hours shown.
+ * every timed meeting of the day. [allDay] sit above the hours. [blocks] are the timed meetings in time order, each in a
+ * lane: a meeting that overlaps an earlier one goes to the first lane free at its start. [nowMinute] is now, or null
+ * while now is outside the hours shown.
  */
 data class MeetingTimeline(
     val startMinute: Int,
     val endMinute: Int,
     val allDay: List<TodayMeeting>,
     val blocks: List<TimelineBlock>,
-    val rows: Int,
+    val lanes: Int,
     val nowMinute: Int?,
 ) {
     /** How many hours it shows. */
@@ -42,22 +40,14 @@ data class MeetingTimeline(
 
 /**
  * A timed meeting on the timeline. [fromMinute] and [toMinute] are its part of today, minutes of the day: a meeting that
- * started yesterday starts at 0, one that ends tomorrow ends at 1440. [drawnFromMinute] and [drawnToMinute] are where it
- * is drawn: the same for a block, [TIMELINE_CHIP_MINUTES] for a [chip]. [row] counts from 0; a block also takes the
- * row under it.
+ * started yesterday starts at 0, one that ends tomorrow ends at 1440. [lane] counts from 0.
  */
 data class TimelineBlock(
     val meeting: TodayMeeting,
     val fromMinute: Int,
     val toMinute: Int,
-    val drawnFromMinute: Int,
-    val drawnToMinute: Int,
-    val row: Int,
-    val chip: Boolean,
-) {
-    /** How many rows it takes: one for a chip, two for a block. */
-    val height: Int get() = if (chip) 1 else 2
-}
+    val lane: Int,
+)
 
 /** Lays out [today], the rows [todayMeetings] gives for [now]'s day, on a timeline. */
 fun meetingTimeline(
@@ -65,41 +55,40 @@ fun meetingTimeline(
     now: WallTime,
 ): MeetingTimeline {
     val day = now.day
-    // The drawn end of the last meeting in each row: a row is free from then on.
-    val rowEnds = mutableListOf<Int>()
-    val blocks =
+    val timed =
         today
             .filter { it.meeting.time is MeetingTime.Timed }
             .map { row ->
                 val from = minuteOn(day, row.meeting.time.startsAt)
                 val to = minuteOn(day, row.meeting.time.endsAt)
-                val chip = to - from < TIMELINE_CHIP_MINUTES
-                val drawnFrom = if (chip) minOf(from, MINUTES_PER_DAY - TIMELINE_CHIP_MINUTES) else from
-                val drawnTo = if (chip) drawnFrom + TIMELINE_CHIP_MINUTES else to
-                val height = if (chip) 1 else 2
-                val first = generateSequence(0) { it + 1 }.first { top -> (top until top + height).all { rowEnds.freeAt(it, drawnFrom) } }
-                for (taken in first until first + height) {
-                    if (taken < rowEnds.size) rowEnds[taken] = drawnTo else rowEnds += drawnTo
-                }
-                TimelineBlock(row, from, to, drawnFrom, drawnTo, first, chip)
+                Placed(row, from, to, room = minOf(maxOf(to, from + TIMELINE_MIN_ROOM_MINUTES), MINUTES_PER_DAY))
             }
-    val start = minOf(TIMELINE_FIRST_HOUR * 60, blocks.minOfOrNull { it.drawnFromMinute / 60 * 60 } ?: MINUTES_PER_DAY)
-    val end = maxOf(TIMELINE_LAST_HOUR * 60, blocks.maxOfOrNull { (it.drawnToMinute + 59) / 60 * 60 } ?: 0)
+    val laneEnds = mutableListOf<Int>()
+    val blocks =
+        timed.map { placed ->
+            val free = laneEnds.indexOfFirst { it <= placed.from }
+            val lane = if (free >= 0) free else laneEnds.size.also { laneEnds += 0 }
+            laneEnds[lane] = placed.room
+            TimelineBlock(placed.row, placed.from, placed.to, lane)
+        }
+    val start = minOf(TIMELINE_FIRST_HOUR * 60, timed.minOfOrNull { it.from / 60 * 60 } ?: MINUTES_PER_DAY)
+    val end = maxOf(TIMELINE_LAST_HOUR * 60, timed.maxOfOrNull { (it.room + 59) / 60 * 60 } ?: 0)
     return MeetingTimeline(
         startMinute = start,
         endMinute = end,
         allDay = today.filter { it.meeting.time is MeetingTime.AllDay },
         blocks = blocks,
-        rows = rowEnds.size,
+        lanes = laneEnds.size,
         nowMinute = now.minuteOfDay.takeIf { it in start..end },
     )
 }
 
-/** Whether row [index] is free at [minute]: nothing drawn in it yet, or its last meeting is drawn up to then. */
-private fun List<Int>.freeAt(
-    index: Int,
-    minute: Int,
-): Boolean = index >= size || this[index] <= minute
+private class Placed(
+    val row: TodayMeeting,
+    val from: Int,
+    val to: Int,
+    val room: Int,
+)
 
 /** [at] as a minute of [day], kept within it: 0 before the day, 1440 after. */
 private fun minuteOn(

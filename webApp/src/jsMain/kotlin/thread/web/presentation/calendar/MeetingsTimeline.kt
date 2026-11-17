@@ -33,11 +33,10 @@ import kotlin.math.round
 /**
  * Today's meetings as a timeline across the page (D79, Settings "Meetings layout: Horizontal"). It is the Meetings card
  * of [MeetingsRail], with the same note and footer, and its body runs the day's hours from left to right
- * ([meetingTimeline]): all-day meetings in a strip above the hours, timed ones placed by start and end, in rows while
- * what is drawn overlaps, and a line at now. An hour or more is a block; a shorter meeting is a one-line chip an hour
- * wide with its real length marked inside (D80). Each is one button named by the row's sentence ([meetingRowLabel]);
- * it opens the Meeting card. They come in time order, so Tab follows the day. Join for the meeting now and the next one
- * sits in the card's head, since a block is too narrow for it. A narrow screen scrolls the hours sideways inside the
+ * ([meetingTimeline]): all-day meetings in a strip above the hours, timed ones as blocks placed by start and end, in
+ * lanes while they overlap, and a line at now. A block is one button named by the row's sentence ([meetingRowLabel]);
+ * it opens the Meeting card. Blocks come in time order, so Tab follows the day. Join for the meeting now and the next
+ * one sits in the card's head, since a block is too narrow for it. A narrow screen scrolls the hours sideways inside the
  * card, starting at now; the page never scrolls sideways.
  */
 @Composable
@@ -113,7 +112,7 @@ private fun AllDayStrip(
 
 /**
  * The hours, their meetings and now, inside a box that scrolls sideways when the card is narrower than the hours need
- * (105 px each, css/cards.css). The box starts with now about a third from its left edge, again when the hours change.
+ * (88 px each, css/cards.css). The box starts with now about a third from its left edge, again when the hours change.
  */
 @Composable
 private fun Track(
@@ -160,8 +159,7 @@ private fun TrackBox(
             }
             Ul({
                 classes("mtl__lanes")
-                // At least a block's height, so a day without meetings keeps the hours' shape.
-                style { property("--rows", maxOf(2, line.rows).toString()) }
+                style { property("--lanes", maxOf(1, line.lanes).toString()) }
             }) {
                 line.blocks.forEach { block ->
                     key(block.meeting.meeting.id.value) { Block(block, line, now, topicsOf(block.meeting.meeting.seriesKey), onOpen) }
@@ -173,10 +171,9 @@ private fun TrackBox(
 }
 
 /**
- * One timed meeting, placed where it is drawn ([TimelineBlock]). A block shows its title on up to two lines, then Now or
- * Next and when it starts. A chip shows them on one line, the title first, and marks its real length along its bottom
- * edge. A part that runs into yesterday or tomorrow has a square edge on that side. Now is tinted and Next outlined, so
- * a chip whose title leaves no room for the badge still shows it. Tentative and not answered have a dashed edge.
+ * One timed meeting: its title, then Now or Next and when it starts. Placed by start and end; a part that runs into
+ * yesterday or tomorrow has a square edge on that side. Now is tinted and Next outlined, so a block too narrow for its
+ * badge still shows it. Tentative and not answered have a dashed edge.
  */
 @Composable
 private fun Block(
@@ -188,22 +185,20 @@ private fun Block(
 ) {
     val row = block.meeting
     val meeting = row.meeting
-    val from = line.offsetOf(block.drawnFromMinute)
+    val from = line.offsetOf(block.fromMinute)
     val label = meetingRowLabel(row, now, topics.map { it.name })
     Li({
         classes("mtl__slot")
-        if (block.chip) classes("mtl__slot--chip")
         style {
             property("--x", percent(from))
-            property("--w", percent(line.offsetOf(block.drawnToMinute) - from))
-            property("--row", block.row.toString())
+            property("--w", percent(line.offsetOf(block.toMinute) - from))
+            property("--lane", block.lane.toString())
         }
     }) {
         Button({
             type(ButtonType.Button)
             itemCard(CardKind.Meeting)
             classes("mblock")
-            if (block.chip) classes("mblock--chip")
             when (row.phase) {
                 MeetingPhase.Ended -> classes("is-ended")
                 MeetingPhase.Now -> classes("is-now")
@@ -222,59 +217,38 @@ private fun Block(
                 classes("mblock__in")
                 attr("aria-hidden", "true")
                 attr("title", label)
-            }) {
-                if (block.chip) {
-                    // One line that wraps what does not fit to a second line it hides: the title keeps its room
-                    // first, then the badge, then the time.
-                    Span({ classes("mchip__line") }) {
-                        Span({ classes("mblock__name") }) { Text(meeting.displayTitle) }
-                        BadgeAndTime(row)
-                    }
-                    ChipLength(block)
-                } else {
-                    Span({ classes("mblock__name") }) { Text(meeting.displayTitle) }
-                    Span({ classes("mblock__meta") }) { BadgeAndTime(row) }
-                }
+            }) { BlockText(row) }
+        }
+    }
+}
+
+/** The title, then Now or Next and when it starts. */
+@Composable
+private fun BlockText(row: TodayMeeting) {
+    val meeting = row.meeting
+    Span({ classes("mblock__name") }) { Text(meeting.displayTitle) }
+    Span({ classes("mblock__meta") }) {
+        val badge =
+            when (row.phase) {
+                MeetingPhase.Now -> "Now"
+                MeetingPhase.Next -> "Next"
+                else -> null
             }
+        if (badge != null) {
+            Span({
+                classes("mbadge")
+                if (row.phase == MeetingPhase.Now) classes("mbadge--now")
+            }) { Text(badge) }
         }
+        // A meeting that started yesterday says when it ends; any other says when it starts.
+        val time =
+            if (row.startsBeforeToday) {
+                "Until ${clockText(meeting.time.endsAt.minuteOfDay)}"
+            } else {
+                clockText(meeting.time.startsAt.minuteOfDay)
+            }
+        Span({ classes("mblock__time") }) { Text(time) }
     }
-}
-
-/** Now or Next, then when it starts. A meeting that started yesterday says when it ends instead. */
-@Composable
-private fun BadgeAndTime(row: TodayMeeting) {
-    val badge =
-        when (row.phase) {
-            MeetingPhase.Now -> "Now"
-            MeetingPhase.Next -> "Next"
-            else -> null
-        }
-    if (badge != null) {
-        Span({
-            classes("mbadge")
-            if (row.phase == MeetingPhase.Now) classes("mbadge--now")
-        }) { Text(badge) }
-    }
-    val time = row.meeting.time
-    Span({ classes("mblock__time") }) {
-        Text(if (row.startsBeforeToday) "Until ${clockText(time.endsAt.minuteOfDay)}" else clockText(time.startsAt.minuteOfDay))
-    }
-}
-
-/**
- * A chip's real start and length along its bottom edge, as fractions of the hour it is drawn over: a 10 minute meeting
- * marks the first sixth, one that ends at midnight the end of the chip. Decorative: the sentence says the times.
- */
-@Composable
-private fun ChipLength(block: TimelineBlock) {
-    val drawn = (block.drawnToMinute - block.drawnFromMinute).toDouble()
-    Span({
-        classes("mchip__len")
-        style {
-            property("--bx", fraction((block.fromMinute - block.drawnFromMinute) / drawn))
-            property("--bw", fraction((block.toMinute - block.fromMinute) / drawn))
-        }
-    })
 }
 
 /** The line at now, with the time on the ruler. Decorative: the rows' sentences and the status line say it in words. */
@@ -314,6 +288,3 @@ private val MeetingResponse.isOpen: Boolean get() = this == MeetingResponse.Tent
 
 /** "12.5%": three decimals are finer than a pixel and never print as an exponent. */
 private fun percent(fraction: Double): String = "${round(fraction * 100_000) / 1000}%"
-
-/** "0.125", for CSS to multiply a length by: five decimals, never an exponent. */
-private fun fraction(value: Double): String = "${round(value * 100_000) / 100_000}"

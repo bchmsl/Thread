@@ -261,9 +261,8 @@
 .dmeet__link::after { inset: -4px 0; }
 
 /* Meetings timeline (D79, "Meetings layout: Horizontal"): the Meetings card across the page. The hours run left to right
-   at 105 px each or more, so an hour holds about 10 letters of a title and 10 hours still fit at 1199 px; a card
-   narrower than that scrolls them inside .mtl, never the page. Meetings sit by start and end in rows 33 px apart (D80): a block of an hour or more is 60 px
-   tall and takes two rows, a shorter meeting is a 27 px chip an hour wide and takes one. The grid's hour lines echo the
+   at 88 px each or more, so a half-hour block keeps a few letters; a card narrower than that scrolls them inside .mtl,
+   never the page. Blocks sit by start and end, in lanes 60 px tall while they overlap; the grid's hour lines echo the
    band's calendar pattern. */
 .scard--tl { margin-bottom: 28px; }
 .scard--tl > .scard__head { flex-wrap: wrap; row-gap: 6px; }
@@ -282,23 +281,22 @@
 .mday__k { flex: none; font-size: var(--fs-12); font-weight: 600; color: var(--text-2); }
 .mday__name { min-width: 0; overflow: hidden; font-size: var(--fs-14); font-weight: 550; white-space: nowrap; text-overflow: ellipsis; }
 .mtl { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding-bottom: 4px; }
-.mtl__track { position: relative; min-width: calc(var(--hours) * 105px); }
+.mtl__track { position: relative; min-width: calc(var(--hours) * 88px); }
 .mtl__ruler { display: grid; grid-template-columns: repeat(var(--hours), minmax(0, 1fr)); height: 24px; }
 .mtl__hour {
   padding: 3px 0 0 6px; border-left: 1px solid var(--border-strong); font-size: var(--fs-12); line-height: 16px;
   color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .mtl__lanes {
-  position: relative; height: calc(var(--rows) * 33px + 6px); margin: 0; padding: 0; list-style: none;
+  position: relative; height: calc(var(--lanes) * 66px + 6px); margin: 0; padding: 0; list-style: none;
   border-right: 1px solid var(--border);
   background-image: linear-gradient(to right, var(--border) 1px, transparent 1px);
   background-size: calc(100% / var(--hours)) 100%;
 }
 .mtl__slot {
-  position: absolute; z-index: 1; top: calc(6px + var(--row) * 33px); left: var(--x); width: var(--w); height: 60px;
-  padding-right: 2px;
+  position: absolute; z-index: 1; top: calc(6px + var(--lane) * 66px); left: min(var(--x), calc(100% - 26px));
+  width: var(--w); min-width: 26px; height: 60px; padding-right: 2px; container-type: inline-size;
 }
-.mtl__slot--chip { height: 27px; }
 .icard.mblock {
   width: 100%; height: 100%; padding: 0; overflow: hidden; border-left: 3px solid var(--k);
   font: inherit; color: inherit; text-align: left; cursor: pointer;
@@ -316,39 +314,21 @@
 .icard:is(.mblock, .mday).is-open { border-left-style: dashed; }
 .icard.mblock.is-from-yesterday { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .icard.mblock.is-to-tomorrow { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-/* A title breaks only between words (D80). A word longer than the line ends in an ellipsis instead of breaking. */
 .mblock__name {
   display: -webkit-box; flex: none; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; overflow: hidden;
-  font-size: var(--fs-13); font-weight: 600; line-height: 16px; overflow-wrap: normal; word-break: normal; hyphens: manual;
-  text-overflow: ellipsis;
+  font-size: var(--fs-13); font-weight: 600; line-height: 16px; overflow-wrap: anywhere; hyphens: auto;
 }
 .mblock.is-ended .mblock__name { color: var(--text-3); font-weight: 500; }
-/* Now or Next, then the time, on one line: what does not fit wraps to a second line that is cut off, so a part is
-   either whole or not shown. */
 .mblock__meta {
-  display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; max-width: 100%; height: 16px; overflow: hidden;
-  font-size: var(--fs-12); line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; font-size: var(--fs-12); line-height: 16px;
+  color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-:is(.mblock__meta, .mchip__line) > .mbadge { margin-right: 0; line-height: 16px; }
-/* A chip (D80): one line, the title first, then Now or Next and the time while they fit, on the same wrap-and-cut line.
-   Its bottom edge marks the real start and length over the hour it is drawn on (--bx, --bw: fractions of that hour). */
-.mblock--chip > .mblock__in { flex-direction: row; align-items: center; padding: 0 6px 3px 7px; }
-.mchip__line {
-  display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; column-gap: 6px; min-width: 0; height: 16px;
-  overflow: hidden; font-size: var(--fs-12); line-height: 16px; color: var(--text-3); font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.mchip__line > .mblock__name {
-  display: block; flex: 0 1 auto; min-width: 0; color: var(--text); -webkit-line-clamp: none; text-overflow: ellipsis;
-}
-.mblock--chip.is-ended .mchip__line > .mblock__name { color: var(--text-3); }
-/* The chip's padding box starts 3 px in (its left edge) and ends 3 px before the hour's end (its right edge and the
-   gap), so the hour is 100% + 6 px wide from 3 px to the left. */
-.mchip__len {
-  position: absolute; bottom: 0; left: calc(var(--bx) * (100% + 6px) - 3px); width: max(3px, calc(var(--bw) * (100% + 6px)));
-  height: 3px; background: var(--k); pointer-events: none;
-}
-.mblock--chip.is-ended .mchip__len { background: var(--border-strong); }
+.mblock__meta > .mbadge { margin-right: 0; line-height: 16px; }
+/* A narrow block keeps what fits: the badge before the time, then the title alone (Now's tint and Next's outline stay),
+   then nothing but its edge. */
+@container (max-width: 96px) { .mbadge + .mblock__time { display: none; } }
+@container (max-width: 50px) { .mblock__meta { display: none; } }
+@container (max-width: 36px) { .mblock__name { visibility: hidden; } }
 .mtl__now {
   position: absolute; z-index: 2; top: 0; bottom: 0; left: var(--x); width: 2px; margin-left: -1px;
   background: var(--fog-100); pointer-events: none;
