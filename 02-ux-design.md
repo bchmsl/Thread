@@ -86,6 +86,7 @@ Linked Jira tickets nest under their linked parent (D64), by Jira's `parent` fie
 Sections collapse; exact default expansion behavior to be designed.
 Tasks, Notes, Jira tickets and pull requests open as cards on top of the page (D70, see Item cards); the page stays as it was under the card. There is no side panel and no routed detail screen.
 Additional information shows as text while viewing (D70). Its small Edit opens the same box, focused; Done or Esc closes it. The text saves as before.
+The header's Edit opens the Edit Topic dialog (D71), the same from the page and from a Topic card. It is a small Topic card: its top edge, band and sticker take the color being picked, and the sticker shows the monogram of the name being typed. Name, Goal (optional; two lines, growing to six) and Sticker color: Chrome's nine colors as hex swatches (D72), one row on wider screens and five a row under 600 px, with the chosen color's Chrome name in the legend. Cancel and Save changes sit in a foot; nothing saves until Save changes, and Esc closes without saving.
 
 Suggestions (D49, ADR-017). Not in the v3 prototype; placement queued as Q77.
 - A "Suggested" group under the linked rows of the Jira and Pull requests sections. Hidden when not connected or when there is nothing to suggest.
@@ -183,7 +184,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Shell | Ink-navy surfaces (app `#0e1322`, surface `#131a2b`, raised `#192135`), fog text (`#e9edf7`, `#b2bbd2`, `#8792ae`). |
 | Action | One magenta action color (`#f2559e`). One magenta pill per surface marks the main action. |
 | Status categories | Gray `#a7b0c6`, blue `#82b6ff`, orange `#f5a65b`, green `#7bd49f`, each with a pattern swatch: dashed outline = Planned, solid = Active, stripes = Paused, check = Done. Meaning never depends on color alone. |
-| Topic identity | Hex sticker with a two-letter monogram in a pastel (lavender, mint, sky, peach, butter) (D36). Pastels are identity only, never status. Idea only, not planned: an optional icon instead of the monogram. |
+| Topic identity | Hex sticker with a two-letter monogram (D36) in one of Chrome's nine tab group colors, named and ordered as in Chrome so a Topic can match its tab group (D72): Grey `#dfe2e9`, Blue `#a8bcff`, Red `#ff928b`, Yellow `#ffdd7a`, Green `#87eb84`, Pink `#ff96de`, Purple `#cb93ff`, Cyan `#88e3eb`, Orange `#ffb379`, Chrome's dark-theme values. Topic colors are identity only, never status. Idea only, not planned: an optional icon instead of the monogram. |
 | Type | Futura for display, system UI for text. Scale 12, 13, 14, 15, 17, 20, 24, 30, 38 px. Futura ships with Apple platforms; other systems use the listed fallbacks (Century Gothic, URW Gothic, Trebuchet MS). |
 | Space and shape | 4 px spacing base. Radius 10 px for controls and rows, 14 px for surfaces, pills for primary actions. Controls 40 px, primary 44 px, rows 48 px minimum, status line 56 px. |
 | Notes | The editor is a notebook page on a faint dot grid. |
@@ -204,7 +205,7 @@ Direction D, "Band + Object", picked by the orchestrator while the owner was awa
 | Note | Paper yellow `#e8c46a` | A page with a folded corner | Dot grid |
 | Jira item | Jira blue family `#6aa8ff` | A ticket with a stub and a perforated edge | A tear line of dots under the band, a notch at each end |
 | Pull request | GitHub violet family `#b48cff` | A commit on a rail; cards in one list share the rail | None |
-| Topic | The Topic's own pastel | The hex sticker; a colored top edge | Hexagons |
+| Topic | The Topic's own color (D72) | The hex sticker; a colored top edge | Hexagons |
 | Reminder | Fog `#ced5e6` | The time leads, like a clock face | None |
 
 - Marks are Thread-drawn, in the provider colors. No official Jira or GitHub logos (Q5).
@@ -213,6 +214,7 @@ Direction D, "Band + Object", picked by the orchestrator while the owner was awa
 - A Jira card's stub holds the issue type icon (D63) in place of the Jira mark, so a ticket shows one mark. The stub, the tear line and the blue still say Jira, and the stub keeps the Jira mark when the type is not known. The type shows on hover, and screen readers hear it in the card's link. A Topic's tickets under a linked parent (D64) are cards in the nested lists, one card gap apart.
 - ⌘K results are small cards of their kind. Settings' Jira and GitHub connections use the kinds' marks and accents.
 - An item card (D70, an item opened on top of another screen) starts with the kind's band: the mark and kind name, a back button on the left and the actions on the right. Under 900 px the card fills the screen, and under 600 px the button labels hide. A Topic's card sits on the page color, like the Topic page.
+- The Edit Topic dialog (D71) is a small Topic card: the colored top edge, and the band with its hexagons and sticker, preview the color being picked before it is saved.
 
 ## Accessibility and interaction quality
 

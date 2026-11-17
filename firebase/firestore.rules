@@ -147,6 +147,8 @@ service cloud.firestore {
     // Topic in Trash; its Tasks, Reminders and Note links are not written, so Restore brings them back as they are.
     // info is the Additional information (D52, ADR-018): absent or null until it is saved (Undo writes null), at most
     // 20,100 characters so the two older fields at 10,000 each fit with their labels.
+    // color is one of Chrome's nine tab group colors (D72) by its stored id: the five older ids keep their meaning
+    // (lavender Purple, mint Green, sky Blue, peach Orange, butter Yellow), and grey, red, pink and cyan are new.
     function validTopic(topic) {
       return topic.keys().hasOnly(['name', 'color', 'statusId', 'goal', 'leftOff', 'nextStep', 'info', 'createdAt', 'updatedAt',
           'deletedAt', 'schemaVersion'])
@@ -154,7 +156,7 @@ service cloud.firestore {
         && topic.schemaVersion == 1
         && topic.updatedAt == request.time
         && topic.name is string && topic.name.size() > 0 && topic.name.size() <= 200
-        && topic.color in ['lavender', 'mint', 'sky', 'peach', 'butter']
+        && topic.color in ['lavender', 'mint', 'sky', 'peach', 'butter', 'grey', 'red', 'pink', 'cyan']
         && topic.statusId is string && topic.statusId.size() > 0
         && validText(topic.goal) && validText(topic.leftOff) && validText(topic.nextStep)
         && (topic.get('info', null) == null || (topic.info is string && topic.info.size() <= 20100))

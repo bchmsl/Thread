@@ -52,7 +52,7 @@ internal fun TopicHex(
         attr("height", size.px.toString())
         attr("aria-hidden", "true")
         attr("focusable", "false")
-        style { property("--hc", "var(--topic-${color.id})") }
+        style { property("--hc", topicColorVar(color)) }
     }) {
         if (size == HexSize.Md || size == HexSize.Lg) {
             SvgTag("polygon", {
@@ -73,6 +73,65 @@ internal fun TopicHex(
                 attr("text-anchor", "middle")
             }) { Text(monogram(name)) }
         }
+    }
+}
+
+/**
+ * A sticker color's name as Chrome names its tab group color (D72), for its radio button, tooltip and the picker's
+ * caption (D71). People see this, never the stored id.
+ */
+internal fun topicColorName(color: TopicColor): String =
+    when (color) {
+        TopicColor.Grey -> "Grey"
+        TopicColor.Blue -> "Blue"
+        TopicColor.Red -> "Red"
+        TopicColor.Yellow -> "Yellow"
+        TopicColor.Green -> "Green"
+        TopicColor.Pink -> "Pink"
+        TopicColor.Purple -> "Purple"
+        TopicColor.Cyan -> "Cyan"
+        TopicColor.Orange -> "Orange"
+    }
+
+/** The tokens.css color of [color], named like the color people see, not like its stored id (D72): `--topic-purple`. */
+internal fun topicColorVar(color: TopicColor): String = "var(--topic-${topicColorName(color).lowercase()})"
+
+/**
+ * One sticker color in the Edit Topic picker (D71): a plain sticker in that color, with room around it for two hex
+ * rings. app.css shows the inner ring and the check when its radio is checked, and the outer ring for keyboard focus.
+ * Decorative: the radio carries the color's name.
+ */
+@Composable
+internal fun TopicColorSwatch(color: TopicColor) {
+    SvgTag("svg", {
+        attr("class", "hex hexsw")
+        attr("viewBox", "-32 -32 164 164")
+        attr("width", "56")
+        attr("height", "56")
+        attr("aria-hidden", "true")
+        attr("focusable", "false")
+        style { property("--hc", topicColorVar(color)) }
+    }) {
+        SvgTag("polygon", {
+            attr("class", "hexsw__focus")
+            attr("points", HEX_FOCUS_RING_POINTS)
+        })
+        SvgTag("polygon", {
+            attr("class", "hexsw__ring")
+            attr("points", HEX_RING_POINTS)
+        })
+        SvgTag("polygon", {
+            attr("class", "hex__cut")
+            attr("points", HEX_POINTS)
+        })
+        SvgTag("polygon", {
+            attr("class", "hex__fill")
+            attr("points", HEX_POINTS)
+        })
+        SvgTag("path", {
+            attr("class", "hexsw__check")
+            attr("d", "M32 51l12.5 12.5L68 39")
+        })
     }
 }
 
@@ -229,7 +288,7 @@ internal fun categoryHint(category: StatusCategory): String =
  * the strict CSP blocks style attributes (adr/ADR-015).
  */
 internal fun AttrsScope<*>.topicColor(color: TopicColor) {
-    style { property("--tc", "var(--topic-${color.id})") }
+    style { property("--tc", topicColorVar(color)) }
 }
 
 internal fun topicPlace(topic: Topic): Place = Place.of("topic", topic.id.value)
@@ -238,6 +297,11 @@ internal fun topicPlace(topic: Topic): Place = Place.of("topic", topic.id.value)
 internal fun topicCount(count: Int): String = if (count == 1) "1 Topic" else "$count Topics"
 
 private const val HEX_POINTS = "50,4 89.8,27 89.8,73 50,96 10.2,73 10.2,27"
+
+// The same hexagon around the same center (50,50), at radius 62 and 74 instead of 46: the picker's checked and focus
+// rings, clear of the sticker's white edge.
+private const val HEX_RING_POINTS = "50,-12 103.7,19 103.7,81 50,112 -3.7,81 -3.7,19"
+private const val HEX_FOCUS_RING_POINTS = "50,-24 114.1,13 114.1,87 50,124 -14.1,87 -14.1,13"
 private const val SVG_NS = "http://www.w3.org/2000/svg"
 
 /** Makes SVG elements in the SVG namespace; Compose HTML's own builder makes HTML elements only. */

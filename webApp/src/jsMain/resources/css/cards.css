@@ -439,6 +439,27 @@ main:has(.md--wide) { max-width: 1520px; }
 /* Additional information, while viewing: the text as written, line breaks kept. */
 .info-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* ---------- Edit Topic (D71, owner change #17): a small Topic card ---------- */
+/* The same dialog from the Topic page and from a Topic card. Its top edge and band take the color being picked, and
+   the band's sticker shows that color with the monogram of the name being typed. The actions sit in a foot, as on an
+   item card. The dialog's rounded corners clip the edge and the band. It is a Task card's width, 560 px, so Chrome's
+   nine sticker colors (D72) fit in one row of 56 px swatches. */
+.dlg--tedit { --under: var(--bg-surface); background: var(--bg-surface); max-width: min(560px, calc(100vw - 32px)); }
+.tedit { border-top: 3px solid var(--k); }
+.tedit__band { gap: 14px; min-height: 64px; padding: 12px 20px; border-radius: 0; }
+/* The hexagons stay on the right, clear of the title, also on a phone. */
+.tedit__band::before {
+  -webkit-mask-image: var(--pat, none), linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.6) 22%, transparent 55%);
+  mask-image: var(--pat, none), linear-gradient(to left, #000 0%, rgba(0, 0, 0, 0.6) 22%, transparent 55%);
+}
+.tedit__band > .hex { flex: none; width: 40px; height: 40px; }
+.tedit__title { margin: 0; min-width: 0; font: 500 var(--fs-20)/1.25 var(--font-display); }
+.tedit__body { padding: 20px 24px 22px; }
+.tedit__body > .field + .field { margin-top: 18px; }
+/* The goal is short: two lines, growing with the text up to six where the browser can size a field to its text. */
+.tedit__goal { min-height: calc(2lh + 22px); max-height: calc(6lh + 22px); field-sizing: content; }
+.tedit__foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+
 /* ---------- Narrow screens ---------- */
 @media (max-width: 1099px) {
   /* One column: the rail's cards follow the main ones at the rail's card gap. */
@@ -487,6 +508,10 @@ main:has(.md--wide) { max-width: 1520px; }
   .dcard__body { padding: 18px 16px 20px; }
   .dcard__body--page { padding: 0; }
   .dcard__th .td-name { font-size: 26px; }
+  .tedit__band { padding: 10px 16px; }
+  .tedit__body { padding: 18px 16px 20px; }
+  /* Five sticker colors a row, 5 and 4: each swatch stays a 56 px tap target, shrinking only on the narrowest phones. */
+  .tedit .colors { grid-template-columns: repeat(5, minmax(44px, 56px)); }
   .fact { grid-template-columns: 120px minmax(0, 1fr); }
   /* Search results: the title gets the full row, the context moves under it (app.css), next to the mark. */
   .pal__opt.icard { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 1px 12px; }

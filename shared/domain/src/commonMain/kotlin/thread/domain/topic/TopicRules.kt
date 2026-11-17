@@ -105,8 +105,25 @@ fun useCount(
 fun statusForNewTopic(statuses: List<TopicStatus>): TopicStatus =
     statuses.firstOrNull { it.category == StatusCategory.Planned } ?: statuses.first()
 
-/** Sticker colors rotate through the palette in creation order (v3 `createTopic`). */
-fun colorForNewTopic(topicCount: Int): TopicColor = TopicColor.entries[topicCount.mod(TopicColor.entries.size)]
+/**
+ * Sticker colors rotate in creation order (v3 `createTopic`), through every color once (D72). The first five are the
+ * five colors in their old order, so the first five Topics get the colors they got before. Grey, the quietest, is last.
+ */
+private val NEW_TOPIC_COLORS: List<TopicColor> =
+    listOf(
+        TopicColor.Purple,
+        TopicColor.Green,
+        TopicColor.Blue,
+        TopicColor.Orange,
+        TopicColor.Yellow,
+        TopicColor.Red,
+        TopicColor.Pink,
+        TopicColor.Cyan,
+        TopicColor.Grey,
+    )
+
+/** The sticker color of a new Topic, given how many Topics there are (D72). */
+fun colorForNewTopic(topicCount: Int): TopicColor = NEW_TOPIC_COLORS[topicCount.mod(NEW_TOPIC_COLORS.size)]
 
 /**
  * A new Topic with only a name (01-product-spec.md: "A Topic can exist with only a name"). Returns null when the

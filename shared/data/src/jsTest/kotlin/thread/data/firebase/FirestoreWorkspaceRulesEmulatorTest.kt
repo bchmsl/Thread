@@ -1,6 +1,7 @@
 package thread.data.firebase
 
 import kotlinx.coroutines.await
+import thread.domain.topic.TopicColor
 import kotlin.test.Test
 
 /**
@@ -135,13 +136,26 @@ class FirestoreWorkspaceRulesEmulatorTest {
         rulesTest { env, owner, _ ->
             val db = env.authenticatedContext(owner).firestore()
 
-            assertFails(setDoc(topicRef(db, owner), topic("color" to "red"))).await()
+            assertFails(setDoc(topicRef(db, owner), topic("color" to "teal"))).await()
+            assertFails(setDoc(topicRef(db, owner), topic("color" to "Purple"))).await()
             assertFails(setDoc(topicRef(db, owner), topic("name" to ""))).await()
             assertFails(setDoc(topicRef(db, owner), topic("statusId" to ""))).await()
             assertFails(setDoc(topicRef(db, owner), topic("goal" to "x".repeat(10_001)))).await()
             assertFails(setDoc(topicRef(db, owner), topic("jiraDescription" to "synthetic"))).await()
             assertFails(setDoc(topicRef(db, owner), topic("createdAt" to null))).await()
             assertFails(setDoc(topicRef(db, owner), topicChange())).await()
+        }
+
+    @Test
+    fun everyStickerColorIsAccepted() =
+        rulesTest { env, owner, _ ->
+            val db = seed(env, owner)
+
+            // D72: Chrome's nine tab group colors, by stored id, on a new Topic and on a later change.
+            TopicColor.entries.forEach { color ->
+                assertSucceeds(setDoc(topicRef(db, owner, "t-color-${color.id}"), topic("color" to color.id))).await()
+                mergeSet(topicRef(db, owner), topicChange("color" to color.id), db)
+            }
         }
 
     @Test

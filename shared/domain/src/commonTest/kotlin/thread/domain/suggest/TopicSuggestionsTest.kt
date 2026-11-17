@@ -29,7 +29,7 @@ class TopicSuggestionsTest {
         Topic(
             TopicId("t-alpha"),
             "Synthetic retries SYN-101",
-            TopicColor.Mint,
+            TopicColor.Green,
             SEED_STATUSES[0].id,
             goal = "",
             leftOff = "Waiting on synthetic-org/synthetic-app#12",

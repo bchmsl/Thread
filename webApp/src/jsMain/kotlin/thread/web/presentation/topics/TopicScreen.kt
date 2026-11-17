@@ -72,6 +72,7 @@ import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.cardKind
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.scopedId
@@ -468,7 +469,11 @@ private fun InfoField(
 
 private const val SAVE_AFTER_TYPING_MS = 1000L
 
-/** The v3 Edit Topic dialog: name, goal and sticker color. */
+/**
+ * The v3 Edit Topic dialog: name, goal and sticker color, laid out as a Topic card (D71). Its band and top edge take
+ * the color being picked, and the sticker in the band shows the name's monogram as it is typed, so the change shows
+ * before it is saved. Nothing is saved until Save changes.
+ */
 @Composable
 private fun EditTopicDialog(
     topic: Topic,
@@ -479,9 +484,11 @@ private fun EditTopicDialog(
     var name by remember { mutableStateOf(topic.name) }
     var goal by remember { mutableStateOf(topic.goal) }
     var color by remember { mutableStateOf(topic.color) }
-    ModalDialog(onClose = onClose) { titleId ->
+    ModalDialog(classes = listOf("dlg--tedit"), onClose = onClose) { titleId ->
         Form(attrs = {
-            classes("dlg__in")
+            classes("tedit")
+            cardKind(CardKind.Topic)
+            topicColor(color)
             onSubmit { event ->
                 event.preventDefault()
                 val current = workspace.topic(topic.id.value) ?: topic
@@ -496,47 +503,65 @@ private fun EditTopicDialog(
                 }
             }
         }) {
-            H2({
-                classes("dlg__title")
-                id(titleId)
-            }) { Text("Edit Topic") }
-            Label(attrs = { classes("field") }) {
-                Span({ classes("field__label") }) { Text("Name") }
-                TextInput(name) {
-                    classes("input")
-                    name("name")
-                    required()
-                    maxLength(TOPIC_NAME_MAX_LENGTH)
-                    attr("autofocus", "")
-                    onInput { name = it.value }
-                }
+            Header({ classes("scard__head", "tedit__band") }) {
+                TopicHex(name, color, HexSize.Md)
+                H2({
+                    classes("tedit__title")
+                    id(titleId)
+                }) { Text("Edit Topic") }
             }
-            Label(attrs = { classes("field") }) {
-                Span({ classes("field__label") }) { Text("Goal") }
-                TextArea(goal) {
-                    classes("input")
-                    name("goal")
-                    rows(3)
-                    maxLength(TOPIC_TEXT_MAX_LENGTH)
-                    onInput { goal = it.value }
+            Div({ classes("tedit__body") }) {
+                Label(attrs = { classes("field") }) {
+                    Span({ classes("field__label") }) { Text("Name") }
+                    TextInput(name) {
+                        classes("input")
+                        name("name")
+                        required()
+                        maxLength(TOPIC_NAME_MAX_LENGTH)
+                        attr("autofocus", "")
+                        onInput { name = it.value }
+                    }
                 }
-            }
-            Fieldset({ classes("field", "colors") }) {
-                Legend({ classes("field__label") }) { Text("Sticker color") }
-                TopicColor.entries.forEach { option ->
-                    Label(attrs = { attr("title", option.id) }) {
-                        Input(InputType.Radio) {
-                            name("color")
-                            value(option.id)
-                            checked(option == color)
-                            attr("aria-label", option.id)
-                            onChange { if (it.value) color = option }
+                Label(attrs = { classes("field") }) {
+                    Span({ classes("field__label") }) {
+                        Text("Goal")
+                        Span({ classes("field__aside") }) { Text("optional") }
+                    }
+                    TextArea(goal) {
+                        classes("input", "tedit__goal")
+                        name("goal")
+                        rows(2)
+                        maxLength(TOPIC_TEXT_MAX_LENGTH)
+                        onInput { goal = it.value }
+                    }
+                }
+                Fieldset({ classes("field", "colors") }) {
+                    Legend({ classes("field__label") }) {
+                        Text("Sticker color")
+                        // Each radio is named, so the chosen color's name here is for sighted users only.
+                        Span({
+                            classes("field__aside")
+                            attr("aria-hidden", "true")
+                        }) { Text(topicColorName(color)) }
+                    }
+                    TopicColor.entries.forEach { option ->
+                        Label(attrs = {
+                            classes("colors__opt")
+                            attr("title", topicColorName(option))
+                        }) {
+                            Input(InputType.Radio) {
+                                name("color")
+                                value(option.id)
+                                checked(option == color)
+                                attr("aria-label", topicColorName(option))
+                                onChange { if (it.value) color = option }
+                            }
+                            TopicColorSwatch(option)
                         }
-                        TopicHex(topic.name, option, HexSize.Md)
                     }
                 }
             }
-            Div({ classes("dlg__acts") }) {
+            Div({ classes("tedit__foot") }) {
                 Button({
                     type(ButtonType.Button)
                     classes("btn", "btn--line")

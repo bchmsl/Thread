@@ -51,7 +51,7 @@ class WorkspaceEditsTest {
     private fun topic(
         id: String,
         status: TopicStatus,
-    ) = Topic(TopicId(id), "Topic $id", TopicColor.Peach, status.id)
+    ) = Topic(TopicId(id), "Topic $id", TopicColor.Orange, status.id)
 
     private fun EditResult.edit(): WorkspaceEdit = assertIs<EditResult.Changed>(this).edit
 
@@ -220,8 +220,8 @@ class WorkspaceEditsTest {
     @Test
     fun editingATopicTrimsAndNeedsAName() {
         val t = topic("a", planned)
-        val after = (editTopic(t, "  New name ", " A goal ", TopicColor.Sky).edit().writes.single() as WorkspaceWrite.PutTopic).topic
-        assertEquals(Triple("New name", "A goal", TopicColor.Sky), Triple(after.name, after.goal, after.color))
+        val after = (editTopic(t, "  New name ", " A goal ", TopicColor.Blue).edit().writes.single() as WorkspaceWrite.PutTopic).topic
+        assertEquals(Triple("New name", "A goal", TopicColor.Blue), Triple(after.name, after.goal, after.color))
         assertEquals(EditProblem.BlankName, editTopic(t, "  ", "", t.color).problem())
         assertEquals(EditResult.Unchanged, editTopic(t, t.name, "", t.color))
     }

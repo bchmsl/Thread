@@ -26,12 +26,19 @@
   --cat-paused: #f5a65b;
   --cat-done: #7bd49f;
 
-  /* Topic pastels: identity only, never status. Colors may repeat; the monogram disambiguates. */
-  --topic-lavender: #cbb8ff;
-  --topic-mint: #9de5c9;
-  --topic-sky: #a8d3ff;
-  --topic-peach: #ffc7a1;
-  --topic-butter: #f0dd8c;
+  /* Topic sticker colors (D72): Chrome's nine tab group colors, dark theme, as Chromium defines them
+     (chrome/browser/ui/color/tab_group_color_ids.h, kTabGroup<Color>DarkMode), so a Topic can match its tab group.
+     Identity only, never status. Colors may repeat; the monogram disambiguates. Named as people see them: the stored
+     ids of the older five differ (TopicColor), and TopicParts.kt maps one to the other. */
+  --topic-grey: #dfe2e9;
+  --topic-blue: #a8bcff;
+  --topic-red: #ff928b;
+  --topic-yellow: #ffdd7a;
+  --topic-green: #87eb84;
+  --topic-pink: #ff96de;
+  --topic-purple: #cb93ff;
+  --topic-cyan: #88e3eb;
+  --topic-orange: #ffb379;
 
   /* Single action color */
   --magenta-400: #ff74b4;

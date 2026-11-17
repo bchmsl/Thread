@@ -44,15 +44,24 @@ enum class StatusCategory(
     }
 }
 
-/** A Topic's sticker color (D36). Pastels only; the color never carries meaning. */
+/**
+ * A Topic's sticker color: Chrome's nine tab group colors, in Chrome's order, so a Topic can match its tab group
+ * (D72). The color never carries meaning. [id] is what is stored and synced, so it never changes. The five colors
+ * Thread had before (D36) keep their old ids, so saved Topics and older clients need no migration: Blue is "sky",
+ * Yellow is "butter", Green is "mint", Purple is "lavender" and Orange is "peach".
+ */
 enum class TopicColor(
     val id: String,
 ) {
-    Lavender("lavender"),
-    Mint("mint"),
-    Sky("sky"),
-    Peach("peach"),
-    Butter("butter"),
+    Grey("grey"),
+    Blue("sky"),
+    Red("red"),
+    Yellow("butter"),
+    Green("mint"),
+    Pink("pink"),
+    Purple("lavender"),
+    Cyan("cyan"),
+    Orange("peach"),
     ;
 
     companion object {

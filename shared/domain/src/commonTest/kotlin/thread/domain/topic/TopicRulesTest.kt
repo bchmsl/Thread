@@ -17,7 +17,7 @@ class TopicRulesTest {
         id: String,
         status: TopicStatus,
         createdAt: Long? = null,
-    ) = Topic(TopicId(id), "Topic $id", TopicColor.Mint, status.id, createdAtMillis = createdAt)
+    ) = Topic(TopicId(id), "Topic $id", TopicColor.Green, status.id, createdAtMillis = createdAt)
 
     @Test
     fun monogramFollowsV3() {
@@ -45,7 +45,7 @@ class TopicRulesTest {
 
     @Test
     fun aTopicWithAMissingStatusShowsTheFirstStatus() {
-        val orphan = Topic(TopicId("t1"), "Orphan", TopicColor.Sky, StatusId("s-gone"))
+        val orphan = Topic(TopicId("t1"), "Orphan", TopicColor.Blue, StatusId("s-gone"))
         assertEquals(planned, statusOf(orphan, statuses))
         assertEquals(StatusCategory.Planned, categoryOf(orphan, statuses))
     }
@@ -99,7 +99,7 @@ class TopicRulesTest {
         assertTrue(todayTopicGroups(listOf(topic("a", planned), topic("b", done)), statuses).isEmpty())
         assertTrue(todayTopicGroups(emptyList(), statuses).isEmpty())
         // A Topic whose status is gone counts under the first status, Planned here, so Today leaves it out.
-        val orphan = Topic(TopicId("t1"), "Orphan", TopicColor.Sky, StatusId("s-gone"))
+        val orphan = Topic(TopicId("t1"), "Orphan", TopicColor.Blue, StatusId("s-gone"))
         assertTrue(todayTopicGroups(listOf(orphan), statuses).isEmpty())
         assertEquals(listOf("t1"), todayTopicGroups(listOf(orphan), listOf(paused, done)).single().topics.map { it.id.value })
     }
@@ -109,10 +109,33 @@ class TopicRulesTest {
         val created = newTopic(TopicId("t-new"), "  Card limits  ", statuses, topicCount = 7)!!
         assertEquals("Card limits", created.name)
         assertEquals(planned.id, created.statusId)
-        assertEquals(TopicColor.Sky, created.color)
-        assertEquals(TopicColor.Butter, colorForNewTopic(4))
-        assertEquals(TopicColor.Lavender, colorForNewTopic(0))
-        assertEquals(TopicColor.Lavender, colorForNewTopic(5))
+        assertEquals(TopicColor.Cyan, created.color)
+        assertEquals(TopicColor.Purple, colorForNewTopic(0))
+        assertEquals(TopicColor.Yellow, colorForNewTopic(4))
+        assertEquals(TopicColor.Red, colorForNewTopic(5))
+        assertEquals(TopicColor.Grey, colorForNewTopic(8))
+        assertEquals(TopicColor.Purple, colorForNewTopic(9))
+    }
+
+    @Test
+    fun newTopicsGetTheFiveOldColorsFirstThenEveryOtherColorOnce() {
+        // D72: the first five Topics get the colors they got before Chrome's palette, in the same order.
+        assertEquals(
+            listOf("lavender", "mint", "sky", "peach", "butter"),
+            (0..4).map { colorForNewTopic(it).id },
+        )
+        assertEquals(TopicColor.entries.toSet(), (0..8).map(::colorForNewTopic).toSet())
+    }
+
+    @Test
+    fun storedColorIdsNeverChange() {
+        // D72: the five old ids stay, so saved Topics and older clients keep working without a migration.
+        assertEquals(
+            listOf("grey", "sky", "red", "butter", "mint", "pink", "lavender", "cyan", "peach"),
+            TopicColor.entries.map { it.id },
+        )
+        TopicColor.entries.forEach { assertEquals(it, TopicColor.fromId(it.id)) }
+        assertNull(TopicColor.fromId("teal"))
     }
 
     @Test

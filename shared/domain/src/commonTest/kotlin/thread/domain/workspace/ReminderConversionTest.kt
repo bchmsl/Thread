@@ -28,7 +28,7 @@ class ReminderConversionTest {
     private val topic = topic("t-synthetic-a")
     private val trashedTopic = topic("t-synthetic-trash").copy(deleted = true)
 
-    private fun topic(id: String) = Topic(TopicId(id), "Synthetic $id", TopicColor.Mint, StatusId("s-planned"))
+    private fun topic(id: String) = Topic(TopicId(id), "Synthetic $id", TopicColor.Green, StatusId("s-planned"))
 
     private fun reminder(
         id: String,

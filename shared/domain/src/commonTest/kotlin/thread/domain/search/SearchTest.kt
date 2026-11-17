@@ -23,11 +23,11 @@ class SearchTest {
     private val status = SEED_STATUSES[0].id
     private val topics =
         listOf(
-            Topic(TopicId("t-1"), "Synthetic payments", TopicColor.Mint, status),
-            Topic(TopicId("t-2"), "Synthetic other", TopicColor.Sky, status, nextStep = "Ask about PAYMENTS limits"),
-            Topic(TopicId("t-3"), "Synthetic third", TopicColor.Peach, status, goal = "Nothing related"),
-            Topic(TopicId("t-4"), "Synthetic fourth", TopicColor.Lavender, status, info = "Links for the payment flow"),
-            Topic(TopicId("t-5"), "Synthetic fifth", TopicColor.Butter, status, nextStep = "Old payment text", info = "Rewritten"),
+            Topic(TopicId("t-1"), "Synthetic payments", TopicColor.Green, status),
+            Topic(TopicId("t-2"), "Synthetic other", TopicColor.Blue, status, nextStep = "Ask about PAYMENTS limits"),
+            Topic(TopicId("t-3"), "Synthetic third", TopicColor.Orange, status, goal = "Nothing related"),
+            Topic(TopicId("t-4"), "Synthetic fourth", TopicColor.Purple, status, info = "Links for the payment flow"),
+            Topic(TopicId("t-5"), "Synthetic fifth", TopicColor.Yellow, status, nextStep = "Old payment text", info = "Rewritten"),
         )
     private val tasks =
         listOf(

@@ -22,8 +22,8 @@ import kotlin.test.assertTrue
 // Every Topic, site and ticket here is SYNTHETIC test data.
 class ExternalLinksTest {
     private val status = SEED_STATUSES[0].id
-    private val alpha = Topic(TopicId("t-alpha"), "Synthetic Alpha", TopicColor.Mint, status)
-    private val beta = Topic(TopicId("t-beta"), "Synthetic Beta", TopicColor.Sky, status)
+    private val alpha = Topic(TopicId("t-alpha"), "Synthetic Alpha", TopicColor.Green, status)
+    private val beta = Topic(TopicId("t-beta"), "Synthetic Beta", TopicColor.Blue, status)
     private val cloudId = assertNotNull(JiraCloudId.parse("00000000-0000-4000-8000-000000000001"))
     private val site = assertNotNull(JiraSite.parse("synthetic.atlassian.net"))
     private val ticket = assertNotNull(jiraReference(cloudId, site, assertNotNull(JiraIssueKey.parse("SYN-101"))))
@@ -105,7 +105,7 @@ class ExternalLinksTest {
 
     @Test
     fun createTopicFromATicketWritesTheTopicTheReferenceAndTheLink() {
-        val topic = Topic(TopicId("t-new"), "Synthetic ticket title", TopicColor.Peach, status, info = "Created from SYN-101.")
+        val topic = Topic(TopicId("t-new"), "Synthetic ticket title", TopicColor.Orange, status, info = "Created from SYN-101.")
         val writes = createTopicLinkedTo(topic, ticket, empty)
         assertEquals(
             listOf(

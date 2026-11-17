@@ -33,8 +33,8 @@ import kotlin.test.assertTrue
 // Every Topic, Task, Note and Reminder here is SYNTHETIC test data.
 class TrashTest {
     private val planned = SEED_STATUSES[0].id
-    private val alpha = Topic(TopicId("t-alpha"), "Synthetic Alpha", TopicColor.Mint, planned, goal = "Synthetic goal")
-    private val beta = Topic(TopicId("t-beta"), "Synthetic Beta", TopicColor.Sky, planned)
+    private val alpha = Topic(TopicId("t-alpha"), "Synthetic Alpha", TopicColor.Green, planned, goal = "Synthetic goal")
+    private val beta = Topic(TopicId("t-beta"), "Synthetic Beta", TopicColor.Blue, planned)
     private val alphaTask = Task(TaskId("k-a"), "Synthetic Alpha task", topicId = alpha.id)
     private val alphaDone =
         Task(TaskId("k-d"), "Synthetic done task", topicId = alpha.id, done = true, completedOn = LocalDay(2026, 11, 12))
