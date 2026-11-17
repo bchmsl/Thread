@@ -98,7 +98,7 @@ Meetings (D78, ADR-020) head the side column once meetings are set up:
 - Declined and cancelled meetings are not shown.
 - The card says when the Mac last uploaded. After an hour without an upload it asks whether the Mac is awake. "No meetings today." shows only after an upload that covered today.
 - "Hide empty sections in Today" (D77) never hides it.
-- Settings > Preferences, "Meetings layout" (D79, synced): Vertical, the default, is the card described here. Horizontal moves the same card across the page under the heading, above both columns, as a timeline of today's hours: all-day meetings above, timed ones as blocks by start and end, overlaps in rows, a line at now, and Join for the meeting now and the next one in the card's head.
+- Settings > Preferences, "Meetings layout" (D79, synced): Vertical, the default, is the card described here. Horizontal moves the same card across the page under the heading, above both columns, as a timeline of today's hours: all-day meetings above, timed ones as blocks by start and end (a meeting under an hour as a one-line chip with its real length marked, D80), overlaps in rows, a line at now, and Join for the meeting now and the next one in the card's head.
 - A row opens a read-only Meeting card: when, where, your answer, Join, and its Topics with Link to Topic and Unlink.
 - The status line names the next meeting in the hour before it starts ("Standup in 12 min") and opens its card.
 
