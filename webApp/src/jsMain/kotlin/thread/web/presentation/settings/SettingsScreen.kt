@@ -66,6 +66,7 @@ private val SECTIONS =
         "topics" to "Topics",
         "topic-details" to "Topic Details",
         "jira" to "Jira",
+        "pull-requests" to "Pull requests",
         "general" to "General",
         "appearance" to "Appearance",
         "account" to "Account",

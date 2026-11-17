@@ -172,7 +172,7 @@ Topic Details preferences (D92, synced), in Settings > Topic Details. They apply
 ## Integrations in v1
 
 - Jira page: assigned tickets, search for other accessible tickets, link to existing Topic or create Topic.
-- Pull Requests page: My PRs and Review Requested, with CI and review state. Each list is grouped by repository, and each row shows its GitHub assignees (avatar and name), with "You" marked when the owner is one (D62).
+- Pull Requests page: My PRs and Review Requested, with CI and review state. Each list is grouped as Settings > Pull requests says (D93, synced): Mine by Repository (default), Topic or Review status; Review requested by Repository (default), Author or Review status. By Topic, a pull request linked to one Topic shows under it, one linked to two or more shows once under "Several Topics", and one linked to none under "No Topic" (Q5). Review status comes from the copy this device saved when the pull request was opened; the rest show under "Not loaded yet", and grouping asks GitHub for nothing (Q4). Each row shows its GitHub assignees (avatar and name), with "You" marked when the owner is one (D62).
 - Show external details even if not linked to a Topic.
 - Read-only: opening originals is supported.
 - Posting comments, changing status, merging, and other external mutations are deferred.

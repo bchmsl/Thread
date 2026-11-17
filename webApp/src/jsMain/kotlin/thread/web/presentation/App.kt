@@ -79,6 +79,7 @@ import thread.web.presentation.settings.ConnectionsBlock
 import thread.web.presentation.settings.GeneralPrefsBlock
 import thread.web.presentation.settings.InboxPrefsBlock
 import thread.web.presentation.settings.JiraPrefsBlock
+import thread.web.presentation.settings.PrsPrefsBlock
 import thread.web.presentation.settings.SettingsScreen
 import thread.web.presentation.settings.StatusesBlock
 import thread.web.presentation.settings.TodayPrefsBlock
@@ -346,6 +347,7 @@ private fun Workspace(
                             TopicsPrefsBlock(workspace)
                             TopicDetailsPrefsBlock(workspace)
                             JiraPrefsBlock(jira)
+                            PrsPrefsBlock(workspace)
                             GeneralPrefsBlock(workspace, capture)
                         }
                     else -> NotBuiltYet(view)

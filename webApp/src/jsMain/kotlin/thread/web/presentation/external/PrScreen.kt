@@ -26,12 +26,18 @@ import org.w3c.dom.HTMLElement
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.GitHubPerson
+import thread.domain.external.PullRequestGroup
+import thread.domain.external.PullRequestGroupKey
 import thread.domain.external.PullRequestList
 import thread.domain.external.PullRequestListPage
 import thread.domain.external.PullRequestRef
 import thread.domain.external.PullRequestSummary
-import thread.domain.external.RepositoryPullRequests
-import thread.domain.external.pullRequestsByRepository
+import thread.domain.external.pullRequestGroupsByRepository
+import thread.domain.external.pullRequestsByAuthor
+import thread.domain.external.pullRequestsByReview
+import thread.domain.external.pullRequestsByTopic
+import thread.domain.workspace.MyPrsGroupBy
+import thread.domain.workspace.ReviewPrsGroupBy
 import thread.domain.workspace.gitHubReference
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
@@ -47,7 +53,10 @@ import thread.web.presentation.SectionCard
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.itemCard
+import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.PlainTopicTag
+import thread.web.presentation.topics.TopicHex
+import thread.web.presentation.topics.TopicHexEmpty
 
 /**
  * The Pull requests page (v3 prs.html, adr/ADR-014-github-in-the-workspace.md): "Mine" and "Review requested" on the
@@ -82,12 +91,13 @@ internal fun PrScreen(
             ?.value
             ?.items
             .orEmpty()
+    val groups = pullRequestGroups(rows, reviewTab, gitHub, workspace)
 
     // At 1000px and wider the first pull request of the list shows when none is picked (v3 shownId): the top row of the
-    // repository groups (owner change #8).
+    // groups the list shows (owner changes #8 and #25).
     val shownRef =
         openRef ?: if (wide) {
-            pullRequestsByRepository(rows)
+            groups
                 .firstOrNull()
                 ?.pulls
                 ?.firstOrNull()
@@ -160,7 +170,7 @@ internal fun PrScreen(
                 attr("role", "tabpanel")
                 attr("aria-labelledby", if (reviewTab) "tab-review" else "tab-mine")
             }) {
-                ListPanel(listView, reviewTab, gitHub, workspace, shownRef, ::open) { listRefresh++ }
+                ListPanel(listView, groups, reviewTab, gitHub, workspace, shownRef, ::open) { listRefresh++ }
             }
         }
         Div({ classes("md__detail") }) {
@@ -224,9 +234,41 @@ private fun PrTabs(
     }
 }
 
+/**
+ * The list's groups, as Settings picks them for each list (D62, D93): by repository, Topic, author or review status.
+ * Review status is what this device saved (Q4): nothing is loaded to group.
+ */
+private fun pullRequestGroups(
+    rows: List<PullRequestSummary>,
+    reviewTab: Boolean,
+    gitHub: GitHubModel,
+    workspace: WorkspaceModel,
+): List<PullRequestGroup> {
+    val reviewOf = { ref: PullRequestRef -> gitHub.detail(ref.id)?.review }
+    return if (reviewTab) {
+        when (workspace.prefs.prsReviewGroupBy) {
+            ReviewPrsGroupBy.Repository -> pullRequestGroupsByRepository(rows)
+            ReviewPrsGroupBy.Author -> pullRequestsByAuthor(rows)
+            ReviewPrsGroupBy.ReviewStatus -> pullRequestsByReview(rows, reviewOf)
+        }
+    } else {
+        when (workspace.prefs.prsMineGroupBy) {
+            MyPrsGroupBy.Repository -> pullRequestGroupsByRepository(rows)
+            MyPrsGroupBy.Topic -> pullRequestsByTopic(rows) { ref -> linkedTopics(ref, workspace) }
+            MyPrsGroupBy.ReviewStatus -> pullRequestsByReview(rows, reviewOf)
+        }
+    }
+}
+
+private fun linkedTopics(
+    ref: PullRequestRef,
+    workspace: WorkspaceModel,
+) = gitHubReference(ref)?.let { workspace.topicsLinkedTo(it.id) }.orEmpty()
+
 @Composable
 private fun ListPanel(
     view: ExternalView<PullRequestListPage>?,
+    groups: List<PullRequestGroup>,
     reviewTab: Boolean,
     gitHub: GitHubModel,
     workspace: WorkspaceModel,
@@ -264,9 +306,10 @@ private fun ListPanel(
             } else {
                 val list = if (reviewTab) PullRequestList.ReviewRequested else PullRequestList.Mine
                 Div({ classes("md__scroll", "prgroups") }) {
-                    pullRequestsByRepository(page.items).forEachIndexed { index, group ->
-                        key(list, group.repo.lowercase()) {
-                            RepositoryGroup(group, list, index) {
+                    groups.forEachIndexed { index, group ->
+                        val groupKey = groupDeviceKey(group.key)
+                        key(list, groupKey) {
+                            PrGroup(group, list, groupKey, index, page.viewer) {
                                 // Rows of an open group that show CI and reviews ask GitHub for the latest (D67). The
                                 // list itself brings the rest; the pull request open next to it asks on its own.
                                 RefreshPullsOnShow(
@@ -281,6 +324,7 @@ private fun ListPanel(
                                             pull.ref == shownRef,
                                             !reviewTab,
                                             page.viewer,
+                                            RowParts.of(group.key),
                                             gitHub,
                                             workspace,
                                             onOpen,
@@ -302,50 +346,136 @@ private fun ListPanel(
 }
 
 /**
- * One repository's pull requests in a list (owner change #8), as a pull request section card (D69): the repository
- * mark, `owner/name` and the count, which opens and closes the group like Today's groups (D53). This device remembers
- * it per list and repository.
+ * One group of a list (owner changes #8 and #25), as a pull request section card (D69): what the group holds, by its
+ * mark and name, and the count, which opens and closes the group like Today's groups (D53). This device remembers it
+ * per list and group.
  */
 @Composable
-private fun RepositoryGroup(
-    group: RepositoryPullRequests,
+private fun PrGroup(
+    group: PullRequestGroup,
     list: PullRequestList,
+    groupKey: String,
     index: Int,
+    viewer: String?,
     rows: @Composable () -> Unit,
 ) {
-    val key = "${list.name.lowercase()}.${group.repo.lowercase()}"
+    val key = "${list.name.lowercase()}.$groupKey"
     val id = "prg-${list.name.lowercase()}-$index"
     var open by remember(key) { mutableStateOf(readDeviceText("$PR_GROUP_OPEN_NAME.$key") != "0") }
-    val owner = group.repo.substringBefore('/')
-    val name = group.repo.substringAfter('/')
+    val by = group.key
     SectionCard(
         kind = CardKind.PullRequest,
         headingId = id,
         bodyId = "$id-b",
-        title = group.repo,
+        title = groupTitle(by, viewer),
         count = group.pulls.size.toString(),
         open = open,
         onToggle = {
             open = !open
             writeDeviceText("$PR_GROUP_OPEN_NAME.$key", if (open) "1" else "0")
         },
-        mark = Icon.Repo,
+        mark = groupMark(by),
         attrs = { classes("prgroup") },
-        titleContent = {
-            Span({ classes("prgroup__owner") }) { Text("$owner/") }
-            Text(name)
-        },
+        titleContent = { GroupTitle(by, viewer) },
     ) { Ul({ classes("tlist") }) { rows() } }
 }
 
-/** Where this device keeps whether a repository group is open, per list and repository: `1` or `0`. Not synced. */
+/** A group's heading text: the repository, Topic, author or review state, or the name of the group for the rest. */
+private fun groupTitle(
+    by: PullRequestGroupKey,
+    viewer: String?,
+): String =
+    when (by) {
+        is PullRequestGroupKey.Repository -> by.repo
+        is PullRequestGroupKey.OneTopic -> by.topic.name
+        PullRequestGroupKey.SeveralTopics -> "Several Topics"
+        PullRequestGroupKey.NoTopic -> "No Topic"
+        is PullRequestGroupKey.Author -> if (by.person.isLogin(viewer)) "You" else by.person.login
+        PullRequestGroupKey.NoAuthor -> "Unknown author"
+        is PullRequestGroupKey.Review -> reviewLabel(by.state)
+        PullRequestGroupKey.NotLoaded -> "Not loaded yet"
+    }
+
+@Composable
+private fun GroupTitle(
+    by: PullRequestGroupKey,
+    viewer: String?,
+) {
+    when (by) {
+        is PullRequestGroupKey.Repository -> {
+            Span({ classes("prgroup__owner") }) { Text("${by.repo.substringBefore('/')}/") }
+            Text(by.repo.substringAfter('/'))
+        }
+        // As Today's Topic groups (D90): the Topic's hex, or an empty one for No Topic.
+        is PullRequestGroupKey.OneTopic ->
+            Span({ classes("tgroup__topic") }) {
+                TopicHex(by.topic.name, by.topic.color, HexSize.Xs)
+                Span { Text(by.topic.name) }
+            }
+        PullRequestGroupKey.NoTopic ->
+            Span({ classes("tgroup__topic") }) {
+                TopicHexEmpty(HexSize.Xs)
+                Span { Text(groupTitle(by, viewer)) }
+            }
+        is PullRequestGroupKey.Author -> PersonHeading(by.person, viewer)
+        else -> Text(groupTitle(by, viewer))
+    }
+}
+
+private fun groupMark(by: PullRequestGroupKey): Icon =
+    when (by) {
+        is PullRequestGroupKey.Repository -> Icon.Repo
+        is PullRequestGroupKey.OneTopic, PullRequestGroupKey.SeveralTopics, PullRequestGroupKey.NoTopic -> Icon.Topics
+        is PullRequestGroupKey.Author, PullRequestGroupKey.NoAuthor -> Icon.User
+        is PullRequestGroupKey.Review -> reviewIcon(by.state)
+        PullRequestGroupKey.NotLoaded -> Icon.Cloud
+    }
+
+/**
+ * The name this device keeps a group's open state under, inside its list. A repository keeps the name it had before
+ * D93 (`owner/name`); a Topic, author or review state starts with a word and a colon, which a repository name cannot
+ * hold; the groups for the rest are one word with neither, so a login such as `none` never shares one.
+ */
+internal fun groupDeviceKey(by: PullRequestGroupKey): String =
+    when (by) {
+        is PullRequestGroupKey.Repository -> by.repo.lowercase()
+        is PullRequestGroupKey.OneTopic -> "topic:${by.topic.id.value}"
+        PullRequestGroupKey.SeveralTopics -> "severaltopics"
+        PullRequestGroupKey.NoTopic -> "notopic"
+        is PullRequestGroupKey.Author -> "author:${by.person.login.lowercase()}"
+        PullRequestGroupKey.NoAuthor -> "noauthor"
+        is PullRequestGroupKey.Review -> "review:${by.state.name.lowercase()}"
+        PullRequestGroupKey.NotLoaded -> "notloaded"
+    }
+
+/**
+ * What a row repeats of its group, left out (D93): the repository shows on the row unless the group is one; the
+ * author hides in an author group; the Topics hide in a group of one Topic or none.
+ */
+internal data class RowParts(
+    val repo: Boolean,
+    val author: Boolean,
+    val topics: Boolean,
+) {
+    companion object {
+        fun of(by: PullRequestGroupKey) =
+            RowParts(
+                repo = by !is PullRequestGroupKey.Repository,
+                author = by !is PullRequestGroupKey.Author && by != PullRequestGroupKey.NoAuthor,
+                topics = by !is PullRequestGroupKey.OneTopic && by != PullRequestGroupKey.NoTopic,
+            )
+    }
+}
+
+/** Where this device keeps whether a group is open, per list and group: `1` or `0`. Not synced. */
 private const val PR_GROUP_OPEN_NAME = "thread.prs.open"
 
 /**
- * v3 `X.prRow` as a pull request card, in a repository group (owner changes #8 and #13): state and the author; title
- * and number; CI and review state; Topics. The repository is the group's heading. Mine hides the author when it is the
- * viewer (D69): Mine searches `author:@me`, so an unknown viewer is the author too. CI and review state show once the
- * pull request was opened on this device (one list request cannot carry them, ADR-007).
+ * v3 `X.prRow` as a pull request card, in a group (owner changes #8, #13 and #25): state, the repository and the
+ * author; title and number; CI and review state; Topics. [parts] leaves out what the group's heading already says.
+ * Mine hides the author when it is the viewer (D69): Mine searches `author:@me`, so an unknown viewer is the author
+ * too. CI and review state show once the pull request was opened on this device (one list request cannot carry them,
+ * ADR-007).
  */
 @Composable
 private fun PrRow(
@@ -354,13 +484,14 @@ private fun PrRow(
     current: Boolean,
     mine: Boolean,
     viewer: String?,
+    parts: RowParts,
     gitHub: GitHubModel,
     workspace: WorkspaceModel,
     onOpen: (PullRequestRef) -> Unit,
 ) {
-    val topics = gitHubReference(pull.ref)?.let { workspace.topicsLinkedTo(it.id) }.orEmpty()
+    val topics = linkedTopics(pull.ref, workspace)
     val detail = gitHub.detail(pull.ref.id)
-    val author = rowAuthor(pull.author, mine, viewer)
+    val author = rowAuthor(pull.author, mine, viewer)?.takeIf { parts.author }
     Li({
         itemCard(CardKind.PullRequest)
         if (current) classes("is-current")
@@ -377,6 +508,12 @@ private fun PrRow(
         }) {
             Span({ classes("xi__top") }) {
                 StatePill(pull.isDraft)
+                if (parts.repo) {
+                    Span({
+                        classes("xi__repo")
+                        attr("title", "${pull.ref.owner}/${pull.ref.repo}")
+                    }) { Text(pull.ref.repo) }
+                }
                 author?.let { Author(it, viewer) }
             }
             Span({ classes("xi__title") }) {
@@ -394,8 +531,10 @@ private fun PrRow(
                     }
                 }
             }
-            Span({ classes("xi__meta") }) {
-                if (topics.isEmpty()) Span { Text("Not linked") } else topics.forEach { PlainTopicTag(it) }
+            if (parts.topics) {
+                Span({ classes("xi__meta") }) {
+                    if (topics.isEmpty()) Span { Text("Not linked") } else topics.forEach { PlainTopicTag(it) }
+                }
             }
         }
     }

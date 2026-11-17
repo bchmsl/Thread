@@ -619,19 +619,36 @@ internal fun CiIndicator(ci: CiSummary) {
 
 @Composable
 internal fun ReviewIndicator(review: ReviewState) {
-    val (css, icon, text) =
+    val css =
         when (review) {
-            ReviewState.Approved -> Triple("ind--approved", Icon.Approved, "Approved")
-            ReviewState.ChangesRequested -> Triple("ind--changes", Icon.Changes, "Changes requested")
-            ReviewState.ReviewRequested -> Triple("ind--requested", Icon.Eye, "Review requested")
-            ReviewState.NoReviews -> Triple("ind--none", Icon.Eye, "No reviews yet")
+            ReviewState.Approved -> "ind--approved"
+            ReviewState.ChangesRequested -> "ind--changes"
+            ReviewState.ReviewRequested -> "ind--requested"
+            ReviewState.NoReviews -> "ind--none"
         }
     Span({ classes("ind", css) }) {
-        IconView(icon, 15)
+        IconView(reviewIcon(review), 15)
         Span({ classes("vh") }) { Text("Review: ") }
-        Text(text)
+        Text(reviewLabel(review))
     }
 }
+
+/** A review state's name, as the review indicator and the review status groups (D93) show it. */
+internal fun reviewLabel(review: ReviewState): String =
+    when (review) {
+        ReviewState.Approved -> "Approved"
+        ReviewState.ChangesRequested -> "Changes requested"
+        ReviewState.ReviewRequested -> "Review requested"
+        ReviewState.NoReviews -> "No reviews yet"
+    }
+
+/** A review state's icon, as the review indicator and the review status groups (D93) show it. */
+internal fun reviewIcon(review: ReviewState): Icon =
+    when (review) {
+        ReviewState.Approved -> Icon.Approved
+        ReviewState.ChangesRequested -> Icon.Changes
+        ReviewState.ReviewRequested, ReviewState.NoReviews -> Icon.Eye
+    }
 
 /** Two letters for a comment avatar. */
 internal fun initials(name: String?): String =

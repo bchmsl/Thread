@@ -86,17 +86,22 @@ data class RepositoryPullRequests(
  * group, the newest update first. A pull request without an update time goes last. Repository names ignore case, as
  * on GitHub; a group shows the name as its first pull request has it.
  */
-fun pullRequestsByRepository(pulls: List<PullRequestSummary>): List<RepositoryPullRequests> {
-    val newestFirst =
-        compareByDescending<PullRequestSummary, Long?>(nullsFirst()) { it.updatedAtMillis }
-            .thenByDescending { it.ref.number }
-    return pulls
+fun pullRequestsByRepository(pulls: List<PullRequestSummary>): List<RepositoryPullRequests> =
+    pulls
         .groupBy { it.repoKey() }
         .values
-        .map { group -> group.sortedWith(newestFirst) }
-        .sortedWith(compareBy<List<PullRequestSummary>, PullRequestSummary>(newestFirst) { it.first() }.thenBy { it.first().repoKey() })
+        .map { group -> group.sortedWith(NEWEST_FIRST) }
+        .sortedWith(newestGroupFirst().thenBy { it.first().repoKey() })
         .map { group -> RepositoryPullRequests("${group.first().ref.owner}/${group.first().ref.repo}", group) }
-}
+
+/** The newest update first; a pull request without an update time last. Ties go by number, the higher first. */
+internal val NEWEST_FIRST: Comparator<PullRequestSummary> =
+    compareByDescending<PullRequestSummary, Long?>(nullsFirst()) { it.updatedAtMillis }
+        .thenByDescending { it.ref.number }
+
+/** Groups, each already [NEWEST_FIRST], by their newest pull request. */
+internal fun newestGroupFirst(): Comparator<List<PullRequestSummary>> =
+    compareBy<List<PullRequestSummary>, PullRequestSummary>(NEWEST_FIRST) { it.first() }
 
 private fun PullRequestSummary.repoKey(): String = "${ref.owner}/${ref.repo}".lowercase()
 

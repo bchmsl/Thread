@@ -510,6 +510,10 @@ main:has(.md--wide) { max-width: 1520px; }
 .prgroup .scard__toggle { flex-wrap: nowrap; font: 600 var(--fs-15)/1.25 var(--font-text); }
 .prgroup .scard__toggle .n { flex: none; }
 .prgroup__owner { color: var(--text-3); font-weight: 500; }
+/* An author group's heading (D93): avatar and login. A long login wraps, as a long repository name does. */
+.prgroup__person { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.prgroup__av { display: inline-flex; flex: 0 0 auto; }
+.prgroup__name { min-width: 0; }
 .prgroup > .scard__body { padding: 8px; }
 
 /* ---------- An opened Jira ticket or pull request: a head card, then its parts as cards ---------- */

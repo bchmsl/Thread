@@ -15,7 +15,9 @@ import thread.domain.topic.StatusCategory
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.MyPrsGroupBy
 import thread.domain.workspace.PAST_MEETINGS_MAX
+import thread.domain.workspace.ReviewPrsGroupBy
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TopicHideableSection
@@ -32,8 +34,7 @@ import thread.web.presentation.tasks.deviceTodayTopicsView
 import thread.web.presentation.topics.categoryLabel
 
 /*
- * The preferences, one block per screen (owner change #25, D84). Every one syncs to the workspace (Q6). A later phase
- * adds a Pull requests block.
+ * The preferences, one block per screen (owner change #25, D84). Every one syncs to the workspace (Q6).
  */
 
 /**
@@ -329,6 +330,50 @@ internal fun JiraPrefsBlock(jira: JiraModel) {
         SwitchPref("pref-sprint", "Current sprint only", hint, jira.currentSprintOnly, enabled) { on -> jira.setCurrentSprintOnly(on) }
     }
 }
+
+/**
+ * Settings > Pull requests (D93): how each list groups, in the owner's order. Review status is what this device saved
+ * when a pull request was opened (Q4); the rest show under Not loaded yet.
+ */
+@Composable
+internal fun PrsPrefsBlock(workspace: WorkspaceModel) {
+    SettingsBlock("pull-requests", "Pull requests", null) {
+        val prefs = workspace.prefs
+        ChoicePref(
+            labelId = "prm-l",
+            label = "Mine: group by",
+            hint = PRS_MINE_HINT,
+            options = MyPrsGroupBy.entries.map { it to myPrsGroupByLabel(it) },
+            picked = prefs.prsMineGroupBy,
+        ) { workspace.setPrefs(workspace.prefs.copy(prsMineGroupBy = it)) }
+        ChoicePref(
+            labelId = "prr-l",
+            label = "Review requested: group by",
+            hint = PRS_REVIEW_HINT,
+            options = ReviewPrsGroupBy.entries.map { it to reviewPrsGroupByLabel(it) },
+            picked = prefs.prsReviewGroupBy,
+        ) { workspace.setPrefs(workspace.prefs.copy(prsReviewGroupBy = it)) }
+    }
+}
+
+private const val PRS_REVIEW_HINT =
+    "Review status comes from pull requests opened on this device. The rest show under Not loaded yet."
+
+private const val PRS_MINE_HINT = "A pull request linked to more than one Topic shows once, under Several Topics. $PRS_REVIEW_HINT"
+
+private fun myPrsGroupByLabel(groupBy: MyPrsGroupBy): String =
+    when (groupBy) {
+        MyPrsGroupBy.Repository -> "Repository"
+        MyPrsGroupBy.Topic -> "Topic"
+        MyPrsGroupBy.ReviewStatus -> "Review status"
+    }
+
+private fun reviewPrsGroupByLabel(groupBy: ReviewPrsGroupBy): String =
+    when (groupBy) {
+        ReviewPrsGroupBy.Repository -> "Repository"
+        ReviewPrsGroupBy.Author -> "Author"
+        ReviewPrsGroupBy.ReviewStatus -> "Review status"
+    }
 
 /** Settings > General: what is not about one screen. */
 @Composable

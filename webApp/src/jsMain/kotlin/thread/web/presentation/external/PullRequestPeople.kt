@@ -120,6 +120,28 @@ private fun ReviewerStateLabel(state: ReviewerState) {
 }
 
 /**
+ * An author as a group heading (D93): avatar and login, or "You" for the viewer. The avatar's initials are hidden from
+ * screen readers, so the heading reads as the login alone.
+ */
+@Composable
+internal fun PersonHeading(
+    person: GitHubPerson,
+    viewer: String?,
+) {
+    val me = person.isLogin(viewer)
+    Span({ classes("prgroup__person") }) {
+        Span({
+            classes("prgroup__av")
+            attr("aria-hidden", "true")
+        }) { Avatar(person.login, person.avatarUrl?.value, me) }
+        Span({
+            classes("prgroup__name")
+            if (me) classes("who__name--me")
+        }) { Text(if (me) "You" else person.login) }
+    }
+}
+
+/**
  * A round avatar, 20 px or 24 px when [large]. The initials sit underneath, so they show while the image loads and stay
  * when it cannot load: offline, blocked, or no avatar address.
  */

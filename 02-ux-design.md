@@ -191,12 +191,13 @@ Each device has its own timer (F2 A); the lengths and the history are the same e
 ### Settings (D84)
 
 One page. Under the header a row of links (chips) jumps to each block and moves focus to its heading; `#/settings/<block>` opens a block directly, and the old `#/settings/prefs` opens Today.
-Blocks, in order: Connections, Calendar from your Mac, Topic statuses, Today, Inbox, Topics, Topic Details, Jira, General, Appearance, Account. Owner change #25 adds a Pull requests block in a later phase.
+Blocks, in order: Connections, Calendar from your Mac, Topic statuses, Today, Inbox, Topics, Topic Details, Jira, Pull requests, General, Appearance, Account.
 - Today, in the owner's order (D86, D89, D90): Topics open as (List / Board), Show completed tasks, Hide empty sections (Meetings, Reminders and Review requested checkboxes in a labelled group), Meetings layout, Group tasks by (None / Topic / Due date; Due date by default), Show past meetings (a select: All, None, 1 to 20), Topics shown (Planned, Active, Paused and Done checkboxes in a labelled group; Active and Paused by default). A row of choices wraps under its label when the label would get too narrow beside it (at 390 px: Meetings layout and Group tasks by).
 - Inbox, in the owner's order (D91): Show completed tasks (on), Group by (None / Type / Due date; None by default), Show notes (on).
 - Topics: Topics open as (List / Board), the same choice as the Topics page switch (D21).
 - Topic Details, in the owner's order (D92): Show completed tasks (on), Hide empty sections (Notes, Jira, Pull requests, Meetings and Additional information checkboxes in a labelled group; none checked), Group tasks by due date (off). The owner listed the last one under Hide empty sections; it is its own switch (A2).
 - Jira: Current sprint only, the same choice as the Jira page checkbox. Disabled, with a hint, while Jira is not connected or the site has no sprints.
+- Pull requests, in the owner's order (D93): Mine: group by (Repository / Topic / Review status), Review requested: group by (Repository / Author / Review status); Repository by default. The hints say that a pull request linked to more than one Topic shows once, under Several Topics, and that review status comes from pull requests opened on this device, the rest showing under Not loaded yet.
 - General: Capture starts as.
 Every preference syncs with the account; open or closed groups stay per device.
 
@@ -237,6 +238,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Notes | The editor is a notebook page on a faint dot grid. |
 | Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). A Task's reminder day counts as a date (D54). Since D90 the groups follow "Group tasks by": Completed, Today, Tomorrow and Upcoming by default, or by Topic, or none. |
 | Inbox | One list of captures, newest first, with Select all and a selection bar (v3). Since D91 Settings > Inbox can group it by Type (Tasks, then Notes) or by Due date (Today's groups, then Notes), as section cards that do not fold, and can hide completed Tasks and Notes. A completed Task shows struck through. When only hidden items wait: "Inbox is clear", what is hidden, and a "Change in Settings" link. |
+| Pull requests | Each list in repository groups (D62). Since D93 Settings > Pull requests picks each list's grouping: Mine by Repository, Topic or Review status; Review requested by Repository, Author or Review status. Groups come by their newest pull request, then by name; "Several Topics", "No Topic", "Unknown author" and "Not loaded yet" come last, and review groups keep a fixed order (Changes requested, Approved, Review requested, No reviews yet). A Topic heading has the Topic's sticker (No Topic an empty one), an author heading the avatar and login. A row leaves out what its heading says: its repository shows unless grouped by repository, the author hides in an author group, the Topics hide under one Topic or No Topic. |
 | Motion | Short transitions (120 and 220 ms) that drop to zero with reduced motion. |
 | Scrollbars (D73) | Every scroller, the page included, has a 10 px bar with no track, so the surface shows through, and a 6 px rounded thumb in fog `#5b6681`, brighter (`#8792ae`) under the pointer. Only where the main pointer is a mouse or trackpad; touch screens keep their own overlay scrollbars. Chromium and Safari draw it with `::-webkit-scrollbar`; Firefox gets the thin standard bar in the same colors, without the hover change. |
 | Cards (D68) | Every section is a card with a tinted head band; every item is a card shaped like its object. See "Card language" below. |
@@ -245,7 +247,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 
 Direction D, "Band + Object", picked by the orchestrator while the owner was away (D68). Source: `webApp/src/jsMain/resources/css/cards.css` and `Cards.kt`.
 
-- **Section card:** every section and block (Topic sections, Today's sections, Pull requests' repository groups, a detail's parts, Trash's preview) is a card. Its head band is tinted in the kind's accent and carries the kind's mark, the title and the count; Notes, Jira and Topics add a pattern Thread draws in the accent, fading toward the actions.
+- **Section card:** every section and block (Topic sections, Today's sections, Pull requests' groups, a detail's parts, Trash's preview) is a card. Its head band is tinted in the kind's accent and carries the kind's mark, the title and the count; Notes, Jira and Topics add a pattern Thread draws in the accent, fading toward the actions.
 - **Item card:** every Task, Note, Jira item, pull request, Topic and reminder is a card shaped like its object, in lists, Today, Inbox, Notes, Jira, Pull requests, Trash and ⌘K results.
 
 | Kind | Accent | Mark and shape | Band pattern |
