@@ -2,11 +2,21 @@ package thread.domain.calendar
 
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
+import kotlin.math.PI
+import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.round
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
-// D79 and D85: the meetings timeline's hours, lanes, flags, title fit and now. Every meeting here is SYNTHETIC test data.
+// D79, D85 and D88: the meetings timeline's hours, lanes, flags, title fit and now. Every meeting here is SYNTHETIC
+// test data.
 class MeetingTimelineTest {
     private val today = LocalDay(2026, 11, 17)
     private val yesterday = today.plusDays(-1)
@@ -81,7 +91,8 @@ class MeetingTimelineTest {
 
     private fun MeetingTimeline.lanesById(): Map<Int, Int> = blocks.associate { it.meeting.number to it.lane }
 
-    private fun MeetingTimeline.turnsById(): Map<Int, TitleTurn> = blocks.associate { it.meeting.number to it.turn }
+    /** The blocks whose title runs along their diagonal, in time order; the others lie flat. */
+    private fun MeetingTimeline.diagonalIds(): List<Int> = blocks.filter { it.turn is TitleTurn.Diagonal }.map { it.meeting.number }
 
     private fun MeetingTimeline.rowsById(): Map<Int, Int> = flags.associate { it.meeting.number to it.row }
 
@@ -89,7 +100,27 @@ class MeetingTimelineTest {
 
     private fun flat() = TitleFit.Block(TitleTurn.Flat, TIMELINE_BLOCK_PX)
 
-    private fun up(heightPx: Int = TIMELINE_BLOCK_PX) = TitleFit.Block(TitleTurn.Up, heightPx)
+    private fun diagonal(
+        slotPx: Double,
+        heightPx: Int,
+    ) = TitleFit.Block(titleDiagonal(slotPx, heightPx), heightPx)
+
+    private fun Double.tenths(): Double = round(this * 10) / 10
+
+    /** The px a long title needs: [MIN_TITLE_CHARS] characters and an ellipsis. */
+    private val longRun = MIN_TITLE_CHARS * TIMELINE_CHAR_PX + TIMELINE_ELLIPSIS_PX
+
+    /** The line [titleDiagonal] finds touches all four sides of the block's room for it: across, then up. */
+    private fun assertCornerToCorner(
+        slotPx: Double,
+        heightPx: Int,
+    ) {
+        val line = titleDiagonal(slotPx, heightPx)
+        val angle = line.angleDeg * PI / 180
+        val message = "A $slotPx px slot, $heightPx px tall: $line"
+        assertEquals(slotPx - TIMELINE_TURNED_SIDES_PX, line.lengthPx * cos(angle) + TIMELINE_LINE_PX * sin(angle), 1e-9, message)
+        assertEquals(heightPx - TIMELINE_TURNED_ENDS_PX, line.lengthPx * sin(angle) + TIMELINE_LINE_PX * cos(angle), 1e-9, message)
+    }
 
     @Test
     fun anEmptyDayShowsTheWorkingHoursAndNow() {
@@ -188,7 +219,7 @@ class MeetingTimelineTest {
         // a lane and 3 fits after 1.
         assertEquals(mapOf(1 to 0, 2 to 1, 3 to 0), line.lanesById())
         assertEquals(5, line.blocks.first().toMinute, "The block keeps the real end")
-        assertEquals(TitleTurn.Up, line.blocks.first().turn)
+        assertEquals(TitleTurn.Diagonal(90.0, 67.0), line.blocks.first().turn, "One line wide: upright")
         assertEquals(0, line.flagRows)
     }
 
@@ -249,17 +280,15 @@ class MeetingTimelineTest {
 
         // 125 px an hour: a long title lies flat from 78 px, 37.4 minutes; "QA sync" whole from 60 px.
         val wideLine = timeline(at(10), *meetings, widthPx = wide)
-        assertEquals(
-            mapOf(1 to TitleTurn.Up, 2 to TitleTurn.Up, 3 to TitleTurn.Up, 4 to TitleTurn.Flat, 5 to TitleTurn.Flat, 7 to TitleTurn.Flat),
-            wideLine.turnsById(),
-        )
+        assertEquals(listOf(1, 2, 3), wideLine.diagonalIds(), "4, 5 and 7 lie flat")
         assertEquals(listOf(6), wideLine.flags.map { it.meeting.number })
+        // The wider the block, the less steep its diagonal and the less it grows: 15, 20 and 30 minutes.
+        val turned = wideLine.blocks.take(3)
+        assertEquals(listOf(81.1, 71.5, 47.7), turned.map { (it.turn as TitleTurn.Diagonal).angleDeg.tenths() })
+        assertEquals(listOf(79, 79, 70), turned.map { it.heightPx })
         // 88 px an hour: a long title lies flat from 53.2 minutes; "QA sync" from 40.9.
         val phoneLine = timeline(at(10), *meetings)
-        assertEquals(
-            mapOf(1 to TitleTurn.Up, 2 to TitleTurn.Up, 3 to TitleTurn.Up, 4 to TitleTurn.Up, 5 to TitleTurn.Flat, 7 to TitleTurn.Up),
-            phoneLine.turnsById(),
-        )
+        assertEquals(listOf(1, 2, 3, 4, 7), phoneLine.diagonalIds(), "5 lies flat")
         assertEquals(listOf(6), phoneLine.flags.map { it.meeting.number })
         // Back to back: every block in the first lane, and Tab follows the day.
         assertEquals(setOf(0), phoneLine.lanesById().values.toSet())
@@ -272,10 +301,10 @@ class MeetingTimelineTest {
 
         assertEquals(78.0, edge)
         assertEquals(flat(), titleFit(edge, long))
-        assertEquals(TitleTurn.Up, (titleFit(edge - 0.01, long) as TitleFit.Block).turn)
+        assertTrue((titleFit(edge - 0.01, long) as TitleFit.Block).turn is TitleTurn.Diagonal)
         // One character under the minimum turns it.
         val oneUnder = TIMELINE_FLAT_SIDES_PX + (MIN_TITLE_CHARS - 1) * TIMELINE_CHAR_PX + TIMELINE_ELLIPSIS_PX
-        assertEquals(TitleTurn.Up, (titleFit(oneUnder, long) as TitleFit.Block).turn)
+        assertTrue((titleFit(oneUnder, long) as TitleFit.Block).turn is TitleTurn.Diagonal)
     }
 
     @Test
@@ -284,7 +313,7 @@ class MeetingTimelineTest {
 
         // No ellipsis: the whole title fits.
         assertEquals(flat(), titleFit(whole, MIN_TITLE_CHARS))
-        assertEquals(TitleTurn.Up, (titleFit(whole - 0.01, MIN_TITLE_CHARS) as TitleFit.Block).turn)
+        assertTrue((titleFit(whole - 0.01, MIN_TITLE_CHARS) as TitleFit.Block).turn is TitleTurn.Diagonal)
         assertEquals(flat(), titleFit(TIMELINE_FLAT_SIDES_PX + 7 * TIMELINE_CHAR_PX, "QA sync".length))
     }
 
@@ -293,7 +322,8 @@ class MeetingTimelineTest {
         val line = TIMELINE_TURNED_SIDES_PX + TIMELINE_LINE_PX
 
         assertEquals(21.0, line)
-        assertEquals(up(TIMELINE_BLOCK_PX + 17), titleFit(line, long))
+        // One line wide, the line can only stand up, as long as the room is tall: 77 px, as D85's upright line.
+        assertEquals(TitleFit.Block(TitleTurn.Diagonal(90.0, 67.0), TIMELINE_BLOCK_PX + 17), titleFit(line, long))
         assertEquals(TitleFit.Flag, titleFit(line - 0.01, long))
         // A short title would fit flat, but a block is never narrower than a turned line.
         assertEquals(flat(), titleFit(line, 1))
@@ -301,22 +331,74 @@ class MeetingTimelineTest {
     }
 
     @Test
-    fun aTurnedTitleKeepsTheBlockHeightWhileItFits() {
-        // 7 characters need 10 + 49 px: the 60 px block holds them.
-        assertEquals(up(), titleFit(40.0, 7))
+    fun aTurnedTitleRunsFromTheBottomLeftCornerToTheTopRight() {
+        // D88: the line touches all four sides of the block's room, its start the left and the bottom, its end the
+        // top and the right. From one line wide to just under flat, and in a short and a tall block.
+        listOf(21.0 to 77, 22.0 to 78, 31.25 to 79, 40.0 to 79, 56.0 to 60, 62.5 to 70, 77.9 to 60, 77.9 to 200)
+            .forEach { (slotPx, heightPx) -> assertCornerToCorner(slotPx, heightPx) }
     }
 
     @Test
-    fun aTurnedTitleOneCharacterShortGrowsTheBlock() {
-        // 8 characters need 10 + 56 px, 6 more than the block's 60: it is 66 px tall.
-        assertEquals(up(66), titleFit(40.0, MIN_TITLE_CHARS))
+    fun aSquareRoomRunsItsTitleAtFortyFiveDegrees() {
+        // A 56 px slot and a 60 px block leave a 50 px square: the line is its diagonal less the line's own height.
+        val line = titleDiagonal(56.0, TIMELINE_BLOCK_PX)
+
+        assertEquals(45.0, line.angleDeg, 1e-9)
+        assertEquals(50 * sqrt(2.0) - TIMELINE_LINE_PX, line.lengthPx, 1e-9)
+    }
+
+    @Test
+    fun aTallNarrowBlockRunsItsTitleNearlyUpright() {
+        // 15 minutes on a phone, 22 px: a room 16 px wide, 1 px more than the line. It leans a little, so it is
+        // shorter than the room is tall, and steeper than the room's own diagonal.
+        val line = titleDiagonal(22.0, 78)
+
+        assertEquals(89.2, line.angleDeg.tenths())
+        assertTrue(line.lengthPx < 78 - TIMELINE_TURNED_ENDS_PX)
+        assertTrue(line.angleDeg > atan2(78 - TIMELINE_TURNED_ENDS_PX, 22 - TIMELINE_TURNED_SIDES_PX) * 180 / PI)
+    }
+
+    @Test
+    fun aWiderOrShorterBlockRunsItsTitleLessSteeply() {
+        val acrossSlots = listOf(22.0, 31.25, 41.7, 62.5, 77.9).map { titleDiagonal(it, 79).angleDeg }
+        val acrossHeights = listOf(200, 120, 79, 60).map { titleDiagonal(40.0, it).angleDeg }
+
+        assertEquals(acrossSlots.sortedDescending(), acrossSlots)
+        assertEquals(acrossHeights.sortedDescending(), acrossHeights)
+    }
+
+    @Test
+    fun aLongTitleKeepsTheBlockHeightFromTheEdgeOfItsDiagonal() {
+        // The narrowest slot whose 60 px block holds a long title, 67 px, along its diagonal: where the line, 15 px
+        // high, is 50 px tall, as the room. Its width there is the room's.
+        val up = TIMELINE_BLOCK_PX - TIMELINE_TURNED_ENDS_PX
+        val angle = asin(up / hypot(longRun, TIMELINE_LINE_PX)) - atan2(TIMELINE_LINE_PX, longRun)
+        val edge = TIMELINE_TURNED_SIDES_PX + longRun * cos(angle) + TIMELINE_LINE_PX * sin(angle)
+
+        assertEquals(69.88, edge, 0.005)
+        assertEquals(diagonal(edge + 0.001, TIMELINE_BLOCK_PX), titleFit(edge + 0.001, long))
+        assertEquals(diagonal(edge - 0.001, TIMELINE_BLOCK_PX + 1), titleFit(edge - 0.001, long))
+        // An upright line (D85) needed 77 px at every width; 30 minutes in a 1440 px window (D87) are 73.1 px.
+        assertEquals(TIMELINE_BLOCK_PX, (titleFit(73.1, long) as TitleFit.Block).heightPx)
+    }
+
+    @Test
+    fun oneCharacterMoreThanTheDiagonalHoldsGrowsTheBlock() {
+        // A 50 px slot's 60 px block holds 51.9 px along its diagonal: 7 characters, 49 px, fit. 8 need 56 px: the
+        // block is the fewest px taller whose diagonal holds them.
+        assertEquals(diagonal(50.0, TIMELINE_BLOCK_PX), titleFit(50.0, 7))
+        assertEquals(diagonal(50.0, 65), titleFit(50.0, MIN_TITLE_CHARS))
+        assertTrue(titleDiagonal(50.0, 64).lengthPx < MIN_TITLE_CHARS * TIMELINE_CHAR_PX)
     }
 
     @Test
     fun aTurnedLongTitleGrowsTheBlockExactly() {
-        // 8 characters, an ellipsis and the ends: 10 + 56 + 11 px.
-        assertEquals(up(77), titleFit(40.0, long))
-        assertEquals(up(77), titleFit(40.0, 300), "Longer titles need no more: the rest is cut")
+        // A 40 px slot: at 78 px the diagonal holds 66.5 px, at 79 px 67.6, enough for 8 characters and an ellipsis.
+        // 2 px more than an upright line needed (D85): a narrow block's thick line takes height as it leans.
+        assertTrue(titleDiagonal(40.0, 78).lengthPx < longRun)
+        assertTrue(titleDiagonal(40.0, 79).lengthPx >= longRun)
+        assertEquals(diagonal(40.0, 79), titleFit(40.0, long))
+        assertEquals(diagonal(40.0, 79), titleFit(40.0, 300), "Longer titles need no more: the rest is cut")
     }
 
     @Test
@@ -330,13 +412,14 @@ class MeetingTimelineTest {
                 widthPx = wide,
             )
 
-        // 1 is turned and 77 px tall; 2 overlaps it in the second lane; 3 follows 1 in the first lane.
+        // 1 is 62.5 px wide, its title along its diagonal, and 70 px tall; 2 overlaps it in the second lane; 3
+        // follows 1 in the first lane.
         assertEquals(mapOf(1 to 0, 2 to 1, 3 to 0), line.lanesById())
-        assertEquals(listOf(77, 60, 60), line.blocks.map { it.heightPx }, "Only the block that needs it grows")
-        assertEquals(listOf(77, 60), line.laneHeightsPx)
+        assertEquals(listOf(70, 60, 60), line.blocks.map { it.heightPx }, "Only the block that needs it grows")
+        assertEquals(listOf(70, 60), line.laneHeightsPx)
         assertEquals(6, line.laneTopPx(0))
-        assertEquals(6 + 77 + 6, line.laneTopPx(1))
-        assertEquals(6 + 77 + 6 + 60 + 6, line.laneTopPx(line.lanes), "The lanes' whole height")
+        assertEquals(6 + 70 + 6, line.laneTopPx(1))
+        assertEquals(6 + 70 + 6 + 60 + 6, line.laneTopPx(line.lanes), "The lanes' whole height")
     }
 
     @Test

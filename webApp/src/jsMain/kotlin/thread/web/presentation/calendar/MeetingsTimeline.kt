@@ -39,6 +39,7 @@ import thread.web.presentation.LocalNow
 import thread.web.presentation.SectionCard
 import thread.web.presentation.cardKind
 import thread.web.presentation.itemCard
+import kotlin.math.floor
 import kotlin.math.round
 
 /**
@@ -47,9 +48,9 @@ import kotlin.math.round
  * the card only (D86). Its body runs the day's hours from left to right
  * ([meetingTimeline]): all-day meetings in a strip above the hours, timed ones as blocks placed by start and end, in
  * lanes while they overlap, and a line at now. The hours share the box's width, so the layout waits for it. A block too
- * narrow for the start of its title turns it up the block, taller when it needs to, and a meeting too narrow even for
- * that is a flag in a band above the lanes ([thread.domain.calendar.titleFit], D85). A block or a flag's title is one
- * button named by the row's sentence ([meetingRowLabel]); it opens the Meeting card.
+ * narrow for the start of its title runs it along its diagonal (D88), taller when it needs to, and a meeting too narrow
+ * even for one line is a flag in a band above the lanes ([thread.domain.calendar.titleFit], D85). A block or a flag's
+ * title is one button named by the row's sentence ([meetingRowLabel]); it opens the Meeting card.
  * Flags and blocks come in one list in time order, so Tab follows the day. Join for the meeting now and the next one
  * sits in the card's head, since a block is too narrow for it. A narrow screen scrolls the hours sideways inside the
  * card, starting at now; the page never scrolls sideways.
@@ -216,8 +217,8 @@ private fun TrackBox(
  * One timed meeting: its title, then Now or Next and when it starts. Placed by start and end; a part that runs into
  * yesterday or tomorrow has a square edge on that side. Now is tinted and Next outlined, so a block too narrow for its
  * badge still shows it. Tentative and not answered have a dashed edge. A block too narrow for the start of its title
- * turns it up the block, read from the bottom, and is as tall as the domain says ([TimelineBlock.heightPx]); its lane
- * grows with it.
+ * runs it along its diagonal, from the bottom-left corner to the top-right, at the angle and length the domain gives
+ * ([TitleTurn.Diagonal], D88), and is as tall as the domain says ([TimelineBlock.heightPx]); its lane grows with it.
  */
 @Composable
 private fun Block(
@@ -231,6 +232,7 @@ private fun Block(
     val meeting = row.meeting
     val from = line.offsetOf(block.fromMinute)
     val label = meetingRowLabel(row, now, topics.map { it.name })
+    val diagonal = block.turn as? TitleTurn.Diagonal
     Li({
         classes("mtl__slot")
         style {
@@ -238,6 +240,11 @@ private fun Block(
             property("--w", percent(line.offsetOf(block.toMinute) - from))
             property("--top", "${line.laneTopPx(block.lane)}px")
             property("--h", "${block.heightPx}px")
+            if (diagonal != null) {
+                // Hundredths: the length rounded down, so the line never passes the corners.
+                property("--a", "${round(diagonal.angleDeg * 100) / 100}deg")
+                property("--l", "${floor(diagonal.lengthPx * 100) / 100}px")
+            }
         }
     }) {
         Button({
@@ -248,7 +255,7 @@ private fun Block(
             if (meeting.response.isOpen) classes("is-open")
             if (row.startsBeforeToday) classes("is-from-yesterday")
             if (row.endsAfterToday) classes("is-to-tomorrow")
-            if (block.turn == TitleTurn.Up) classes("is-turned")
+            if (diagonal != null) classes("is-turned")
             attr("aria-label", label)
             onClick { onOpen(meeting) }
         }) {

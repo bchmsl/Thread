@@ -3,7 +3,10 @@ package thread.domain.calendar
 import thread.domain.time.LocalDay
 import thread.domain.time.MINUTES_PER_DAY
 import thread.domain.time.WallTime
+import kotlin.math.PI
 import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** The first hour the meetings timeline always shows (D79, D85): 10:00 in the workspace zone. */
 const val TIMELINE_FIRST_HOUR: Int = 10
@@ -19,8 +22,8 @@ const val TIMELINE_MIN_HOUR_PX: Double = 88.0
 
 /**
  * The characters of a title that are enough to tell a call apart (D85, owner): a block shows at least this many, or the
- * whole title when it is shorter, flat or turned up the block. Eight keep the start of a second word, so "Weekly s…"
- * and "Weekly p…" differ.
+ * whole title when it is shorter, flat or along the block's diagonal (D88). Eight keep the start of a second word, so
+ * "Weekly s…" and "Weekly p…" differ.
  */
 const val MIN_TITLE_CHARS: Int = 8
 
@@ -120,8 +123,8 @@ sealed interface TimelineItem {
 
 /**
  * A meeting wide enough for at least one turned title line, or one that started yesterday, as a block placed by its
- * start and end, [heightPx] tall, its title running [turn] (D85). A meeting that overlaps an earlier block goes to the
- * first [lane] free at its start, counted from 0.
+ * start and end, [heightPx] tall, its title running [turn] (D85, D88). A meeting that overlaps an earlier block goes to
+ * the first [lane] free at its start, counted from 0.
  */
 data class TimelineBlock(
     override val meeting: TodayMeeting,
@@ -145,8 +148,20 @@ data class TimelineFlag(
     val roomMinutes: Int,
 ) : TimelineItem
 
-/** How a block's title runs (D85): flat, on one or two lines, or one line up the block, read from the bottom. */
-enum class TitleTurn { Flat, Up }
+/** How a block's title runs (D85, D88): [Flat], on one or two lines, or one line along the block's [Diagonal]. */
+sealed interface TitleTurn {
+    /** Flat, on one or two lines. */
+    data object Flat : TitleTurn
+
+    /**
+     * One line from the block's bottom-left corner to its top-right (D88), read from the bottom: [angleDeg] up from flat,
+     * 90 only in a block one line wide, and [lengthPx] long, as [titleDiagonal] finds it.
+     */
+    data class Diagonal(
+        val angleDeg: Double,
+        val lengthPx: Double,
+    ) : TitleTurn
+}
 
 /** Where a timed meeting's title fits on the timeline (D85), as [titleFit] picks it. */
 sealed interface TitleFit {
@@ -166,8 +181,9 @@ sealed interface TitleFit {
  * the same day always looks the same. The run a title needs is [MIN_TITLE_CHARS] characters and an ellipsis, or a
  * shorter title whole.
  * - Flat, when the slot holds that run and [TIMELINE_FLAT_SIDES_PX]. The block shows as much of the title as fits.
- * - Else up the block, when the slot holds one [TIMELINE_LINE_PX] line and [TIMELINE_TURNED_SIDES_PX]. The block is
- *   [TIMELINE_BLOCK_PX] tall, or taller when that height is short of the run and [TIMELINE_TURNED_ENDS_PX].
+ * - Else along the block's diagonal ([titleDiagonal], D88), when the slot holds one [TIMELINE_LINE_PX] line and
+ *   [TIMELINE_TURNED_SIDES_PX]. The block is [TIMELINE_BLOCK_PX] tall, or the fewest whole px taller whose diagonal
+ *   holds the run. A wider block's diagonal is longer, so it needs less.
  * - Else a flag. Its pole and cloth need no width.
  */
 fun titleFit(
@@ -178,9 +194,46 @@ fun titleFit(
     return when {
         slotPx < TURNED_SLOT_PX -> TitleFit.Flag
         slotPx >= TIMELINE_FLAT_SIDES_PX + run -> TitleFit.Block(TitleTurn.Flat, TIMELINE_BLOCK_PX)
-        else -> TitleFit.Block(TitleTurn.Up, maxOf(TIMELINE_BLOCK_PX, ceil(TIMELINE_TURNED_ENDS_PX + run).toInt()))
+        else -> {
+            val heightPx = generateSequence(TIMELINE_BLOCK_PX) { it + 1 }.first { titleDiagonal(slotPx, it).lengthPx >= run }
+            TitleFit.Block(titleDiagonal(slotPx, heightPx), heightPx)
+        }
     }
 }
+
+/**
+ * The title line along the diagonal of a block in a slot [slotPx] wide and [heightPx] tall (D88, owner: "the text
+ * always starts from bottom left corner and ends to top right corner"). The line is [TIMELINE_LINE_PX] thick and keeps
+ * to the block's room for it: [TIMELINE_TURNED_SIDES_PX] less than the slot across, [TIMELINE_TURNED_ENDS_PX] less than
+ * the block up. Its angle is the one where it touches all four sides of that room, its start the left and the bottom,
+ * its end the top and the right, which makes it the longest line from corner to corner. For a thin line that is the
+ * room's own diagonal; a line's thickness makes it steeper, and it is upright only in a slot one line wide.
+ */
+fun titleDiagonal(
+    slotPx: Double,
+    heightPx: Int,
+): TitleTurn.Diagonal {
+    val across = slotPx - TIMELINE_TURNED_SIDES_PX
+    val up = heightPx - TIMELINE_TURNED_ENDS_PX
+    val line = TIMELINE_LINE_PX
+    require(across >= line && up >= line) { "A block's title needs room for one line" }
+    if (across == line) return TitleTurn.Diagonal(90.0, up)
+    // At angle a the line of length L takes L cos a + line sin a across and L sin a + line cos a up. Both are the
+    // room's where across sin a - up cos a + line cos 2a is 0: below 0 flat, above 0 upright, so halving finds it.
+    var low = 0.0
+    var high = PI / 2
+    repeat(DIAGONAL_HALVINGS) {
+        val mid = (low + high) / 2
+        if (across * sin(mid) - up * cos(mid) + line * cos(2 * mid) < 0) low = mid else high = mid
+    }
+    val angle = (low + high) / 2
+    // Both sides give the length there; each is the steadier one on its own side of 45 degrees.
+    val length = if (angle < PI / 4) (across - line * sin(angle)) / cos(angle) else (up - line * cos(angle)) / sin(angle)
+    return TitleTurn.Diagonal(angle * 180 / PI, length)
+}
+
+/** Enough halvings of a right angle for a Double. */
+private const val DIAGONAL_HALVINGS = 60
 
 /**
  * Lays out [today], the rows [todayMeetings] gives for [now]'s day, on a timeline [widthPx] wide: the hours share it,
