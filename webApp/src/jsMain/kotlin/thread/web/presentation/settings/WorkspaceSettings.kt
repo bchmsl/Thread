@@ -40,6 +40,7 @@ import thread.domain.topic.useCount
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.addStatus
 import thread.domain.workspace.changeStatusCategory
@@ -369,6 +370,32 @@ internal fun PreferencesBlock(
             }
             CheckBox(prefs.hideEmptySections, label = null, classes = listOf("switch"), id = "pref-hide", switch = true) { on ->
                 workspace.setPrefs(workspace.prefs.copy(hideEmptySections = on))
+            }
+        }
+        // D79: where Today shows the meetings.
+        Div({ classes("pref") }) {
+            Div {
+                P({
+                    classes("pref__label")
+                    id("ml-l")
+                }) { Text("Meetings layout") }
+                P({ classes("pref__hint") }) {
+                    Text("Vertical lists today's meetings on the right. Horizontal draws a timeline across the top.")
+                }
+            }
+            Div({
+                classes("seg")
+                attr("role", "radiogroup")
+                attr("aria-labelledby", "ml-l")
+            }) {
+                MeetingsLayout.entries.forEach { option ->
+                    Button({
+                        type(ButtonType.Button)
+                        attr("role", "radio")
+                        attr("aria-checked", (prefs.meetingsLayout == option).toString())
+                        onClick { workspace.setPrefs(workspace.prefs.copy(meetingsLayout = option)) }
+                    }) { Text(if (option == MeetingsLayout.Vertical) "Vertical" else "Horizontal") }
+                }
             }
         }
         Div({ classes("pref") }) {

@@ -260,6 +260,94 @@
 .lchip--hit .iconbtn::after { inset: -7px; }
 .dmeet__link::after { inset: -4px 0; }
 
+/* Meetings timeline (D79, "Meetings layout: Horizontal"): the Meetings card across the page. The hours run left to right
+   at 88 px each or more, so a half-hour block keeps a few letters; a card narrower than that scrolls them inside .mtl,
+   never the page. Blocks sit by start and end, in lanes 60 px tall while they overlap; the grid's hour lines echo the
+   band's calendar pattern. */
+.scard--tl { margin-bottom: 28px; }
+.scard--tl > .scard__head { flex-wrap: wrap; row-gap: 6px; }
+.scard--tl > .scard__head > .scard__h { flex: 1 1 auto; }
+.scard--tl .scard__acts { gap: 8px; min-width: 0; }
+.mjoin--named { flex: 0 1 auto; gap: 5px; min-width: 0; max-width: 260px; height: 34px; padding: 0 14px; font-size: var(--fs-13); }
+.mjoin__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A phone: Join for now and next get their own row under the title, from the left. */
+@media (max-width: 759px) { .scard--tl .scard__acts { flex-basis: 100%; justify-content: flex-start; } }
+.mtl__allday { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
+.mtl__allday > li { min-width: 0; max-width: 100%; }
+.icard.mday {
+  align-items: center; gap: 8px; max-width: 100%; min-height: 34px; padding: 6px 12px 6px 9px; border-left: 3px solid var(--k);
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.mday__k { flex: none; font-size: var(--fs-12); font-weight: 600; color: var(--text-2); }
+.mday__name { min-width: 0; overflow: hidden; font-size: var(--fs-14); font-weight: 550; white-space: nowrap; text-overflow: ellipsis; }
+.mtl { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding-bottom: 4px; }
+.mtl__track { position: relative; min-width: calc(var(--hours) * 88px); }
+.mtl__ruler { display: grid; grid-template-columns: repeat(var(--hours), minmax(0, 1fr)); height: 24px; }
+.mtl__hour {
+  padding: 3px 0 0 6px; border-left: 1px solid var(--border-strong); font-size: var(--fs-12); line-height: 16px;
+  color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mtl__lanes {
+  position: relative; height: calc(var(--lanes) * 66px + 6px); margin: 0; padding: 0; list-style: none;
+  border-right: 1px solid var(--border);
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px);
+  background-size: calc(100% / var(--hours)) 100%;
+}
+.mtl__slot {
+  position: absolute; z-index: 1; top: calc(6px + var(--lane) * 66px); left: min(var(--x), calc(100% - 26px));
+  width: var(--w); min-width: 26px; height: 60px; padding-right: 2px; container-type: inline-size;
+}
+.icard.mblock {
+  width: 100%; height: 100%; padding: 0; overflow: hidden; border-left: 3px solid var(--k);
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+/* The block's text, with the whole sentence as a pointer's tooltip: the title on top, Now or Next and the time below.
+   Inside the 1 px border, 5 px above and below leave the 48 px two title lines and the meta line need. */
+.mblock__in {
+  display: flex; flex-direction: column; justify-content: space-between; width: 100%; height: 100%; min-width: 0;
+  padding: 5px 7px;
+}
+.icard.mblock:focus-visible { outline-offset: -2px; }
+.icard.mblock.is-now { background-color: color-mix(in srgb, var(--k) 14%, var(--bg-raised)); }
+.icard.mblock.is-next { border-color: color-mix(in srgb, var(--k) 55%, var(--border)); border-left-color: var(--k); }
+.icard.mblock.is-ended { border-left-color: var(--border-strong); background-color: var(--bg-surface); }
+.icard:is(.mblock, .mday).is-open { border-left-style: dashed; }
+.icard.mblock.is-from-yesterday { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.icard.mblock.is-to-tomorrow { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.mblock__name {
+  display: -webkit-box; flex: none; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; overflow: hidden;
+  font-size: var(--fs-13); font-weight: 600; line-height: 16px; overflow-wrap: anywhere; hyphens: auto;
+}
+.mblock.is-ended .mblock__name { color: var(--text-3); font-weight: 500; }
+.mblock__meta {
+  display: flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; font-size: var(--fs-12); line-height: 16px;
+  color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mblock__meta > .mbadge { margin-right: 0; line-height: 16px; }
+/* A narrow block keeps what fits: the badge before the time, then the title alone (Now's tint and Next's outline stay),
+   then nothing but its edge. */
+@container (max-width: 96px) { .mbadge + .mblock__time { display: none; } }
+@container (max-width: 50px) { .mblock__meta { display: none; } }
+@container (max-width: 36px) { .mblock__name { visibility: hidden; } }
+.mtl__now {
+  position: absolute; z-index: 2; top: 0; bottom: 0; left: var(--x); width: 2px; margin-left: -1px;
+  background: var(--fog-100); pointer-events: none;
+}
+.mtl__nowt {
+  position: absolute; top: 3px; left: 50%; transform: translateX(-50%); padding: 0 5px; border-radius: 4px;
+  background: var(--fog-100); color: var(--ink-900); font: 650 11px/18px var(--font-text); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mtl__now.is-start .mtl__nowt { left: 0; transform: none; }
+.mtl__now.is-end .mtl__nowt { left: auto; right: 0; transform: none; }
+/* While the first answer loads: a grey ruler and two grey blocks of the same height. */
+.mtl--skel { overflow: hidden; }
+.skel.mtl__skelrule { height: 10px; margin: 7px 0 13px; }
+.mtl__skellane { position: relative; height: 72px; }
+.skel.mtl__skelblock { position: absolute; top: 6px; height: 60px; border-radius: var(--r-row); }
+.mtl__skelblock:first-child { left: 12%; width: 14%; }
+.mtl__skelblock:last-child { left: 46%; width: 20%; }
+
 /* Suggestions (#11): quieter cards with a dashed edge. */
 .icard--sugg { background-color: transparent; border-style: dashed; border-color: var(--border-strong); }
 .icard--sugg .xrow__title { font-weight: 500; color: var(--text-2); }

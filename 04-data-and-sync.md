@@ -293,6 +293,14 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 - **Rules:** `validPrefs` allows the key; when present it must be a bool.
 - **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the setting (turning it on or off, or the first preferences save of a new account).
 
+## Meetings layout (D79, 2026-11-17)
+
+- **Setting:** `users/{uid}/prefs/main` gets `meetingsLayout` (`vertical` or `horizontal`). Absent, or a value this build does not know, reads as `vertical`, so documents and clients from before D79 keep working.
+- It saves like the other preferences: only a changed value is written, through the outbox, and a refused save stays in the sync panel with Retry.
+- **Rules:** `validPrefs` allows the key; when present it must be one of the two strings.
+- **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the layout (changing it, or the first preferences save of a new account).
+- The timeline itself stores nothing: it is drawn from the meetings already on the device (D78).
+
 ## Calendar meetings (D78, 2026-11-17)
 
 Details: ADR-020 (Accepted). Plan: `calendar-plan.md` v2.2 in the session notes.

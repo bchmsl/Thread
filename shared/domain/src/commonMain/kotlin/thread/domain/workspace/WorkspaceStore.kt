@@ -28,6 +28,22 @@ enum class TopicsView(
     }
 }
 
+/**
+ * Where Today shows the meetings (D79, Settings "Meetings layout"): [Vertical], the Meetings card at the top of the right
+ * column, or [Horizontal], a timeline across the page above both columns.
+ */
+enum class MeetingsLayout(
+    val id: String,
+) {
+    Vertical("vertical"),
+    Horizontal("horizontal"),
+    ;
+
+    companion object {
+        fun fromId(id: String?): MeetingsLayout? = entries.firstOrNull { it.id == id }
+    }
+}
+
 /** What quick capture makes (D35). */
 enum class CaptureKind(
     val id: String,
@@ -56,6 +72,8 @@ data class WorkspacePrefs(
     val focusBreakMinutes: Int = FocusSettings.DEFAULT_BREAK_MINUTES,
     /** Settings, "Hide empty sections in Today" (D77). Off by default. */
     val hideEmptySections: Boolean = false,
+    /** Settings, "Meetings layout" (D79). Vertical by default, as before D79. */
+    val meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
 ) {
     /** The Focus timer's durations. A value outside its limits reads as kept inside them. */
     val focusSettings: FocusSettings

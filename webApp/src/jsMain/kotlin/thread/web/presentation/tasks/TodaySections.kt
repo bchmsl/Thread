@@ -4,6 +4,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.PullRequestListPage
 import thread.domain.task.TodayTasks
+import thread.domain.workspace.MeetingsLayout
 import thread.web.presentation.external.savedOrNull
 
 /** What Today's Review requested card has to show (D77). */
@@ -36,19 +37,26 @@ internal fun reviewContent(
 /**
  * Which of Today's sections show (D77). Overdue, Earlier planned, Upcoming and No date never show empty (D53). With
  * "Hide empty sections in Today" on, Today, Reminders and Review requested do the same, and each comes back as soon as
- * something arrives. The rule names these sections only: Active and paused Topics always shows, and so does the
- * Meetings card once meetings are set up (D78), even on a day without meetings.
+ * something arrives. The rule names these sections only: Active and paused Topics always shows, and so do the meetings
+ * once they are set up (D78), even on a day without meetings, in either layout (D79).
  *
- * [reminderRows]: today's reminders that have a row to show. [meetings]: the Meetings card shows
- * ([thread.web.presentation.calendar.MeetingsModel.cardShown]).
+ * [reminderRows]: today's reminders that have a row to show. [meetingsShown]: the meetings show
+ * ([thread.web.presentation.calendar.MeetingsModel.cardShown]). [meetingsLayout]: where (D79).
  */
 internal class TodaySections(
     hideEmpty: Boolean,
     tasks: TodayTasks,
     reminderRows: Int,
     reviewContent: ReviewContent,
-    val meetings: Boolean,
+    meetingsShown: Boolean,
+    meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
 ) {
+    /** The Meetings card leads the side column (Vertical). */
+    val meetings: Boolean = meetingsShown && meetingsLayout == MeetingsLayout.Vertical
+
+    /** The meetings timeline runs across the page above both columns (Horizontal). */
+    val timeline: Boolean = meetingsShown && meetingsLayout == MeetingsLayout.Horizontal
+
     val today: Boolean = !hideEmpty || tasks.today.isNotEmpty()
     val reminders: Boolean = !hideEmpty || reminderRows > 0
     val review: Boolean = !hideEmpty || reviewContent != ReviewContent.Nothing
@@ -61,5 +69,5 @@ internal class TodaySections(
     val rail: Boolean = meetings || reminders || review
 
     /** Every section the rule names is empty and hidden, so Today says so in their place. */
-    val nothing: Boolean = !main && !rail
+    val nothing: Boolean = !main && !rail && !timeline
 }

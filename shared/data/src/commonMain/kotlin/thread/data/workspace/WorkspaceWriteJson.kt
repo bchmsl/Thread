@@ -42,6 +42,7 @@ import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
@@ -181,6 +182,7 @@ internal object WorkspaceWriteJson {
             put("focusMin", prefs.focusWorkMinutes)
             put("breakMin", prefs.focusBreakMinutes)
             put("hideEmptySections", prefs.hideEmptySections)
+            put("meetingsLayout", prefs.meetingsLayout.id)
         }
 
     private fun prefs(json: JsonObject): WorkspacePrefs? =
@@ -194,6 +196,8 @@ internal object WorkspaceWriteJson {
             focusBreakMinutes = json.int("breakMin") ?: FocusSettings.DEFAULT_BREAK_MINUTES,
             // Absent in changes saved by builds before D77: off.
             hideEmptySections = json.bool("hideEmptySections") ?: false,
+            // Absent in changes saved by builds before D79: vertical.
+            meetingsLayout = MeetingsLayout.fromId(json.str("meetingsLayout")) ?: MeetingsLayout.Vertical,
         )
 
     private fun task(task: Task): JsonObject =

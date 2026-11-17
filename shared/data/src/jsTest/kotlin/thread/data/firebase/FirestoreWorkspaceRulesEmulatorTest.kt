@@ -220,4 +220,26 @@ class FirestoreWorkspaceRulesEmulatorTest {
             val stranger = env.authenticatedContext(other).firestore()
             assertFails(setDoc(prefsRef(stranger, owner), prefs("hideEmptySections" to true))).await()
         }
+
+    @Test
+    fun theMeetingsLayoutIsAnOptionalVerticalOrHorizontalPreference() =
+        rulesTest { env, owner, other ->
+            val db = env.authenticatedContext(owner).firestore()
+
+            // A document from before D79, then the layout changed by a change of that field only.
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs())).await()
+            mergeSet(prefsRef(db, owner), jsObject("meetingsLayout" to "horizontal", "updatedAt" to serverTimestamp()), db)
+            mergeSet(prefsRef(db, owner), jsObject("meetingsLayout" to "vertical", "updatedAt" to serverTimestamp()), db)
+            // A build that does not know the field still changes the others in a document that has it.
+            mergeSet(prefsRef(db, owner), jsObject("meetingsLayout" to "horizontal", "updatedAt" to serverTimestamp()), db)
+            mergeSet(prefsRef(db, owner), jsObject("hideEmptySections" to true, "updatedAt" to serverTimestamp()), db)
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs("meetingsLayout" to "vertical"))).await()
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs("meetingsLayout" to "horizontal", "hideEmptySections" to false))).await()
+
+            for (value in listOf<Any?>("grid", "Horizontal", "", true, 1, null)) {
+                assertFails(setDoc(prefsRef(db, owner), prefs("meetingsLayout" to value))).await()
+            }
+            val stranger = env.authenticatedContext(other).firestore()
+            assertFails(setDoc(prefsRef(stranger, owner), prefs("meetingsLayout" to "horizontal"))).await()
+        }
 }

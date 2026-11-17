@@ -225,4 +225,13 @@ class RefusedChangesTest {
         assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
         assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
     }
+
+    @Test
+    fun theMeetingsLayoutIsComparedLikeOtherPreferences() {
+        val stored = WorkspacePrefs(meetingsLayout = MeetingsLayout.Horizontal)
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutPrefs(stored, before = WorkspacePrefs())))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
+    }
 }

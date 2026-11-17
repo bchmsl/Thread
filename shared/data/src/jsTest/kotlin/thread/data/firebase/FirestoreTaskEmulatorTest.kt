@@ -13,6 +13,7 @@ import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
 import thread.domain.topic.TopicId
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.createReminderWrite
 import thread.domain.workspace.createTaskWrite
 import thread.domain.workspace.discardTask
@@ -204,6 +205,35 @@ class FirestoreTaskEmulatorTest {
                 assertTrue(store.refused.value.isEmpty())
             } finally {
                 device.backend.close()
+            }
+        }
+
+    @Test
+    fun theMeetingsLayoutSyncsAndStartsVertical() =
+        emulatorTest {
+            val subject = syntheticSubject()
+            val deviceA = EmulatedDevice.signIn(subject)
+            val deviceB = EmulatedDevice.signIn(subject)
+            val storeA = FirestoreWorkspaceStore(deviceA.backend, deviceA.accountId)
+            val storeB = FirestoreWorkspaceStore(deviceB.backend, deviceB.accountId)
+            try {
+                storeA.write(seedWrites())
+                val seeded = storeA.observe().first { it.statuses.size == 4 && !it.pendingWrites }
+                assertEquals(MeetingsLayout.Vertical, seeded.prefs.meetingsLayout, "Vertical by default")
+
+                val horizontal = seeded.prefs.copy(meetingsLayout = MeetingsLayout.Horizontal)
+                storeA.write(listOfNotNull(savePrefs(seeded, horizontal)))
+                val saved = storeA.observe().first { !it.pendingWrites && it.prefs.meetingsLayout == MeetingsLayout.Horizontal }
+                assertEquals(horizontal, saved.prefs, "Only the layout changed")
+                // The other device follows.
+                assertEquals(horizontal, storeB.observe().first { it.prefs.meetingsLayout == MeetingsLayout.Horizontal }.prefs)
+
+                storeA.write(listOfNotNull(savePrefs(saved, saved.prefs.copy(meetingsLayout = MeetingsLayout.Vertical))))
+                storeB.observe().first { it.prefs.meetingsLayout == MeetingsLayout.Vertical }
+                assertTrue(storeA.refused.value.isEmpty())
+            } finally {
+                deviceA.backend.close()
+                deviceB.backend.close()
             }
         }
 }

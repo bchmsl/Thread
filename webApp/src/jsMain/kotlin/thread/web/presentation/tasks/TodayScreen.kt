@@ -65,6 +65,7 @@ import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.calendar.MeetingsModel
 import thread.web.presentation.calendar.MeetingsRail
+import thread.web.presentation.calendar.MeetingsTimeline
 import thread.web.presentation.cardKind
 import thread.web.presentation.dayText
 import thread.web.presentation.external.GitHubModel
@@ -83,9 +84,11 @@ import thread.web.presentation.topics.topicPlace
 
 /**
  * Today (v3 today.html): the date and the personal checklist lead, meetings, reminders and review requests sit on the rail,
- * active and paused Topics below. Each Task shows once, in the first group it qualifies for (D37). Upcoming and No date follow
- * Earlier planned and start closed; every group opens and closes, and this device remembers it (D53). With "Hide empty
- * sections in Today" on, an empty Today, Reminders or Review requested section is left out too (D77); see [TodaySections].
+ * active and paused Topics below. With "Meetings layout" set to Horizontal (D79), the meetings leave the rail for a
+ * timeline across the page, under the heading and above both columns. Each Task shows once, in the first group it
+ * qualifies for (D37). Upcoming and No date follow Earlier planned and start closed; every group opens and closes, and
+ * this device remembers it (D53). With "Hide empty sections in Today" on, an empty Today, Reminders or Review requested
+ * section is left out too (D77); see [TodaySections].
  */
 @Composable
 internal fun TodayScreen(
@@ -142,12 +145,15 @@ internal fun TodayScreen(
             tasks = groups,
             reminderRows = reminders.count { targetInfo(workspace, it.reminder.target) != null },
             reviewContent = reviewContent(gitHub.checked && gitHub.connected, reviews),
-            meetings = meetings.cardShown,
+            meetingsShown = meetings.cardShown,
+            meetingsLayout = workspace.prefs.meetingsLayout,
         )
     val cards = LocalCards.current
+    // D79: Horizontal draws the meetings as a timeline across the page, above both columns.
+    if (sections.timeline) MeetingsTimeline(meetings, zone, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
     if (sections.nothing) {
         NothingForToday()
-    } else {
+    } else if (sections.main || sections.rail) {
         Div({
             classes("today")
             // A column with nothing to show is left out, and the other takes the width (D77).

@@ -100,7 +100,8 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
                 "Preferences: Topics opens as ${write.prefs.topicsView.id}, capture makes a ${write.prefs.captureType.id}, " +
                     "keep completed tasks ${if (write.prefs.keepCompleted) "on" else "off"}, time zone ${write.prefs.timeZone}, " +
                     "focus ${write.prefs.focusWorkMinutes} min, break ${write.prefs.focusBreakMinutes} min, " +
-                    "hide empty sections in Today ${if (write.prefs.hideEmptySections) "on" else "off"}",
+                    "hide empty sections in Today ${if (write.prefs.hideEmptySections) "on" else "off"}, " +
+                    "meetings layout ${write.prefs.meetingsLayout.id}",
             )
         is WorkspaceWrite.PutTask ->
             listOfNotNull(

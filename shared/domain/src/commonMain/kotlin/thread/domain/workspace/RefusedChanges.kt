@@ -174,6 +174,7 @@ private fun WorkspacePrefs.fields(): Map<String, Any?> =
         "focusMin" to focusWorkMinutes,
         "breakMin" to focusBreakMinutes,
         "hideEmptySections" to hideEmptySections,
+        "meetingsLayout" to meetingsLayout,
     )
 
 private fun Task.fields(): Map<String, Any?> =

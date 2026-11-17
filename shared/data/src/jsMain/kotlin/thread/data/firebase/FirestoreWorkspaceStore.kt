@@ -48,6 +48,7 @@ import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicsView
@@ -79,8 +80,10 @@ class WorkspaceReadException(
  *   older build made, and [TopicReminderConverter][thread.domain.workspace.TopicReminderConverter] moves those onto a
  *   Task by changing `targetKind` and `targetId` only.
  * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, focusMin?, breakMin?,
- *   hideEmptySections?, updatedAt, schemaVersion: 1}`. The Focus timer lengths are optional; a document without them
- *   reads as 25 and 5. `hideEmptySections` (D77) is optional too; without it, empty Today sections show.
+ *   hideEmptySections?, meetingsLayout?, updatedAt, schemaVersion: 1}`. The Focus timer lengths are optional; a document
+ *   without them reads as 25 and 5. `hideEmptySections` (D77) is optional too; without it, empty Today sections show.
+ *   So is `meetingsLayout` (D79), `vertical` or `horizontal`; without it, or with a value this build does not know,
+ *   Today's meetings are vertical.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -399,6 +402,7 @@ class FirestoreWorkspaceStore internal constructor(
         if (before == null || before.focusWorkMinutes != prefs.focusWorkMinutes) data.focusMin = prefs.focusWorkMinutes
         if (before == null || before.focusBreakMinutes != prefs.focusBreakMinutes) data.breakMin = prefs.focusBreakMinutes
         if (before == null || before.hideEmptySections != prefs.hideEmptySections) data.hideEmptySections = prefs.hideEmptySections
+        if (before == null || before.meetingsLayout != prefs.meetingsLayout) data.meetingsLayout = prefs.meetingsLayout.id
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -835,6 +839,7 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         focusWorkMinutes = minutesOrNull(data.focusMin, FocusSettings.WORK_MINUTES) ?: FocusSettings.DEFAULT_WORK_MINUTES,
         focusBreakMinutes = minutesOrNull(data.breakMin, FocusSettings.BREAK_MINUTES) ?: FocusSettings.DEFAULT_BREAK_MINUTES,
         hideEmptySections = booleanOrNull(data.hideEmptySections) ?: false,
+        meetingsLayout = MeetingsLayout.fromId(stringOrNull(data.meetingsLayout)) ?: MeetingsLayout.Vertical,
     )
 }
 

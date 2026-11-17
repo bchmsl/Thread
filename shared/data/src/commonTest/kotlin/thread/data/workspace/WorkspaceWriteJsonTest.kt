@@ -3,6 +3,7 @@ package thread.data.workspace
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import thread.domain.calendar.MeetingLink
@@ -33,6 +34,7 @@ import thread.domain.topic.TopicStatus
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.TrashKind
@@ -106,6 +108,7 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutPrefs(WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(focusWorkMinutes = 50, focusBreakMinutes = 10)),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(hideEmptySections = true), before = WorkspacePrefs()),
+            WorkspaceWrite.PutPrefs(WorkspacePrefs(meetingsLayout = MeetingsLayout.Horizontal), before = WorkspacePrefs()),
             WorkspaceWrite.PutFocusSession(focusSession),
             WorkspaceWrite.PutFocusSession(focusSession.copy(id = "f-run-2", outcome = FocusOutcome.Stopped, target = null)),
             WorkspaceWrite.PutTask(task, isNew = true),
@@ -157,6 +160,23 @@ class WorkspaceWriteJsonTest {
         val older = JsonObject(stored + ("value" to JsonObject(value - "hideEmptySections")))
 
         assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+    }
+
+    @Test
+    fun preferencesSavedBeforeTheMeetingsLayoutReadAsVertical() {
+        val prefs = WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")
+        val stored =
+            WorkspaceWriteJson
+                .encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(meetingsLayout = MeetingsLayout.Horizontal))))
+                .single()
+                .jsonObject
+        val value = stored.getValue("value").jsonObject
+        val older = JsonObject(stored + ("value" to JsonObject(value - "meetingsLayout")))
+        val later = JsonObject(stored + ("value" to JsonObject(value + ("meetingsLayout" to JsonPrimitive("grid")))))
+
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+        val unknown = WorkspaceWriteJson.decode(JsonArray(listOf(later)))
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), unknown, "A layout this build does not know reads as vertical")
     }
 
     @Test

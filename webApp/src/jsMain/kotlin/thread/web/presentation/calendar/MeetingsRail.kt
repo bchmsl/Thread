@@ -25,6 +25,7 @@ import thread.domain.calendar.TodayMeeting
 import thread.domain.calendar.isJoinTime
 import thread.domain.calendar.joinServiceOf
 import thread.domain.calendar.todayMeetings
+import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
 import thread.domain.time.clockText
 import thread.domain.topic.Topic
@@ -51,33 +52,18 @@ internal fun MeetingsRail(
     onOpen: (Meeting) -> Unit,
 ) {
     val now = LocalNow.current
-    val state = model.state
-    val rows = if (state is MeetingsState.Ready) todayMeetings(state.meetings, now) else emptyList()
-    val lastSuccess = (state as? MeetingsState.Ready)?.source?.lastSuccessAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), zone) }
-    val notice = meetingsNotice(state, rows.isNotEmpty(), now.day, WallClock.nowMillis().toLong(), lastSuccess)
+    val view = todayMeetingsView(model.state, now, zone)
+    val rows = view.rows
     SectionCard(
         kind = CardKind.Meeting,
         headingId = "mtg-h",
         bodyId = "mtg-b",
         title = "Meetings",
-        count = if (state is MeetingsState.Ready) rows.size.toString() else null,
+        count = view.count,
         attrs = { classes("scard--meet") },
     ) {
-        // Always present, so a change of state is announced; empty while the rows say it all.
-        P({
-            classes("mtg__note")
-            if (notice?.warning == true) classes("is-warn")
-            attr("role", "status")
-        }) {
-            when {
-                state == MeetingsState.Loading -> Span({ classes("vh") }) { Text("Loading meetings") }
-                notice != null -> {
-                    if (notice.warning) IconView(Icon.Alert, 15)
-                    Span { Text(notice.text) }
-                }
-            }
-        }
-        if (state == MeetingsState.Loading || state == MeetingsState.NotSetUp) {
+        MeetingsNote(view)
+        if (view.loading) {
             LoadingRows()
             return@SectionCard
         }
@@ -86,10 +72,64 @@ internal fun MeetingsRail(
                 rows.forEach { row -> key(row.meeting.id.value) { MeetingRow(row, now, topicsOf(row.meeting.seriesKey), onOpen) } }
             }
         }
-        if (lastSuccess != null && notice?.saysTime != true) {
-            P({ classes("mtg__foot") }) { Text(updatedText(lastSuccess, now.day)) }
+        MeetingsFoot(view, now.day)
+    }
+}
+
+/** What both layouts of today's meetings show (D78, D79): the rows, the note above them and the last upload. */
+internal class TodayMeetingsView(
+    val state: MeetingsState,
+    val rows: List<TodayMeeting>,
+    val notice: MeetingsNotice?,
+    /** The Mac app's last upload in the workspace zone. */
+    val lastSuccess: WallTime?,
+) {
+    /** The first answer is on its way: grey placeholders keep the card's place. */
+    val loading: Boolean get() = state == MeetingsState.Loading || state == MeetingsState.NotSetUp
+
+    /** The head's count, once the meetings are known. */
+    val count: String? get() = if (state is MeetingsState.Ready) rows.size.toString() else null
+}
+
+internal fun todayMeetingsView(
+    state: MeetingsState,
+    now: WallTime,
+    zone: String,
+): TodayMeetingsView {
+    val rows = if (state is MeetingsState.Ready) todayMeetings(state.meetings, now) else emptyList()
+    val lastSuccess = (state as? MeetingsState.Ready)?.source?.lastSuccessAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), zone) }
+    val notice = meetingsNotice(state, rows.isNotEmpty(), now.day, WallClock.nowMillis().toLong(), lastSuccess)
+    return TodayMeetingsView(state, rows, notice, lastSuccess)
+}
+
+/** The line at the top of the card. Always present, so a change of state is announced; empty while the rows say it all. */
+@Composable
+internal fun MeetingsNote(view: TodayMeetingsView) {
+    val notice = view.notice
+    P({
+        classes("mtg__note")
+        if (notice?.warning == true) classes("is-warn")
+        attr("role", "status")
+    }) {
+        when {
+            view.state == MeetingsState.Loading -> Span({ classes("vh") }) { Text("Loading meetings") }
+            notice != null -> {
+                if (notice.warning) IconView(Icon.Alert, 15)
+                Span { Text(notice.text) }
+            }
         }
     }
+}
+
+/** "Updated from your Mac at 10:42" closes the card, unless the note already says when. */
+@Composable
+internal fun MeetingsFoot(
+    view: TodayMeetingsView,
+    today: LocalDay,
+) {
+    val lastSuccess = view.lastSuccess ?: return
+    if (view.notice?.saysTime == true) return
+    P({ classes("mtg__foot") }) { Text(updatedText(lastSuccess, today)) }
 }
 
 /** Two grey rows while the first answer loads (aria-busy), so the card keeps its height. */
@@ -182,13 +222,15 @@ private fun MeetingRow(
 /**
  * The meeting's Join link, when it has one on the allowlist: "Join (Teams)", in a new tab, without the opener or the
  * referrer. The link itself is never shown as text: it may hold a passcode. It uses the action style from
- * [thread.domain.calendar.JOIN_LEAD_MINUTES] before the start until the end.
+ * [thread.domain.calendar.JOIN_LEAD_MINUTES] before the start until the end. [small]: a row's "Join". [named]: "Join
+ * Standup", for the timeline's head (D79), where it stands apart from its meeting.
  */
 @Composable
 internal fun JoinLink(
     meeting: Meeting,
     now: WallTime,
     small: Boolean,
+    named: Boolean = false,
 ) {
     val url = meeting.joinUrl ?: return
     val service = joinServiceOf(url) ?: return
@@ -196,13 +238,23 @@ internal fun JoinLink(
     A(url, {
         classes("btn", if (isJoinTime(meeting, now)) "btn--primary" else "btn--line", "mjoin")
         if (small) classes("mjoin--row")
+        if (named) classes("mjoin--named")
         target(ATarget.Blank)
         attr("rel", "noopener noreferrer")
         // A row's Join names its meeting, so a list of Join links can be told apart.
         if (small) attr("aria-label", "$label, ${meeting.displayTitle}")
+        // The name starts with what the link shows, then says the service.
+        if (named) attr("aria-label", "Join ${meeting.displayTitle} (${service.label})")
     }) {
-        // A row is narrow: it shows "Join", and its name says the service.
-        Text(if (small) "Join" else label)
+        when {
+            named -> {
+                Span { Text("Join") }
+                Span({ classes("mjoin__name") }) { Text(meeting.displayTitle) }
+            }
+            // A row is narrow: it shows "Join", and its name says the service.
+            small -> Text("Join")
+            else -> Text(label)
+        }
     }
 }
 
