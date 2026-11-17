@@ -14,7 +14,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** D77: which Today sections show with "Hide empty sections in Today" off and on. SYNTHETIC tasks and pull requests. */
+/**
+ * D77: which Today sections show with "Hide empty sections in Today" off and on, and the Meetings card (D78). SYNTHETIC
+ * tasks and pull requests.
+ */
 class TodaySectionsTest {
     private val task = Task(TaskId("synthetic-task"), "Synthetic task")
     private val noTasks = TodayTasks(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
@@ -49,7 +52,8 @@ class TodaySectionsTest {
 
     @Test
     fun withTheSettingOffEverySectionShowsAsBefore() {
-        val sections = TodaySections(hideEmpty = false, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing)
+        val sections =
+            TodaySections(hideEmpty = false, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetings = false)
         assertTrue(sections.today)
         assertTrue(sections.reminders)
         assertTrue(sections.review)
@@ -60,7 +64,8 @@ class TodaySectionsTest {
 
     @Test
     fun withTheSettingOnEachNamedSectionShowsOnlyWithSomething() {
-        val empty = TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing)
+        val empty =
+            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetings = false)
         assertFalse(empty.today)
         assertFalse(empty.reminders)
         assertFalse(empty.review)
@@ -69,13 +74,15 @@ class TodaySectionsTest {
         assertTrue(empty.nothing, "Today says it has nothing instead of an empty page")
 
         val withToday = noTasks.copy(today = listOf(task))
-        val full = TodaySections(hideEmpty = true, tasks = withToday, reminderRows = 1, reviewContent = ReviewContent.Requests)
+        val full =
+            TodaySections(hideEmpty = true, tasks = withToday, reminderRows = 1, reviewContent = ReviewContent.Requests, meetings = false)
         assertTrue(full.today)
         assertTrue(full.reminders)
         assertTrue(full.review)
         assertFalse(full.nothing)
 
-        val problem = TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Problem)
+        val problem =
+            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Problem, meetings = false)
         assertTrue(problem.review, "GitHub could not answer and nothing is saved: say so")
     }
 
@@ -87,7 +94,8 @@ class TodaySectionsTest {
             noTasks.copy(upcoming = listOf(task)),
             noTasks.copy(noDate = listOf(task)),
         ).forEach { tasks ->
-            val sections = TodaySections(hideEmpty = true, tasks = tasks, reminderRows = 0, reviewContent = ReviewContent.Nothing)
+            val sections =
+                TodaySections(hideEmpty = true, tasks = tasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetings = false)
             assertFalse(sections.today)
             assertTrue(sections.main)
             assertFalse(sections.rail)
@@ -97,16 +105,36 @@ class TodaySectionsTest {
 
     @Test
     fun oneRailCardKeepsTheRailWhileTheMainColumnIsHidden() {
-        val reminders = TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 2, reviewContent = ReviewContent.Nothing)
+        val reminders =
+            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 2, reviewContent = ReviewContent.Nothing, meetings = false)
         assertFalse(reminders.main)
         assertTrue(reminders.rail)
         assertTrue(reminders.reminders)
         assertFalse(reminders.review)
         assertFalse(reminders.nothing)
 
-        val review = TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Requests)
+        val review =
+            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Requests, meetings = false)
         assertTrue(review.rail)
         assertFalse(review.reminders)
         assertTrue(review.review)
+    }
+
+    @Test
+    fun theMeetingsCardStaysWithTheSettingOnEvenWithNoMeetingsToday() {
+        // D77 with D78: once meetings are set up, the card shows, so "No meetings today" is said, not hidden.
+        val meetings =
+            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetings = true)
+        assertTrue(meetings.meetings)
+        assertTrue(meetings.rail)
+        assertFalse(meetings.reminders)
+        assertFalse(meetings.review)
+        assertFalse(meetings.main)
+        assertFalse(meetings.nothing, "Today shows the Meetings card instead of saying it has nothing")
+
+        val notSetUp =
+            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetings = false)
+        assertFalse(notSetUp.rail)
+        assertTrue(notSetUp.nothing)
     }
 }

@@ -25,6 +25,9 @@ internal enum class Icon(
         """<circle cx="7" cy="5.5" r="2"/><circle cx="7" cy="18.5" r="2"/><circle cx="17" cy="8.5" r="2"/>""" +
             """<path d="M7 7.5v9M17 10.5a5 5 0 0 1-5 5H7"/>""",
     ),
+
+    /** A calendar page, the mark of a meeting (D78). Drawn by Thread, like the Today icon without its check. */
+    Calendar("""<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17h3"/>"""),
     Changes("""<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M12 7.5v6M9 10.5h6M9 16.8h6"/>"""),
     Check("""<path d="M5 12.5l4.5 4.5L19 7.5"/>"""),
     Checklist(
@@ -135,6 +138,9 @@ internal enum class Icon(
         """<rect x="6.5" y="5.5" width="3.8" height="13" rx="1" fill="currentColor" stroke="none"/>""" +
             """<rect x="13.7" y="5.5" width="3.8" height="13" rx="1" fill="currentColor" stroke="none"/>""",
     ),
+
+    /** A place: where a meeting is (D78). Drawn by Thread. */
+    Pin("""<path d="M12 20.5s6.5-5.6 6.5-10.8a6.5 6.5 0 0 0-13 0c0 5.2 6.5 10.8 6.5 10.8z"/><circle cx="12" cy="9.8" r="2.3"/>"""),
     Play("""<path d="M8 5.5l11 6.5-11 6.5z" fill="currentColor" stroke="none"/>"""),
     Plus("""<path d="M12 5v14M5 12h14"/>"""),
     Pr(

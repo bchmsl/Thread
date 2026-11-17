@@ -25,6 +25,7 @@ import org.w3c.dom.HTMLTextAreaElement
 import org.w3c.dom.events.Event
 import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.MouseEvent
+import thread.domain.calendar.MeetingId
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.PullRequestRef
 import thread.domain.note.NoteId
@@ -80,6 +81,8 @@ internal class CardOpener(
     fun openJira(key: JiraIssueKey) = open(CardItem(CardType.Jira, key.value))
 
     fun openPr(ref: PullRequestRef) = open(CardItem(CardType.Pr, ref.id))
+
+    fun openMeeting(id: MeetingId) = open(CardItem(CardType.Meeting, id.value))
 
     /** A Topic as a card, wherever it is opened from: Cmd+K (D70, the owner's extra answer). */
     fun openTopicCard(id: TopicId) = open(CardItem(CardType.Topic, id.value))

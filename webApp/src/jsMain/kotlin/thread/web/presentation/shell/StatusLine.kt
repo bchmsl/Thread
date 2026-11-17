@@ -92,7 +92,8 @@ internal class CaptureState(
 
 /**
  * The bottom status line (D35, v3 shell.js buildLine): views, the narrow views button, quick capture, search,
- * [focusTool] (the Focus timer, adr/ADR-019-focus-timer.md), sync status, Trash and Settings.
+ * [meetingTool] (the next meeting, D78), [focusTool] (the Focus timer, adr/ADR-019-focus-timer.md), sync status, Trash
+ * and Settings.
  */
 @Composable
 internal fun StatusLine(
@@ -106,6 +107,7 @@ internal fun StatusLine(
     onOpenViews: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenSync: () -> Unit,
+    meetingTool: @Composable () -> Unit,
     focusTool: @Composable () -> Unit,
 ) {
     var lineElement by remember { mutableStateOf<HTMLElement?>(null) }
@@ -263,6 +265,7 @@ internal fun StatusLine(
                 Span({ classes("tool__label") }) { Text("Search") }
                 Kbd("⌘K")
             }
+            meetingTool()
             focusTool()
             Button({
                 type(ButtonType.Button)

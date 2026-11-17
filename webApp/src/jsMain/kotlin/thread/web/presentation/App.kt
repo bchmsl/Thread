@@ -25,6 +25,7 @@ import org.w3c.dom.HTMLElement
 import thread.domain.account.AccountId
 import thread.domain.account.AccountSession
 import thread.domain.account.AccountState
+import thread.domain.calendar.MeetingStore
 import thread.domain.external.ConnectionSync
 import thread.domain.external.summary
 import thread.domain.focus.FocusRunStore
@@ -46,6 +47,8 @@ import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.copyText
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.presentation.calendar.MeetingTool
+import thread.web.presentation.calendar.MeetingsModel
 import thread.web.presentation.external.BackgroundRefreshProbe
 import thread.web.presentation.external.BackgroundRefresher
 import thread.web.presentation.external.ConnectionSyncModel
@@ -68,6 +71,7 @@ import thread.web.presentation.notes.NOTE_PARAM
 import thread.web.presentation.notes.NoteServices
 import thread.web.presentation.notes.NotesScreen
 import thread.web.presentation.notes.launchNoteWrite
+import thread.web.presentation.settings.CalendarBlock
 import thread.web.presentation.settings.ConnectionsBlock
 import thread.web.presentation.settings.PreferencesBlock
 import thread.web.presentation.settings.SettingsScreen
@@ -103,6 +107,8 @@ class AppServices(
     val conversionBackup: (AccountId) -> ConversionBackup,
     /** One account's Focus timer on this device (adr/ADR-019-focus-timer.md, F2 A). */
     val focusStore: (AccountId) -> FocusRunStore,
+    /** One account's meetings, which the Mac app uploads; read-only (D78, adr/ADR-020-calendar-meetings-sync.md). */
+    val meetingStore: (AccountId) -> MeetingStore,
     /** A new random id with this prefix, for entities made on this device. */
     val newId: (prefix: String) -> String,
     /** Note drafts on this device and Note sync with the server. */
@@ -181,6 +187,10 @@ private fun Workspace(
     // Wall-clock "now" in the workspace zone, refreshed each minute (ADR-010).
     val now by rememberNow(workspace.prefs.timeZone)
     val online by rememberOnline()
+    val zone = workspace.prefs.timeZone
+    val meetings = remember { MeetingsModel(services.meetingStore(signedIn.accountId)) }
+    // Meetings follow the server while Thread is open. After a read error they wait for the next network change.
+    LaunchedEffect(meetings, zone, online) { meetings.follow(zone) }
     var searchOpen by remember { mutableStateOf(false) }
     var syncOpen by remember { mutableStateOf(false) }
     var viewsOpen by remember { mutableStateOf(false) }
@@ -293,7 +303,7 @@ private fun Workspace(
                     place.head == "topic" -> TopicScreen(workspace, jira, gitHub, placeTopicId, cards)
                     view == View.Jira -> JiraScreen(jira, workspace, router, place)
                     view == View.Prs -> PrScreen(gitHub, workspace, router, place)
-                    view == View.Today -> TodayScreen(workspace, gitHub, place.param("add") == "1", openTask, openTarget)
+                    view == View.Today -> TodayScreen(workspace, gitHub, meetings, zone, place.param("add") == "1", openTask, openTarget)
                     view == View.Inbox -> InboxScreen(workspace, router, capture, openTask, openNote)
                     view == View.Notes ->
                         NotesScreen(workspace, router, services.notes, signedIn.accountId, place.param(NOTE_PARAM), syncCenter)
@@ -311,6 +321,7 @@ private fun Workspace(
                     view == View.Settings ->
                         SettingsScreen(signedIn, services.account, services.usesEmulators, place.segment(1)) {
                             ConnectionsBlock(jira, gitHub, connectionSync)
+                            CalendarBlock(meetings, zone)
                             StatusesBlock(workspace)
                             PreferencesBlock(workspace, capture)
                         }
@@ -380,13 +391,14 @@ private fun Workspace(
             onOpenViews = { viewsOpen = true },
             onOpenSearch = { searchOpen = true },
             onOpenSync = { syncOpen = true },
+            meetingTool = { MeetingTool(meetings) { cards.openMeeting(it.id) } },
             focusTool = { FocusTool(focus) { router.replace(router.place.with(FOCUS_PARAM, "1")) } },
         )
         if (dialogs.isEmpty) ToastHost(toasts)
 
         val card = place.card
         if (card != null && legacy == null && workspace.loaded) {
-            CardHost(card, workspace, jira, gitHub, router, cards, services.notes, signedIn.accountId, syncCenter)
+            CardHost(card, workspace, jira, gitHub, router, cards, services.notes, signedIn.accountId, syncCenter, meetings)
         }
         if (place.param(FOCUS_PARAM) != null && workspace.loaded && focus.loaded) {
             FocusPanel(focus, workspace) { router.replace(router.place.with(FOCUS_PARAM, null)) }

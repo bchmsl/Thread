@@ -33,6 +33,9 @@ internal enum class CardKind(
     Topic("topic", Icon.Hex),
     Reminder("time", Icon.Bell),
 
+    /** A work meeting from the Mac app (D78). Read-only. */
+    Meeting("meet", Icon.Calendar),
+
     /** A part of one item, like a pull request's Description: the item's own head carries the kind. */
     Part("part", Icon.Doc),
 

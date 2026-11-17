@@ -10,7 +10,7 @@ import thread.web.presentation.notes.NOTE_PARAM
 
 /**
  * The kinds of item that open as a card on top of the current page (D70), and the URL parameter that opens each:
- * `?task=<id>`, `?note=<id>`, `?jira=<KEY>`, `?pr=<owner/repo#n>`, `?topic=<id>`.
+ * `?task=<id>`, `?note=<id>`, `?jira=<KEY>`, `?pr=<owner/repo#n>`, `?topic=<id>`, `?meeting=<id>`.
  */
 internal enum class CardType(
     val param: String,
@@ -20,6 +20,9 @@ internal enum class CardType(
     Jira("jira"),
     Pr("pr"),
     Topic("topic"),
+
+    /** A meeting from the Mac app (D78). It has no page of its own. */
+    Meeting("meeting"),
 }
 
 /** One card: its kind and the item's id as the URL keeps it. */
@@ -58,7 +61,7 @@ internal fun cardShownByPage(
     item: CardItem,
 ): Boolean =
     when (item.type) {
-        CardType.Task -> false
+        CardType.Task, CardType.Meeting -> false
         CardType.Note -> page.head == View.Notes.id && page.param(NOTE_PARAM) == item.id
         CardType.Topic -> page.head == "topic" && page.segment(1) == item.id
         CardType.Jira -> page.head == View.Jira.id && page.param(JIRA_KEY_PARAM)?.let(JiraIssueKey::parse)?.value == item.id

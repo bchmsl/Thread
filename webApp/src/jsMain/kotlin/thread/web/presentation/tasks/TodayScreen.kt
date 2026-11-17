@@ -63,6 +63,8 @@ import thread.web.presentation.SelectBox
 import thread.web.presentation.TaskCreation
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
+import thread.web.presentation.calendar.MeetingsModel
+import thread.web.presentation.calendar.MeetingsRail
 import thread.web.presentation.cardKind
 import thread.web.presentation.dayText
 import thread.web.presentation.external.GitHubModel
@@ -80,7 +82,7 @@ import thread.web.presentation.topics.topicColor
 import thread.web.presentation.topics.topicPlace
 
 /**
- * Today (v3 today.html): the date and the personal checklist lead, reminders and review requests sit on the rail,
+ * Today (v3 today.html): the date and the personal checklist lead, meetings, reminders and review requests sit on the rail,
  * active and paused Topics below. Each Task shows once, in the first group it qualifies for (D37). Upcoming and No date follow
  * Earlier planned and start closed; every group opens and closes, and this device remembers it (D53). With "Hide empty
  * sections in Today" on, an empty Today, Reminders or Review requested section is left out too (D77); see [TodaySections].
@@ -89,6 +91,8 @@ import thread.web.presentation.topics.topicPlace
 internal fun TodayScreen(
     workspace: WorkspaceModel,
     gitHub: GitHubModel,
+    meetings: MeetingsModel,
+    zone: String,
     startAdding: Boolean,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
@@ -138,7 +142,9 @@ internal fun TodayScreen(
             tasks = groups,
             reminderRows = reminders.count { targetInfo(workspace, it.reminder.target) != null },
             reviewContent = reviewContent(gitHub.checked && gitHub.connected, reviews),
+            meetings = meetings.cardShown,
         )
+    val cards = LocalCards.current
     if (sections.nothing) {
         NothingForToday()
     } else {
@@ -180,8 +186,9 @@ internal fun TodayScreen(
             if (sections.rail) {
                 Aside({
                     classes("today__rail")
-                    attr("aria-label", "Reminders and reviews")
+                    attr("aria-label", if (sections.meetings) "Meetings, reminders and reviews" else "Reminders and reviews")
                 }) {
+                    if (sections.meetings) MeetingsRail(meetings, zone) { cards?.openMeeting(it.id) }
                     if (sections.reminders) RemindersRail(workspace, reminders, onOpenTarget)
                     if (sections.review) ReviewRequestedRail(gitHub, reviews)
                 }

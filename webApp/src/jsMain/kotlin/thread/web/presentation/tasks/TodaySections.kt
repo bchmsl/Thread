@@ -36,16 +36,18 @@ internal fun reviewContent(
 /**
  * Which of Today's sections show (D77). Overdue, Earlier planned, Upcoming and No date never show empty (D53). With
  * "Hide empty sections in Today" on, Today, Reminders and Review requested do the same, and each comes back as soon as
- * something arrives. The rule names these sections only: Active and paused Topics always shows, and so will the
- * calendar's card (#19b).
+ * something arrives. The rule names these sections only: Active and paused Topics always shows, and so does the
+ * Meetings card once meetings are set up (D78), even on a day without meetings.
  *
- * [reminderRows]: today's reminders that have a row to show.
+ * [reminderRows]: today's reminders that have a row to show. [meetings]: the Meetings card shows
+ * ([thread.web.presentation.calendar.MeetingsModel.cardShown]).
  */
 internal class TodaySections(
     hideEmpty: Boolean,
     tasks: TodayTasks,
     reminderRows: Int,
     reviewContent: ReviewContent,
+    val meetings: Boolean,
 ) {
     val today: Boolean = !hideEmpty || tasks.today.isNotEmpty()
     val reminders: Boolean = !hideEmpty || reminderRows > 0
@@ -56,7 +58,7 @@ internal class TodaySections(
         today || listOf(tasks.overdue, tasks.earlier, tasks.upcoming, tasks.noDate).any { it.isNotEmpty() }
 
     /** The side column has a card to show. */
-    val rail: Boolean = reminders || review
+    val rail: Boolean = meetings || reminders || review
 
     /** Every section the rule names is empty and hidden, so Today says so in their place. */
     val nothing: Boolean = !main && !rail

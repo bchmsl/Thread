@@ -6,6 +6,7 @@ import thread.data.external.KeyValueStore
 import thread.data.firebase.FirebaseAccountSession
 import thread.data.firebase.FirebaseBackend
 import thread.data.firebase.FirebaseProjectConfig
+import thread.data.firebase.FirestoreMeetingStore
 import thread.data.firebase.FirestoreNoteSyncRemote
 import thread.data.firebase.FirestoreVaultRemote
 import thread.data.firebase.FirestoreWorkspaceStore
@@ -38,6 +39,7 @@ import thread.domain.external.ConnectionStore
 import thread.domain.external.ConnectionSync
 import thread.domain.note.LocalDraftStore
 import thread.domain.workspace.ConversionBackup
+import thread.web.platform.WallClock
 import thread.web.platform.installZoomGuard
 import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
@@ -79,6 +81,7 @@ fun main() {
             },
             conversionBackup = ::conversionBackup,
             focusStore = { accountId -> IndexedDbFocusRunStore(accountId) },
+            meetingStore = { accountId -> FirestoreMeetingStore(backend, accountId, WallClock::wallTimeAt) },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
             jira =
