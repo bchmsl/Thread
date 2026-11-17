@@ -22,16 +22,16 @@ class ReminderTextTest {
             todayEffect(inTopic, noon, keepCompleted = true, remindAt = WallTime.of(today, 18, 0)),
         )
         assertEquals(
-            "Shows in Today under Upcoming. On its first date it moves to Today.",
+            "Shows in Today under Upcoming. The day before its first date it moves to Tomorrow.",
             todayEffect(inTopic, noon, keepCompleted = true, remindAt = WallTime.of(today.plusDays(2), 9, 0)),
         )
         assertEquals(
-            "Shows in Today under No date. Plan a day, set a deadline or add a reminder to give it one.",
+            "Shows in Today under Upcoming. It has no date: plan a day, set a deadline or add a reminder to give it one.",
             todayEffect(inTopic, noon, keepCompleted = true),
         )
         val inInbox = inTopic.copy(topicId = null, inbox = true)
         assertEquals(
-            "Shows in Today under Upcoming. On its first date it moves to Today.",
+            "Shows in Today under Tomorrow. Tomorrow it moves to Today.",
             todayEffect(inInbox, noon, keepCompleted = true, remindAt = WallTime.of(today.plusDays(1), 9, 0)),
             "an Inbox Task with a reminder shows in Today",
         )

@@ -27,7 +27,6 @@
 [data-k="topic"], [data-k="info"] { --k: var(--tc, var(--fog-300)); }
 /* A card that lists several Topics has no one Topic color. */
 .scard--topics, .atopics { --k: var(--fog-300); }
-.scard--overdue { --k: var(--danger); }
 .dlg { --under: var(--bg-raised); }
 
 /* ---------- Section card: every section and block ---------- */
@@ -58,7 +57,6 @@
 .scard__acts { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
 .scard__body { --under: var(--bg-surface); padding: 12px 16px 16px; }
 .scard__empty, .scard__body > .sect__empty { padding: 2px 2px 4px; font-size: var(--fs-14); color: var(--text-3); }
-.scard--overdue .scard__title { color: var(--danger); }
 
 /* The kind mark: solid in a head, a tinted chip on an item. */
 .kmark {
@@ -69,7 +67,6 @@
 
 /* Bands: Tasks, Reminders and parts stay quiet; the others carry their pattern through a mask colored by --k. */
 :is([data-k="task"], [data-k="time"], [data-k="part"]) > .scard__head { background: color-mix(in srgb, var(--k) 5%, var(--bg-surface)); }
-.scard--overdue > .scard__head { background: color-mix(in srgb, var(--danger) 9%, var(--bg-surface)); }
 .scard__head::before {
   content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
   background: var(--k); opacity: 0.22;

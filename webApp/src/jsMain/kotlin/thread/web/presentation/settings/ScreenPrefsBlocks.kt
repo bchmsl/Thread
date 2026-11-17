@@ -15,6 +15,7 @@ import thread.domain.topic.StatusCategory
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.PAST_MEETINGS_MAX
+import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.todayHiddenWhenEmpty
@@ -34,9 +35,8 @@ import thread.web.presentation.topics.categoryLabel
  */
 
 /**
- * Settings > Today, in the owner's order (D84, D86, D89): Topics open as, Show completed tasks, Hide empty sections,
- * Meetings layout, Show past meetings, Topics shown. Group tasks by takes its place, before Show past meetings, in a
- * later phase.
+ * Settings > Today, in the owner's order (D84, D86, D89, D90): Topics open as, Show completed tasks, Hide empty
+ * sections, Meetings layout, Group tasks by, Show past meetings, Topics shown.
  */
 @Composable
 internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
@@ -62,6 +62,13 @@ internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
             options = MeetingsLayout.entries.map { it to if (it == MeetingsLayout.Vertical) "Vertical" else "Horizontal" },
             picked = prefs.meetingsLayout,
         ) { workspace.setPrefs(workspace.prefs.copy(meetingsLayout = it)) }
+        ChoicePref(
+            labelId = "tg-l",
+            label = "Group tasks by",
+            hint = GROUP_TASKS_HINT,
+            options = TodayGroupBy.entries.map { it to groupByLabel(it) },
+            picked = prefs.todayGroupBy,
+        ) { workspace.setPrefs(workspace.prefs.copy(todayGroupBy = it)) }
         Div({ classes("pref") }) {
             Div {
                 Label("pref-past", { classes("pref__label") }) { Text("Show past meetings") }
@@ -159,6 +166,16 @@ private fun HideEmptyPref(workspace: WorkspaceModel) {
 
 private const val HIDE_EMPTY_HINT =
     "A checked section shows only when it has something. A meetings problem always shows. Empty task groups always hide."
+
+private const val GROUP_TASKS_HINT =
+    "Due date: Completed (when completed tasks show), Today, Tomorrow and Upcoming. Empty groups hide."
+
+private fun groupByLabel(groupBy: TodayGroupBy): String =
+    when (groupBy) {
+        TodayGroupBy.None -> "None"
+        TodayGroupBy.Topic -> "Topic"
+        TodayGroupBy.DueDate -> "Due date"
+    }
 
 private const val PAST_MEETINGS_HINT = "How many ended meetings the Vertical layout keeps, the latest ones. Horizontal shows the whole day."
 
@@ -265,7 +282,7 @@ private fun <T> ChoicePref(
     picked: T,
     onPick: (T) -> Unit,
 ) {
-    Div({ classes("pref") }) {
+    Div({ classes("pref", "pref--choice") }) {
         Div {
             P({
                 classes("pref__label")

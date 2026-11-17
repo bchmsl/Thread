@@ -89,7 +89,7 @@ Include:
 Avoid duplicating the same Task just because it is both planned and overdue.
 Always show Topic context when relevant.
 
-Groups (D37): Overdue, Today, and Earlier planned in the main column.
+Task groups (D90): Settings > Today "Group tasks by" (synced) picks how the main column groups today's Tasks. Due date, the default, has four groups in this order: Completed (only while "Show completed tasks" is on), Today, Tomorrow and Upcoming. Topic has one group per Topic, the one with the most urgent open Task first and "No Topic" last. None is one list. All three show the same Tasks in the same order; only the headings change.
 Reminders and Review requested sit in a side column.
 
 Meetings (D78, ADR-020) head the side column once meetings are set up:
@@ -102,11 +102,13 @@ Meetings (D78, ADR-020) head the side column once meetings are set up:
 - A row opens a read-only Meeting card: when, where, your answer, Join, and its Topics with Link to Topic and Unlink.
 - The status line names the next meeting in the hour before it starts ("Standup in 12 min") and opens its card.
 
-Two more groups follow Earlier planned (D53):
-- Upcoming: open Tasks whose planned day or deadline is after today, by day.
-- No date: open Tasks with no planned day and no deadline, with or without a Topic. A Task waiting in Inbox without dates stays in Inbox only.
+The due-date groups (D90; before it Overdue, Today, Earlier planned, Upcoming and No date, D37 and D53). A Task's first date is the earliest of its planned day, deadline and next reminder (D54):
+- Completed: Tasks completed today, while "Show completed tasks" is on. It starts closed.
+- Today: open Tasks that are overdue, planned, due or reminded today, or planned on an earlier day.
+- Tomorrow: open Tasks whose first date is tomorrow.
+- Upcoming: open Tasks with a later first date, by day, then the ones with no date. A Task waiting in Inbox without dates stays in Inbox only. It starts closed.
 
-Every group opens and closes from its heading. Upcoming and No date start closed, and each device remembers the choice.
+Days follow the workspace time zone. An empty group is not shown. Every group opens and closes from its heading, and each device remembers the choice.
 
 Below the Tasks, Today shows the Topics whose status is in a category checked under "Topics shown" in Settings > Today (D89, synced): Active and Paused by default, and any mix of Planned, Active, Paused and Done. They are grouped by status in Settings order (D59). The section's title names the checked categories: "Active and paused Topics" by default, "Planned and done Topics", "All Topics" for all four. With none checked, Today leaves its Topics out. A List / Board switch picks the layout; List is the default. The choice syncs and is also in Settings > Today (D84); until it is first changed, a device keeps the layout it showed before. On wide screens the Board, like the Topics Board, uses more width and then narrower lanes before it scrolls sideways (D66).
 

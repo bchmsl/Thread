@@ -35,9 +35,14 @@ import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.reminder.TodayReminder
 import thread.domain.reminder.todayReminders
+import thread.domain.task.DueGroup
+import thread.domain.task.DueTaskGroup
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
+import thread.domain.task.dueGroupOf
 import thread.domain.task.firstDayOf
+import thread.domain.task.groupByDue
+import thread.domain.task.groupByTopic
 import thread.domain.task.todayTasks
 import thread.domain.time.clockText
 import thread.domain.topic.StatusCategory
@@ -49,6 +54,7 @@ import thread.domain.topic.statusOf
 import thread.domain.topic.todayStatuses
 import thread.domain.topic.todayTopicGroups
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.todayTopicsLayout
@@ -84,6 +90,7 @@ import thread.web.presentation.taskProblemText
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.StatusLabel
 import thread.web.presentation.topics.TopicHex
+import thread.web.presentation.topics.TopicHexEmpty
 import thread.web.presentation.topics.TopicProgress
 import thread.web.presentation.topics.topicColor
 import thread.web.presentation.topics.topicPlace
@@ -91,10 +98,10 @@ import thread.web.presentation.topics.topicPlace
 /**
  * Today (v3 today.html): the date and the personal checklist lead, meetings, reminders and review requests sit on the rail,
  * the picked Topics below (D89). With "Meetings layout" set to Horizontal (D79), the meetings leave the rail for a
- * timeline across the page, under the heading and above both columns. Each Task shows once, in the first group it
- * qualifies for (D37). Upcoming and No date follow Earlier planned and start closed; every group opens and closes, and
- * this device remembers it (D53). An empty task group is left out; so are the Meetings, Reminders and Review requested
- * sections Settings hides when empty (D77, D86); see [TodaySections].
+ * timeline across the page, under the heading and above both columns. The Tasks are grouped as Settings > Today
+ * "Group tasks by" says (D90); see [TodayTaskGroups]. Every group opens and closes, and this device remembers it (D53).
+ * An empty task group is left out; so are the Meetings, Reminders and Review requested sections Settings hides when
+ * empty (D77, D86); see [TodaySections].
  */
 @Composable
 internal fun TodayScreen(
@@ -113,9 +120,11 @@ internal fun TodayScreen(
     val now = LocalNow.current
     var adding by remember { mutableStateOf(startAdding) }
     var focusAddRequest by remember { mutableStateOf(0) }
-    val groups = todayTasks(workspace.storedTasks, now, workspace.prefs.keepCompleted, workspace.taskReminderTimes)
-    val open = groups.openCount
-    val done = groups.doneCount
+    val remindAt = workspace.taskReminderTimes
+    val tasks = todayTasks(workspace.storedTasks, now, workspace.prefs.keepCompleted, remindAt)
+    // The header counts what is for today, as before D90: later Tasks are not counted (D53).
+    val open = tasks.count { dueGroupOf(it, now, remindAt[it.id]) == DueGroup.Today }
+    val done = tasks.count { it.done }
 
     LaunchedEffect(focusAddRequest) {
         if (focusAddRequest > 0) focusById(if (adding) "today-new" else "today-add")
@@ -152,7 +161,7 @@ internal fun TodayScreen(
     val sections =
         TodaySections(
             hidden = workspace.prefs.todayHiddenWhenEmpty,
-            tasks = groups,
+            hasTasks = tasks.isNotEmpty(),
             reminderRows = reminders.count { targetInfo(workspace, it.reminder.target) != null },
             reviewContent = reviewContent(gitHub.checked && gitHub.connected, reviews),
             meetingsShown = meetings.cardShown,
@@ -171,28 +180,7 @@ internal fun TodayScreen(
             if (!sections.main || !sections.rail) classes("today--one")
         }) {
             if (sections.main) {
-                Div({ classes("today__main") }) {
-                    TaskGroup("overdue", "Overdue", Icon.Alert, groups.overdue, "Deadline passed", openByDefault = true) {
-                        TaskList(groups.overdue, workspace, onOpenTask)
-                    }
-                    // D54: a reminder day counts as a date, so the hints name reminders too.
-                    TaskGroup("today", "Today", Icon.Today, groups.today, "Planned, due or reminded today", openByDefault = true) {
-                        TaskList(groups.today, workspace, onOpenTask)
-                    }
-                    val earlierHint = "Planned before today, still open"
-                    TaskGroup("earlier", "Earlier planned", Icon.Clock, groups.earlier, earlierHint, openByDefault = true) {
-                        TaskList(groups.earlier, workspace, onOpenTask)
-                    }
-                    // D53: the open Tasks the groups above leave out. They start closed.
-                    val upcomingHint = "Planned, due or reminded after today"
-                    TaskGroup("upcoming", "Upcoming", Icon.ArrowRight, groups.upcoming, upcomingHint, openByDefault = false) {
-                        UpcomingList(groups.upcoming, workspace, onOpenTask)
-                    }
-                    val noDateHint = "No planned day, deadline or reminder"
-                    TaskGroup("nodate", "No date", Icon.Task, groups.noDate, noDateHint, openByDefault = false) {
-                        ShortenedList(groups.noDate) { shown -> TaskList(shown, workspace, onOpenTask) }
-                    }
-                }
+                Div({ classes("today__main") }) { TodayTaskGroups(tasks, workspace, onOpenTask) }
             }
             if (sections.rail) {
                 Aside({
@@ -285,28 +273,137 @@ private fun AddForTodayForm(
 }
 
 /**
+ * Today's Tasks ([todayTasks]), grouped as Settings > Today "Group tasks by" says (D90), with the shared task-group rule:
+ *
+ * - Due date, the default: Completed (only while "Show completed tasks" is on), Today, Tomorrow and Upcoming, in the
+ *   owner's order (Q1). Completed and Upcoming start closed (D53).
+ * - Topic: a group per Topic, the one with the most urgent open Task first, "No Topic" last (A4). Each starts open.
+ * - None: one list, in the same order.
+ *
+ * Only the headings change between them: the same Tasks show in the same order (A4). An empty group is not drawn (Q2).
+ * Without headings for the day, the rows say when a Task is planned, today included.
+ */
+@Composable
+private fun TodayTaskGroups(
+    tasks: List<Task>,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+) {
+    val now = LocalNow.current
+    val remindAt = workspace.taskReminderTimes
+    // The Tasks for today, done or not, lead the order. They always show; "Show all" is for the later ones.
+    val todayPart = { list: List<Task> -> list.count { dueGroupOf(it, now, remindAt[it.id]) in TODAY_PART } }
+    when (workspace.prefs.todayGroupBy) {
+        TodayGroupBy.DueDate ->
+            groupByDue(tasks, now, remindAt).forEach { group ->
+                key(group.group.name) { DueGroupCard(group, workspace, onOpenTask) }
+            }
+        TodayGroupBy.Topic ->
+            groupByTopic(tasks, workspace.topics, now, remindAt).forEach { group ->
+                val topic = group.topic
+                val groupKey = if (topic == null) "notopic" else "topic-${topic.id.value}"
+                val name = topic?.name ?: "No Topic"
+                key(groupKey) {
+                    TaskGroup(
+                        key = groupKey,
+                        kind = "topic",
+                        title = name,
+                        mark = Icon.Topics,
+                        tasks = group.tasks,
+                        hint = null,
+                        openByDefault = true,
+                        titleContent = {
+                            Span({ classes("tgroup__topic") }) {
+                                if (topic == null) TopicHexEmpty(HexSize.Xs) else TopicHex(topic.name, topic.color, HexSize.Xs)
+                                Span { Text(name) }
+                            }
+                        },
+                    ) {
+                        ShortenedList(group.tasks, keep = todayPart(group.tasks)) { shown ->
+                            TaskList(shown, workspace, onOpenTask, hideTopic = true, showPlanned = true)
+                        }
+                    }
+                }
+            }
+        TodayGroupBy.None ->
+            TaskGroup("all", "all", "Tasks", Icon.Task, tasks, NONE_HINT, openByDefault = true) {
+                ShortenedList(tasks, keep = todayPart(tasks)) { shown -> TaskList(shown, workspace, onOpenTask, showPlanned = true) }
+            }
+    }
+}
+
+/** The groups whose Tasks always show, before "Show all": what is for today, open or completed. */
+private val TODAY_PART = setOf(DueGroup.Today, DueGroup.Completed)
+
+private const val NONE_HINT = "For today first, then done today, then later and with no date"
+
+/**
+ * One due-date group (D90, Q1), named by its [DueGroup] on this device. Today and Completed show every Task; Tomorrow
+ * and Upcoming the first ones, then "Show all".
+ */
+@Composable
+private fun DueGroupCard(
+    group: DueTaskGroup,
+    workspace: WorkspaceModel,
+    onOpenTask: (Task) -> Unit,
+) {
+    val tasks = group.tasks
+    val key = group.group.name.lowercase()
+    // D54: a reminder day counts as a date, so the hints name reminders too.
+    val (mark, hint) =
+        when (group.group) {
+            DueGroup.Completed -> Icon.Check to "Done today. They leave when the day ends"
+            DueGroup.Today -> Icon.Today to "Overdue, planned, due or reminded today, or planned earlier"
+            DueGroup.Tomorrow -> Icon.Calendar to "Planned, due or reminded tomorrow"
+            DueGroup.Upcoming -> Icon.ArrowRight to "Later dates, then no date"
+        }
+    TaskGroup(key, key, dueGroupTitle(group.group), mark, tasks, hint, openByDefault = group.group in OPEN_DUE_GROUPS) {
+        when (group.group) {
+            DueGroup.Completed, DueGroup.Today -> TaskList(tasks, workspace, onOpenTask)
+            DueGroup.Tomorrow -> ShortenedList(tasks) { shown -> TaskList(shown, workspace, onOpenTask) }
+            DueGroup.Upcoming -> UpcomingList(tasks, workspace, onOpenTask)
+        }
+    }
+}
+
+/** A due-date group's heading, also named by the Task sheet (D90). */
+internal fun dueGroupTitle(group: DueGroup): String =
+    when (group) {
+        DueGroup.Completed -> "Completed"
+        DueGroup.Today -> "Today"
+        DueGroup.Tomorrow -> "Tomorrow"
+        DueGroup.Upcoming -> "Upcoming"
+    }
+
+/** The due-date groups that start open. Completed starts closed, like Topic Details' Completed (A8); Upcoming too (D53). */
+private val OPEN_DUE_GROUPS = setOf(DueGroup.Today, DueGroup.Tomorrow)
+
+/**
  * One group of Today's main column: a Task section card (D68) whose [mark] says which group it is. Its heading is a
  * button that opens and closes it (D53), like a Topic page section; the open count stays in the heading when it is
- * closed. An empty group is not shown, Today too (D86, Q2).
+ * closed, and the Completed group counts its Tasks. [key] names it on this device, [kind] in the page's classes. An
+ * empty group is not shown (D86, Q2).
  */
 @Composable
 private fun TaskGroup(
     key: String,
+    kind: String,
     title: String,
     mark: Icon,
     tasks: List<Task>,
-    hint: String,
+    hint: String?,
     openByDefault: Boolean,
+    titleContent: (@Composable () -> Unit)? = null,
     body: @Composable () -> Unit,
 ) {
     if (tasks.isEmpty()) return
-    var open by remember { mutableStateOf(isGroupOpen(key, openByDefault)) }
+    var open by remember(key) { mutableStateOf(isGroupOpen(key, openByDefault)) }
     SectionCard(
         kind = CardKind.Task,
         headingId = "g-$key",
         bodyId = "gb-$key",
         title = title,
-        count = tasks.count { !it.done }.toString(),
+        count = (if (kind == "completed") tasks.size else tasks.count { !it.done }).toString(),
         open = open,
         onToggle = {
             open = !open
@@ -314,10 +411,8 @@ private fun TaskGroup(
         },
         hint = hint,
         mark = mark,
-        attrs = {
-            classes("tgroup--$key")
-            if (key == "overdue") classes("scard--overdue")
-        },
+        attrs = { classes("tgroup--$kind") },
+        titleContent = titleContent,
         body = body,
     )
 }
@@ -327,14 +422,19 @@ private fun TaskList(
     tasks: List<Task>,
     workspace: WorkspaceModel,
     onOpenTask: (Task) -> Unit,
+    hideTopic: Boolean = false,
+    showPlanned: Boolean = false,
 ) {
     val toasts = LocalToasts.current
     Ul({ classes("tlist") }) {
-        tasks.forEach { task -> key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask) } }
+        tasks.forEach { task -> key(task.id.value) { TaskRow(task, workspace, toasts, onOpenTask, hideTopic, showPlanned) } }
     }
 }
 
-/** Upcoming (D53): the first [LIST_PREVIEW] Tasks under small day headings ("Tomorrow", "Mon 17 Nov"). */
+/**
+ * Upcoming (D53, D90): the first [LIST_PREVIEW] Tasks under small day headings ("Mon 17 Nov"), the ones with no date
+ * last, under "No date".
+ */
 @Composable
 private fun UpcomingList(
     tasks: List<Task>,
@@ -345,22 +445,27 @@ private fun UpcomingList(
     ShortenedList(tasks) { shown ->
         shown.groupBy { firstDayOf(it, workspace.taskReminderTimes[it.id]) }.forEach { (day, onDay) ->
             key(day.toString()) {
-                if (day != null) H3({ classes("tgroup__day") }) { Text(dayText(day, today)) }
+                H3({ classes("tgroup__day") }) { Text(if (day == null) "No date" else dayText(day, today)) }
                 TaskList(onDay, workspace, onOpenTask)
             }
         }
     }
 }
 
-/** The first [LIST_PREVIEW] of [tasks], then a button that shows all of them, and fewer again. */
+/**
+ * The first [keep] Tasks and [LIST_PREVIEW] more, then a button that shows all of them, and fewer again. [keep] is for
+ * the Tasks that must always show.
+ */
 @Composable
 private fun ShortenedList(
     tasks: List<Task>,
+    keep: Int = 0,
     content: @Composable (List<Task>) -> Unit,
 ) {
     var all by remember { mutableStateOf(false) }
-    content(if (all) tasks else tasks.take(LIST_PREVIEW))
-    if (tasks.size > LIST_PREVIEW) {
+    val preview = keep + LIST_PREVIEW
+    content(if (all) tasks else tasks.take(preview))
+    if (tasks.size > preview) {
         Button({
             type(ButtonType.Button)
             classes("btn", "btn--text", "btn--sm", "tgroup__more")
@@ -369,7 +474,7 @@ private fun ShortenedList(
     }
 }
 
-/** Rows Upcoming and No date show before "Show all" (D53). */
+/** Rows a shortened list shows before "Show all" (D53), after the ones it always shows. */
 private const val LIST_PREVIEW = 10
 
 /** Where this device keeps whether a Today group is open: `1` or `0`, per group. Not synced (D53). */

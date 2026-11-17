@@ -574,6 +574,8 @@ main:has(.scard--tl) { max-width: 1600px; }
 /* D77: with empty sections hidden, a column with nothing to show is left out and the other takes the width. */
 .today--one { grid-template-columns: minmax(0, 1fr); }
 .tgroup__day { font: 600 var(--fs-13) var(--font-text); color: var(--text-3); margin: 14px 4px 2px; }
+/* D90: a Topic group's heading, the Topic's sticker on the line before its name, as in a Topic tag. */
+.tgroup__topic { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 /* -6px lines the text up with the day headings (the button has 10px side padding). */
 .tgroup__more { margin: 4px 0 0 -6px; }
 .addrow {
@@ -1005,6 +1007,9 @@ main:has(.board) { max-width: 1520px; }
 .pref__hint { font-size: var(--fs-13); color: var(--text-3); }
 .pref select.input { width: auto; min-width: 150px; }
 .pref .seg { flex-shrink: 0; }
+/* A row of choices (D90): it wraps under the label when the label would get too narrow beside it. */
+.pref--choice { flex-wrap: wrap; }
+.pref--choice > :first-child { flex: 1 1 200px; }
 /* A preference with a few checkboxes (D86): they wrap under the label on a narrow screen. */
 .pref--checks { flex-wrap: wrap; }
 .pref--checks > :first-child { flex: 1 1 260px; }

@@ -65,24 +65,6 @@ fun isOverdue(
     now: WallTime,
 ): Boolean = !task.done && task.deadline?.isPassed(now) == true
 
-/** The groups of Today's main column (D37), in the order a Task is checked against them. */
-enum class TodayGroup {
-    /** The deadline passed. */
-    Overdue,
-
-    /** Planned for today, due later today, or reminded today (D54). */
-    Today,
-
-    /** Planned before today and still open. Nothing moves it automatically. */
-    EarlierPlanned,
-
-    /** Open, and every date it has is after today (D53). */
-    Upcoming,
-
-    /** Open, with no planned day and no deadline, and not waiting in Inbox (D53). */
-    NoDate,
-}
-
 /**
  * The earliest of [task]'s planned day, deadline day and the day of [remindAt], its next reminder (D54), or null when
  * it has none of them.
@@ -93,107 +75,34 @@ fun firstDayOf(
 ): LocalDay? = listOfNotNull(task.plannedDay, task.deadline?.day, remindAt?.day).minOrNull()
 
 /**
- * The one Today group [task] belongs to by its dates, or null when it does not show in Today (v3 `taskGroup`).
- * A Task that qualifies twice, for example planned for today and overdue, is in the first group that matches, so it
- * shows once. A Task in Inbox with no dates is left to Inbox (D38), so it has no group.
- *
- * [remindAt] is the Task's next open reminder ([taskReminderTimes][thread.domain.reminder.taskReminderTimes]). Its day
- * counts as a date (D54). A reminder whose time has come and that is not dismissed yet counts as today.
+ * Whether [task] shows in Today (D37, D53, D90): every open Task, and one completed today while [keepCompleted] is on
+ * (Settings > Today, "Show completed tasks"). A Task waiting in Inbox with no planned day, no deadline and no open
+ * reminder is left to Inbox (D38), done or not. [remindAt] is its next open reminder (D54).
  */
-fun todayGroupOf(
+fun showsInToday(
     task: Task,
     now: WallTime,
+    keepCompleted: Boolean,
     remindAt: WallTime? = null,
-): TodayGroup? {
-    val today = now.day
-    val reminderDay = remindAt?.day?.let { maxOf(it, today) }
-    return when {
-        task.deadline?.isPassed(now) == true -> TodayGroup.Overdue
-        task.plannedDay == today || task.deadline?.day == today || reminderDay == today -> TodayGroup.Today
-        task.plannedDay != null && task.plannedDay < today -> TodayGroup.EarlierPlanned
-        // A deadline before today has passed and an earlier reminder counts as today, so any date left is after today.
-        firstDayOf(task, remindAt) != null -> TodayGroup.Upcoming
-        task.inbox -> null
-        else -> TodayGroup.NoDate
-    }
-}
-
-/** Today's Tasks by group, each Task in one group at most. */
-data class TodayTasks(
-    val overdue: List<Task>,
-    val today: List<Task>,
-    val earlier: List<Task>,
-    /** Open Tasks with dates after today, by their first day (D53). */
-    val upcoming: List<Task>,
-    /** Open Tasks without dates, not in Inbox, newest first (D53). */
-    val noDate: List<Task>,
-) {
-    /** Open Tasks for today: Overdue, Today and Earlier planned. Upcoming and No date are not counted (D53). */
-    val openCount: Int get() = (overdue + today + earlier).count { !it.done }
-
-    val doneCount: Int get() = (overdue + today + earlier).count { it.done }
+): Boolean {
+    if (task.deleted) return false
+    if (task.inbox && task.plannedDay == null && task.deadline == null && remindAt == null) return false
+    return !task.done || (keepCompleted && task.completedOn == now.day)
 }
 
 /**
- * Today's main column (D37, D53, v3 `todayGroups`).
- *
- * - Open Tasks go to the group of [todayGroupOf].
- * - A Task completed today stays while [keepCompleted] is on (Settings, "Keep completed tasks in Today"), in Earlier
- *   planned when it was planned before today, else in Today. It leaves the next day. Upcoming and No date hold open
- *   Tasks only.
- * - A Task in Inbox with no planned day, no deadline and no open reminder does not show, done or not.
- *
- * [remindAt] holds each Task's next open reminder (D54), from [taskReminderTimes][thread.domain.reminder.taskReminderTimes].
- *
- * Overdue is sorted by deadline, Today by open first and then deadline, Earlier planned by planned day. Upcoming is
- * sorted by first day, then the time of a timed deadline or reminder on that day, then creation. No date is newest
- * first.
+ * The Tasks Today shows ([showsInToday]), in [dueOrder]. [remindAt] holds each Task's next open reminder (D54), from
+ * [taskReminderTimes][thread.domain.reminder.taskReminderTimes].
  */
 fun todayTasks(
     tasks: List<Task>,
     now: WallTime,
     keepCompleted: Boolean,
     remindAt: Map<TaskId, WallTime> = emptyMap(),
-): TodayTasks {
-    val overdue = mutableListOf<Task>()
-    val today = mutableListOf<Task>()
-    val earlier = mutableListOf<Task>()
-    val upcoming = mutableListOf<Task>()
-    val noDate = mutableListOf<Task>()
-    liveTasks(tasks).sortedWith(CREATION_ORDER).forEach { task ->
-        val reminder = remindAt[task.id]
-        if (task.inbox && task.plannedDay == null && task.deadline == null && reminder == null) return@forEach
-        val group =
-            when {
-                !task.done -> todayGroupOf(task, now, reminder)
-                !keepCompleted || task.completedOn != now.day -> null
-                // A completed Task is never overdue; one with no Today group of its own stays under Today.
-                else -> todayGroupOf(task, now, reminder).takeIf { it == TodayGroup.EarlierPlanned } ?: TodayGroup.Today
-            }
-        when (group) {
-            TodayGroup.Overdue -> overdue += task
-            TodayGroup.Today -> today += task
-            TodayGroup.EarlierPlanned -> earlier += task
-            TodayGroup.Upcoming -> upcoming += task
-            TodayGroup.NoDate -> noDate += task
-            null -> Unit
-        }
-    }
-    return TodayTasks(
-        overdue = overdue.sortedWith(compareBy(nullsLast()) { it.deadline }),
-        today = today.sortedWith(compareBy<Task> { it.done }.thenBy(nullsLast()) { it.deadline }),
-        earlier = earlier.sortedWith(compareBy(nullsLast()) { it.plannedDay }),
-        // The lists are already in creation order, and sortedWith is stable.
-        upcoming =
-            upcoming.sortedWith(
-                compareBy<Task> { firstDayOf(it, remindAt[it.id]) }.thenBy(nullsLast()) { timeOnFirstDay(it, remindAt[it.id]) },
-            ),
-        noDate = noDate.reversed(),
-    )
-}
+): List<Task> = dueOrder(tasks.filter { showsInToday(it, now, keepCompleted, remindAt[it.id]) }, now, remindAt)
 
 /** The earliest time on [task]'s first day: of a timed deadline or of its next reminder on that day. Null without one. */
-private fun timeOnFirstDay(
+internal fun timeOnFirstDay(
     task: Task,
     remindAt: WallTime?,
 ): Int? {
@@ -207,5 +116,5 @@ private fun timeOnFirstDay(
 fun inboxTasks(tasks: List<Task>): List<Task> = liveTasks(tasks).filter { it.inbox }.sortedWith(CREATION_ORDER.reversed())
 
 /** Oldest first. A Task whose creation time is not known yet is the newest. */
-private val CREATION_ORDER: Comparator<Task> =
+internal val CREATION_ORDER: Comparator<Task> =
     compareBy<Task> { it.createdAtMillis ?: Long.MAX_VALUE }.thenBy { it.id.value }

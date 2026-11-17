@@ -6,9 +6,13 @@ import thread.domain.external.PullRequestListPage
 import thread.domain.external.PullRequestRef
 import thread.domain.external.PullRequestSummary
 import thread.domain.external.Saved
+import thread.domain.task.DueGroup
 import thread.domain.task.Task
 import thread.domain.task.TaskId
-import thread.domain.task.TodayTasks
+import thread.domain.task.dueGroupOf
+import thread.domain.task.todayTasks
+import thread.domain.time.LocalDay
+import thread.domain.time.WallTime
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TodayHideableSection.Meetings
@@ -26,8 +30,6 @@ import kotlin.test.assertTrue
  * requested), empty task groups (always hidden, Q2) and the meetings (D78, D79). SYNTHETIC tasks and pull requests.
  */
 class TodaySectionsTest {
-    private val task = Task(TaskId("synthetic-task"), "Synthetic task")
-    private val noTasks = TodayTasks(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
     private val pull =
         PullRequestSummary(
             ref = PullRequestRef("synthetic-owner", "synthetic-repo", 1),
@@ -46,13 +48,13 @@ class TodaySectionsTest {
 
     private fun sections(
         hidden: Set<TodayHideableSection>,
-        tasks: TodayTasks = noTasks,
+        hasTasks: Boolean = false,
         reminderRows: Int = 0,
         reviewContent: ReviewContent = ReviewContent.Nothing,
         meetingsShown: Boolean = true,
         meetingsContent: Boolean = false,
         layout: MeetingsLayout = MeetingsLayout.Vertical,
-    ) = TodaySections(hidden, tasks, reminderRows, reviewContent, meetingsShown, meetingsContent, layout)
+    ) = TodaySections(hidden, hasTasks, reminderRows, reviewContent, meetingsShown, meetingsContent, layout)
 
     @Test
     fun reviewRequestsCountOnlyWhenThereIsSomethingToActOn() {
@@ -119,16 +121,21 @@ class TodaySectionsTest {
 
     @Test
     fun anyTaskGroupKeepsTheMainColumn() {
-        listOf(
-            noTasks.copy(overdue = listOf(task)),
-            noTasks.copy(today = listOf(task)),
-            noTasks.copy(earlier = listOf(task)),
-            noTasks.copy(upcoming = listOf(task)),
-            noTasks.copy(noDate = listOf(task)),
-        ).forEach { tasks ->
+        val today = LocalDay(2026, 11, 13)
+        val noon = WallTime.of(today, 12, 0)
+        val oneInEachGroup =
+            listOf(
+                Task(TaskId("synthetic-done"), "Synthetic done task", done = true, completedOn = today),
+                Task(TaskId("synthetic-today"), "Synthetic task for today", plannedDay = today),
+                Task(TaskId("synthetic-tomorrow"), "Synthetic task for tomorrow", plannedDay = today.plusDays(1)),
+                Task(TaskId("synthetic-undated"), "Synthetic task with no date"),
+            )
+        assertEquals(DueGroup.entries.toList(), oneInEachGroup.map { dueGroupOf(it, noon) })
+        oneInEachGroup.forEach { task ->
+            val shown = todayTasks(listOf(task), noon, keepCompleted = true)
             everyMix.forEach { hidden ->
-                val withTasks = sections(hidden, tasks = tasks)
-                assertTrue(withTasks.main)
+                val withTasks = sections(hidden, hasTasks = shown.isNotEmpty())
+                assertTrue(withTasks.main, "${task.title} with $hidden")
                 assertFalse(withTasks.nothing, "A task to show with $hidden")
             }
         }

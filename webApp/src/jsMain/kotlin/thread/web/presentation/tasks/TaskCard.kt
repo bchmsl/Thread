@@ -34,17 +34,19 @@ import org.w3c.dom.HTMLTextAreaElement
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.task.Deadline
+import thread.domain.task.DueGroup
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
-import thread.domain.task.TodayGroup
-import thread.domain.task.todayGroupOf
-import thread.domain.task.todayTasks
+import thread.domain.task.dueGroupOf
+import thread.domain.task.firstDayOf
+import thread.domain.task.showsInToday
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
 import thread.domain.time.clockText
 import thread.domain.time.parseClock
 import thread.domain.topic.TopicId
 import thread.domain.workspace.EditResult
+import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.editTask
 import thread.domain.workspace.planTask
 import thread.domain.workspace.trashReminder
@@ -142,7 +144,10 @@ internal fun TaskCard(
             }) { Text(if (task.done) "Reopen task" else "Complete task") }
             P({ classes("ts-effect") }) {
                 IconView(Icon.Today, 16)
-                Span { Text(todayEffect(task, now, workspace.prefs.keepCompleted, workspace.taskReminderTimes[task.id])) }
+                Span {
+                    val prefs = workspace.prefs
+                    Text(todayEffect(task, now, prefs.keepCompleted, workspace.taskReminderTimes[task.id], prefs.todayGroupBy))
+                }
             }
             if (task.inbox) {
                 P({ classes("ts-effect") }) {
@@ -454,31 +459,54 @@ private fun Chip(
 }
 
 /**
- * Why the Task is or is not in Today (v3 todayEffect), so the person never has to guess. [remindAt] is the Task's next
- * reminder that is not dismissed (D54).
+ * Why the Task is or is not in Today (v3 todayEffect), so the person never has to guess, and where Today lists it with
+ * [groupBy] (D90). [remindAt] is the Task's next reminder that is not dismissed (D54).
  */
 internal fun todayEffect(
     task: Task,
     now: WallTime,
     keepCompleted: Boolean,
     remindAt: WallTime? = null,
+    groupBy: TodayGroupBy = TodayGroupBy.DueDate,
 ): String {
+    val group = dueGroupOf(task, now, remindAt)
+    val under =
+        when (groupBy) {
+            TodayGroupBy.DueDate -> " under ${dueGroupTitle(group)}"
+            TodayGroupBy.Topic -> if (task.topicId == null) " under No Topic" else " under its Topic"
+            TodayGroupBy.None -> ""
+        }
     if (task.done) {
-        val reminders = remindAt?.let { mapOf(task.id to it) }.orEmpty()
-        val stays = todayTasks(listOf(task), now, keepCompleted, reminders).let { it.today.isNotEmpty() || it.earlier.isNotEmpty() }
-        return if (stays) "Completed. It stays visible in Today until tomorrow, then leaves." else "Completed. It does not show in Today."
+        val stays = showsInToday(task, now, keepCompleted, remindAt)
+        return if (stays) "Completed. It stays in Today$under until tomorrow, then leaves." else "Completed. It does not show in Today."
     }
-    return when (todayGroupOf(task, now, remindAt)) {
-        TodayGroup.Overdue -> "Shows in Today under Overdue because the deadline passed."
-        TodayGroup.Today ->
-            when {
-                task.plannedDay == now.day -> "Shows in Today under Today because it is planned for today."
-                task.deadline?.day == now.day -> "Shows in Today under Today because it is due today."
-                else -> "Shows in Today under Today because it has a reminder today."
+    val byDate = groupBy == TodayGroupBy.DueDate
+    val today = now.day
+    return when {
+        group == DueGroup.Today -> {
+            val why =
+                when {
+                    task.deadline?.isPassed(now) == true -> "the deadline passed"
+                    task.plannedDay == today -> "it is planned for today"
+                    task.deadline?.day == today -> "it is due today"
+                    remindAt != null && remindAt.day <= today -> "it has a reminder today"
+                    else -> "it was planned for an earlier day. It is not overdue; nothing moves it automatically"
+                }
+            "Shows in Today$under because $why."
+        }
+        group == DueGroup.Tomorrow ->
+            if (byDate) {
+                "Shows in Today under Tomorrow. Tomorrow it moves to Today."
+            } else {
+                "Shows in Today$under. Its first date is tomorrow."
             }
-        TodayGroup.EarlierPlanned -> "Shows in Today under Earlier planned. It is not overdue; nothing moves it automatically."
-        TodayGroup.Upcoming -> "Shows in Today under Upcoming. On its first date it moves to Today."
-        TodayGroup.NoDate -> "Shows in Today under No date. Plan a day, set a deadline or add a reminder to give it one."
-        null -> "Not in Today while it waits in Inbox. Plan a day, set a deadline or add a reminder to see it there."
+        firstDayOf(task, remindAt) != null ->
+            if (byDate) {
+                "Shows in Today under Upcoming. The day before its first date it moves to Tomorrow."
+            } else {
+                "Shows in Today$under. Its first date is after tomorrow."
+            }
+        task.inbox -> "Not in Today while it waits in Inbox. Plan a day, set a deadline or add a reminder to see it there."
+        else -> "Shows in Today$under. It has no date: plan a day, set a deadline or add a reminder to give it one."
     }
 }

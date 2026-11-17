@@ -3,7 +3,6 @@ package thread.web.presentation.tasks
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.PullRequestListPage
-import thread.domain.task.TodayTasks
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TodayHideableSection
 import thread.web.presentation.external.savedOrNull
@@ -36,11 +35,11 @@ internal fun reviewContent(
 }
 
 /**
- * Which of Today's sections show (D77, D86). A task group never shows empty (D53; Today too since D86, Q2). Settings
- * "Hide empty sections" names Meetings, Reminders and Review requested ([hidden], from
- * [thread.domain.workspace.todayHiddenWhenEmpty]): each one named there shows only while it has something, and comes
- * back as soon as something arrives. The Topics card is not one of these: it shows unless "Topics shown" picks no
- * category (D89).
+ * Which of Today's sections show (D77, D86). A task group never shows empty (D53; Today too since D86, Q2): [hasTasks]
+ * says whether Today has a Task to show in any group (D90). Settings "Hide empty sections" names Meetings, Reminders
+ * and Review requested ([hidden], from [thread.domain.workspace.todayHiddenWhenEmpty]): each one named there shows
+ * only while it has something, and comes back as soon as something arrives. The Topics card is not one of these: it
+ * shows unless "Topics shown" picks no category (D89).
  *
  * [reminderRows]: today's reminders that have a row to show. [meetingsShown]: the meetings are set up
  * ([thread.web.presentation.calendar.MeetingsModel.cardShown]). [meetingsContent]: they have something to show
@@ -49,7 +48,7 @@ internal fun reviewContent(
  */
 internal class TodaySections(
     hidden: Set<TodayHideableSection>,
-    tasks: TodayTasks,
+    hasTasks: Boolean,
     reminderRows: Int,
     reviewContent: ReviewContent,
     meetingsShown: Boolean,
@@ -68,7 +67,7 @@ internal class TodaySections(
     val review: Boolean = TodayHideableSection.ReviewRequested !in hidden || reviewContent != ReviewContent.Nothing
 
     /** The main column has a task group to show. */
-    val main: Boolean = listOf(tasks.overdue, tasks.today, tasks.earlier, tasks.upcoming, tasks.noDate).any { it.isNotEmpty() }
+    val main: Boolean = hasTasks
 
     /** The side column has a card to show. */
     val rail: Boolean = meetings || reminders || review
