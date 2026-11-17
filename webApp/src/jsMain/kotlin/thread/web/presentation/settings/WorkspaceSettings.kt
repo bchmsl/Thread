@@ -364,6 +364,15 @@ internal fun PreferencesBlock(
         }
         Div({ classes("pref") }) {
             Div {
+                Label("pref-hide", { classes("pref__label") }) { Text("Hide empty sections in Today") }
+                P({ classes("pref__hint") }) { Text("Today, Reminders and Review requested show only when they have something.") }
+            }
+            CheckBox(prefs.hideEmptySections, label = null, classes = listOf("switch"), id = "pref-hide", switch = true) { on ->
+                workspace.setPrefs(workspace.prefs.copy(hideEmptySections = on))
+            }
+        }
+        Div({ classes("pref") }) {
+            Div {
                 Label("pref-cap", { classes("pref__label") }) { Text("Capture starts as") }
                 P({ classes("pref__hint") }) { Text("The type picked in the bottom bar when a page opens.") }
             }

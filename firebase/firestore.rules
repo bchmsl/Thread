@@ -168,11 +168,12 @@ service cloud.firestore {
       return text is string && text.size() <= 10000;
     }
 
-    // users/{uid}/prefs/main: the workspace preferences. keepCompleted and timeZone arrived in Phase 7, and the Focus
-    // timer lengths in minutes (focusMin, breakMin) in Phase 14, so a document saved before may lack them.
+    // users/{uid}/prefs/main: the workspace preferences. keepCompleted and timeZone arrived in Phase 7, the Focus
+    // timer lengths in minutes (focusMin, breakMin) in Phase 14 and hideEmptySections with D77, so a document saved
+    // before may lack them.
     function validPrefs(prefs) {
-      return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'focusMin', 'breakMin', 'updatedAt',
-          'schemaVersion'])
+      return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'focusMin', 'breakMin',
+          'hideEmptySections', 'updatedAt', 'schemaVersion'])
         && prefs.keys().hasAll(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
         && prefs.schemaVersion == 1
         && prefs.updatedAt == request.time
@@ -181,7 +182,8 @@ service cloud.firestore {
         && (!('keepCompleted' in prefs) || prefs.keepCompleted is bool)
         && (!('timeZone' in prefs) || (prefs.timeZone is string && prefs.timeZone.size() > 0 && prefs.timeZone.size() <= 64))
         && (!('focusMin' in prefs) || (prefs.focusMin is int && prefs.focusMin >= 1 && prefs.focusMin <= 90))
-        && (!('breakMin' in prefs) || (prefs.breakMin is int && prefs.breakMin >= 1 && prefs.breakMin <= 30));
+        && (!('breakMin' in prefs) || (prefs.breakMin is int && prefs.breakMin >= 1 && prefs.breakMin <= 30))
+        && (!('hideEmptySections' in prefs) || prefs.hideEmptySections is bool);
     }
 
     // users/{uid}/focusSessions/f-{runId}: one focus period that ended, or that was stopped after a minute or more.

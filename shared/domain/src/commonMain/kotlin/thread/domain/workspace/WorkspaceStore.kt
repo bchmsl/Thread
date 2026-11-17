@@ -53,6 +53,8 @@ data class WorkspacePrefs(
     val focusWorkMinutes: Int = FocusSettings.DEFAULT_WORK_MINUTES,
     /** The Focus timer's break length in minutes, 1 to 30 (FD1). */
     val focusBreakMinutes: Int = FocusSettings.DEFAULT_BREAK_MINUTES,
+    /** Settings, "Hide empty sections in Today" (D77). Off by default. */
+    val hideEmptySections: Boolean = false,
 ) {
     /** The Focus timer's durations. A value outside its limits reads as kept inside them. */
     val focusSettings: FocusSettings

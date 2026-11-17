@@ -33,6 +33,7 @@ import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
+import thread.domain.reminder.TodayReminder
 import thread.domain.reminder.todayReminders
 import thread.domain.task.TASK_TITLE_MAX_LENGTH
 import thread.domain.task.Task
@@ -56,6 +57,7 @@ import thread.web.presentation.LocalCards
 import thread.web.presentation.LocalNow
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.PageHeader
+import thread.web.presentation.Place
 import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.TaskCreation
@@ -65,6 +67,7 @@ import thread.web.presentation.cardKind
 import thread.web.presentation.dayText
 import thread.web.presentation.external.GitHubModel
 import thread.web.presentation.external.ReviewRequestedRail
+import thread.web.presentation.external.rememberReviewRequested
 import thread.web.presentation.itemCard
 import thread.web.presentation.longDate
 import thread.web.presentation.onPlainClick
@@ -79,7 +82,8 @@ import thread.web.presentation.topics.topicPlace
 /**
  * Today (v3 today.html): the date and the personal checklist lead, reminders and review requests sit on the rail,
  * active and paused Topics below. Each Task shows once, in the first group it qualifies for (D37). Upcoming and No date follow
- * Earlier planned and start closed; every group opens and closes, and this device remembers it (D53).
+ * Earlier planned and start closed; every group opens and closes, and this device remembers it (D53). With "Hide empty
+ * sections in Today" on, an empty Today, Reminders or Review requested section is left out too (D77); see [TodaySections].
  */
 @Composable
 internal fun TodayScreen(
@@ -126,40 +130,79 @@ internal fun TodayScreen(
             focusAddRequest++
         }
     }
-    Div({ classes("today") }) {
-        Div({ classes("today__main") }) {
-            TaskGroup("overdue", "Overdue", Icon.Alert, groups.overdue, "Deadline passed", openByDefault = true) {
-                TaskList(groups.overdue, workspace, onOpenTask)
-            }
-            // D54: a reminder day counts as a date, so the hints name reminders too.
-            TaskGroup("today", "Today", Icon.Today, groups.today, "Planned, due or reminded today", openByDefault = true) {
-                if (groups.today.isEmpty()) {
-                    P({ classes("scard__empty") }) { Text("Nothing planned for today yet.") }
-                } else {
-                    TaskList(groups.today, workspace, onOpenTask)
+    val reminders = todayReminders(workspace.reminders, now)
+    val reviews = rememberReviewRequested(gitHub)
+    val sections =
+        TodaySections(
+            hideEmpty = workspace.prefs.hideEmptySections,
+            tasks = groups,
+            reminderRows = reminders.count { targetInfo(workspace, it.reminder.target) != null },
+            reviewContent = reviewContent(gitHub.checked && gitHub.connected, reviews),
+        )
+    if (sections.nothing) {
+        NothingForToday()
+    } else {
+        Div({
+            classes("today")
+            // A column with nothing to show is left out, and the other takes the width (D77).
+            if (!sections.main || !sections.rail) classes("today--one")
+        }) {
+            if (sections.main) {
+                Div({ classes("today__main") }) {
+                    TaskGroup("overdue", "Overdue", Icon.Alert, groups.overdue, "Deadline passed", openByDefault = true) {
+                        TaskList(groups.overdue, workspace, onOpenTask)
+                    }
+                    // D54: a reminder day counts as a date, so the hints name reminders too.
+                    if (sections.today) {
+                        TaskGroup("today", "Today", Icon.Today, groups.today, "Planned, due or reminded today", openByDefault = true) {
+                            if (groups.today.isEmpty()) {
+                                P({ classes("scard__empty") }) { Text("Nothing planned for today yet.") }
+                            } else {
+                                TaskList(groups.today, workspace, onOpenTask)
+                            }
+                        }
+                    }
+                    val earlierHint = "Planned before today, still open"
+                    TaskGroup("earlier", "Earlier planned", Icon.Clock, groups.earlier, earlierHint, openByDefault = true) {
+                        TaskList(groups.earlier, workspace, onOpenTask)
+                    }
+                    // D53: the open Tasks the groups above leave out. They start closed.
+                    val upcomingHint = "Planned, due or reminded after today"
+                    TaskGroup("upcoming", "Upcoming", Icon.ArrowRight, groups.upcoming, upcomingHint, openByDefault = false) {
+                        UpcomingList(groups.upcoming, workspace, onOpenTask)
+                    }
+                    val noDateHint = "No planned day, deadline or reminder"
+                    TaskGroup("nodate", "No date", Icon.Task, groups.noDate, noDateHint, openByDefault = false) {
+                        ShortenedList(groups.noDate) { shown -> TaskList(shown, workspace, onOpenTask) }
+                    }
                 }
             }
-            TaskGroup("earlier", "Earlier planned", Icon.Clock, groups.earlier, "Planned before today, still open", openByDefault = true) {
-                TaskList(groups.earlier, workspace, onOpenTask)
+            if (sections.rail) {
+                Aside({
+                    classes("today__rail")
+                    attr("aria-label", "Reminders and reviews")
+                }) {
+                    if (sections.reminders) RemindersRail(workspace, reminders, onOpenTarget)
+                    if (sections.review) ReviewRequestedRail(gitHub, reviews)
+                }
             }
-            // D53: the open Tasks the groups above leave out. They start closed.
-            val upcomingHint = "Planned, due or reminded after today"
-            TaskGroup("upcoming", "Upcoming", Icon.ArrowRight, groups.upcoming, upcomingHint, openByDefault = false) {
-                UpcomingList(groups.upcoming, workspace, onOpenTask)
-            }
-            TaskGroup("nodate", "No date", Icon.Task, groups.noDate, "No planned day, deadline or reminder", openByDefault = false) {
-                ShortenedList(groups.noDate) { shown -> TaskList(shown, workspace, onOpenTask) }
-            }
-        }
-        Aside({
-            classes("today__rail")
-            attr("aria-label", "Reminders and reviews")
-        }) {
-            RemindersRail(workspace, onOpenTarget)
-            ReviewRequestedRail(gitHub)
         }
     }
     ActiveTopics(workspace)
+}
+
+/** Where the empty state sends the person: Settings, at Preferences. */
+private val PREFERENCES_PLACE = Place.of("settings", "prefs")
+
+/**
+ * With "Hide empty sections in Today" on and every section it names empty (D77), one line says so in their place.
+ * The page header, its add button and Active and paused Topics stay.
+ */
+@Composable
+private fun NothingForToday() {
+    EmptyState(Icon.Today, "Nothing for today", "No tasks, reminders or review requests. Empty sections are hidden.") {
+        A(PREFERENCES_PLACE.hash, { classes("btn", "btn--line") }) { Text("Change in Settings") }
+    }
 }
 
 /** The v3 add row: planned for today, and in Inbox too when it has no Topic (D38). */
@@ -333,10 +376,9 @@ internal fun keepGroupOpen(
 @Composable
 private fun RemindersRail(
     workspace: WorkspaceModel,
+    list: List<TodayReminder>,
     onOpenTarget: (ReminderTarget) -> Unit,
 ) {
-    val now = LocalNow.current
-    val list = todayReminders(workspace.reminders, now)
     SectionCard(
         kind = CardKind.Reminder,
         headingId = "rem-h",

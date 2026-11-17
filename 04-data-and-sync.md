@@ -277,3 +277,10 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 - **Lengths:** `users/{uid}/prefs/main` gets `focusMin` (1 to 90) and `breakMin` (1 to 30). Absent reads as 25 and 5.
 - **Rules:** `validPrefs` allows the two fields. `focusSessions` can be created with a valid shape and an id matching `f-[A-Za-z0-9_-]{1,64}`, updated only when nothing changes, and never deleted.
 - **Deploy the rules before the build ships.** Until then the server refuses every session, and any preferences save that stores a Focus or Break length (a changed length, or the first preferences save of a new account). They stay in the sync panel with Retry; nothing is lost.
+
+## Hide empty Today sections (D77, 2026-11-17)
+
+- **Setting:** `users/{uid}/prefs/main` gets `hideEmptySections` (bool). Absent reads as false, so documents and clients from before D77 keep working.
+- It saves like the other preferences: only a changed value is written, through the outbox, and a refused save stays in the sync panel with Retry.
+- **Rules:** `validPrefs` allows the key; when present it must be a bool.
+- **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the setting (turning it on or off, or the first preferences save of a new account).

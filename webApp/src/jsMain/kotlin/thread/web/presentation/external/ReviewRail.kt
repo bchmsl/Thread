@@ -10,6 +10,7 @@ import org.jetbrains.compose.web.dom.Ul
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.PullRequestList
+import thread.domain.external.PullRequestListPage
 import thread.web.presentation.CardKind
 import thread.web.presentation.Icon
 import thread.web.presentation.KindMark
@@ -25,9 +26,11 @@ import thread.web.presentation.onPlainClick
  * review state show for pull requests opened on this device.
  */
 @Composable
-internal fun ReviewRequestedRail(gitHub: GitHubModel) {
+internal fun ReviewRequestedRail(
+    gitHub: GitHubModel,
+    view: ExternalView<PullRequestListPage>?,
+) {
     val cards = LocalCards.current
-    val view = if (gitHub.checked && gitHub.connected) rememberPullRequestList(gitHub, PullRequestList.ReviewRequested, 0) else null
     val items = view?.savedOrNull?.value?.items
     SectionCard(
         kind = CardKind.PullRequest,
@@ -102,3 +105,11 @@ internal fun ReviewRequestedRail(gitHub: GitHubModel) {
         }
     }
 }
+
+/**
+ * The Review requested list while Today shows, asked even while its card is hidden (D77), so the card comes back when a
+ * request arrives. Null until GitHub is checked and connected on this device.
+ */
+@Composable
+internal fun rememberReviewRequested(gitHub: GitHubModel): ExternalView<PullRequestListPage>? =
+    if (gitHub.checked && gitHub.connected) rememberPullRequestList(gitHub, PullRequestList.ReviewRequested, 0) else null

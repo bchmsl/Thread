@@ -165,6 +165,7 @@ private fun WorkspacePrefs.fields(): Map<String, Any?> =
         "timeZone" to timeZone,
         "focusMin" to focusWorkMinutes,
         "breakMin" to focusBreakMinutes,
+        "hideEmptySections" to hideEmptySections,
     )
 
 private fun Task.fields(): Map<String, Any?> =

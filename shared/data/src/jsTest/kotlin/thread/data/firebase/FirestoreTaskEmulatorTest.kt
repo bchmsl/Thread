@@ -184,4 +184,26 @@ class FirestoreTaskEmulatorTest {
                 device.backend.close()
             }
         }
+
+    @Test
+    fun theHideEmptySectionsSettingSyncsAndStartsOff() =
+        emulatorTest {
+            val device = EmulatedDevice.signIn(syntheticSubject())
+            val store = FirestoreWorkspaceStore(device.backend, device.accountId)
+            try {
+                store.write(seedWrites())
+                val seeded = store.observe().first { it.statuses.size == 4 && !it.pendingWrites }
+                assertEquals(false, seeded.prefs.hideEmptySections, "Off by default")
+
+                store.write(listOfNotNull(savePrefs(seeded, seeded.prefs.copy(hideEmptySections = true))))
+                val on = store.observe().first { !it.pendingWrites && it.prefsStored && it.prefs.hideEmptySections }
+                assertEquals(seeded.prefs.copy(hideEmptySections = true), on.prefs, "Only the switch changed")
+
+                store.write(listOfNotNull(savePrefs(on, on.prefs.copy(hideEmptySections = false))))
+                store.observe().first { !it.pendingWrites && !it.prefs.hideEmptySections }
+                assertTrue(store.refused.value.isEmpty())
+            } finally {
+                device.backend.close()
+            }
+        }
 }

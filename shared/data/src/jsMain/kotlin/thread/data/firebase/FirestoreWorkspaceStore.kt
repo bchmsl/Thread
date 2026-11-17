@@ -75,8 +75,9 @@ class WorkspaceReadException(
  *   deletedAt, schemaVersion: 1}`. `targetKind` is `task` or `note` since D54; `topic` is still read, for reminders an
  *   older build made, and [TopicReminderConverter][thread.domain.workspace.TopicReminderConverter] moves those onto a
  *   Task by changing `targetKind` and `targetId` only.
- * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, focusMin?, breakMin?, updatedAt,
- *   schemaVersion: 1}`. The Focus timer lengths are optional; a document without them reads as 25 and 5.
+ * - `users/{uid}/prefs/main`: `{topicsView, captureType, keepCompleted, timeZone, focusMin?, breakMin?,
+ *   hideEmptySections?, updatedAt, schemaVersion: 1}`. The Focus timer lengths are optional; a document without them
+ *   reads as 25 and 5. `hideEmptySections` (D77) is optional too; without it, empty Today sections show.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -379,6 +380,7 @@ class FirestoreWorkspaceStore internal constructor(
         if (before == null || before.timeZone != prefs.timeZone) data.timeZone = prefs.timeZone
         if (before == null || before.focusWorkMinutes != prefs.focusWorkMinutes) data.focusMin = prefs.focusWorkMinutes
         if (before == null || before.focusBreakMinutes != prefs.focusBreakMinutes) data.breakMin = prefs.focusBreakMinutes
+        if (before == null || before.hideEmptySections != prefs.hideEmptySections) data.hideEmptySections = prefs.hideEmptySections
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -784,6 +786,7 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         timeZone = stringOrNull(data.timeZone)?.takeIf { it.isNotBlank() } ?: DEFAULT_WORKSPACE_ZONE,
         focusWorkMinutes = minutesOrNull(data.focusMin, FocusSettings.WORK_MINUTES) ?: FocusSettings.DEFAULT_WORK_MINUTES,
         focusBreakMinutes = minutesOrNull(data.breakMin, FocusSettings.BREAK_MINUTES) ?: FocusSettings.DEFAULT_BREAK_MINUTES,
+        hideEmptySections = booleanOrNull(data.hideEmptySections) ?: false,
     )
 }
 

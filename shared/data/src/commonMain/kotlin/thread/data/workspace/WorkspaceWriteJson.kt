@@ -175,6 +175,7 @@ internal object WorkspaceWriteJson {
             put("timeZone", prefs.timeZone)
             put("focusMin", prefs.focusWorkMinutes)
             put("breakMin", prefs.focusBreakMinutes)
+            put("hideEmptySections", prefs.hideEmptySections)
         }
 
     private fun prefs(json: JsonObject): WorkspacePrefs? =
@@ -186,6 +187,8 @@ internal object WorkspaceWriteJson {
             // Absent in changes saved by builds before the Focus timer: the defaults.
             focusWorkMinutes = json.int("focusMin") ?: FocusSettings.DEFAULT_WORK_MINUTES,
             focusBreakMinutes = json.int("breakMin") ?: FocusSettings.DEFAULT_BREAK_MINUTES,
+            // Absent in changes saved by builds before D77: off.
+            hideEmptySections = json.bool("hideEmptySections") ?: false,
         )
 
     private fun task(task: Task): JsonObject =

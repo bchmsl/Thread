@@ -101,6 +101,7 @@ class WorkspaceWriteJsonTest {
             ),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(focusWorkMinutes = 50, focusBreakMinutes = 10)),
+            WorkspaceWrite.PutPrefs(WorkspacePrefs(hideEmptySections = true), before = WorkspacePrefs()),
             WorkspaceWrite.PutFocusSession(focusSession),
             WorkspaceWrite.PutFocusSession(focusSession.copy(id = "f-run-2", outcome = FocusOutcome.Stopped, target = null)),
             WorkspaceWrite.PutTask(task, isNew = true),
@@ -138,6 +139,16 @@ class WorkspaceWriteJsonTest {
         val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(focusWorkMinutes = 50)))).single().jsonObject
         val value = stored.getValue("value").jsonObject
         val older = JsonObject(stored + ("value" to JsonObject(value - "focusMin" - "breakMin")))
+
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+    }
+
+    @Test
+    fun preferencesSavedBeforeHidingEmptySectionsReadAsOff() {
+        val prefs = WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")
+        val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(hideEmptySections = true)))).single().jsonObject
+        val value = stored.getValue("value").jsonObject
+        val older = JsonObject(stored + ("value" to JsonObject(value - "hideEmptySections")))
 
         assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
     }

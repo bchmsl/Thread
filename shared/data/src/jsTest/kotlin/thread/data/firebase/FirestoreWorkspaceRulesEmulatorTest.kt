@@ -199,4 +199,25 @@ class FirestoreWorkspaceRulesEmulatorTest {
             assertFails(setDoc(prefsRef(db, owner), prefs("captureType" to "jira"))).await()
             assertFails(setDoc(prefsRef(db, owner), prefs("token" to "synthetic"))).await()
         }
+
+    @Test
+    fun hidingEmptySectionsIsAnOptionalTrueOrFalsePreference() =
+        rulesTest { env, owner, other ->
+            val db = env.authenticatedContext(owner).firestore()
+
+            // A document from before D77, then the switch turned on and off by a change of that field only.
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs())).await()
+            mergeSet(prefsRef(db, owner), jsObject("hideEmptySections" to true, "updatedAt" to serverTimestamp()), db)
+            mergeSet(prefsRef(db, owner), jsObject("hideEmptySections" to false, "updatedAt" to serverTimestamp()), db)
+            // A build that does not know the field still changes the others in a document that has it.
+            mergeSet(prefsRef(db, owner), jsObject("hideEmptySections" to true, "updatedAt" to serverTimestamp()), db)
+            mergeSet(prefsRef(db, owner), jsObject("keepCompleted" to false, "updatedAt" to serverTimestamp()), db)
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs("hideEmptySections" to false))).await()
+
+            for (value in listOf<Any?>("yes", 1, null)) {
+                assertFails(setDoc(prefsRef(db, owner), prefs("hideEmptySections" to value))).await()
+            }
+            val stranger = env.authenticatedContext(other).firestore()
+            assertFails(setDoc(prefsRef(stranger, owner), prefs("hideEmptySections" to true))).await()
+        }
 }

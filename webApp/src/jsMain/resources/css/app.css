@@ -556,6 +556,8 @@ html:has(dialog:modal) { overflow: hidden; background-color: color-mix(in srgb, 
 .today { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px 56px; align-items: start; }
 .today__main { min-width: 0; }
 .today__rail { display: flex; flex-direction: column; gap: 36px; min-width: 0; }
+/* D77: with empty sections hidden, a column with nothing to show is left out and the other takes the width. */
+.today--one { grid-template-columns: minmax(0, 1fr); }
 .tgroup__day { font: 600 var(--fs-13) var(--font-text); color: var(--text-3); margin: 14px 4px 2px; }
 /* -6px lines the text up with the day headings (the button has 10px side padding). */
 .tgroup__more { margin: 4px 0 0 -6px; }
@@ -595,6 +597,8 @@ html:has(dialog:modal) { overflow: hidden; background-color: color-mix(in srgb, 
 @media (max-width: 1099px) {
   .today { grid-template-columns: minmax(0, 1fr); }
   .today__rail { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  /* The other card is hidden while empty (D77). */
+  .today__rail > .scard:only-child { grid-column: 1 / -1; }
 }
 @media (max-width: 759px) {
   .today__rail { grid-template-columns: minmax(0, 1fr); }
