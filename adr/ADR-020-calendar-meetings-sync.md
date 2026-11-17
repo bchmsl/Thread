@@ -1,6 +1,6 @@
 # ADR-020: Calendar meetings synced through a Mac uploader
 
-Status: Accepted (2026-11-17, D78). The owner approved the direction and the D row before the spike ("Approve (Recommended)"), then ended the spike with "End spike, build (Recommended)". The plan is `calendar-plan.md` v2.2 and the spike report `calendar-spike-report.md`, both in the session notes. Phase P2 lands this ADR with the Firestore rules, their emulator tests and the shared domain types. The Mac app (P3), the web read (P4), Topic links (P5) and search (P5b) follow; the product documents (01 to 05, ADR-005, ADR-009, README) are updated in P6, after the owner's live check.
+Status: Accepted (2026-11-17, D78). The owner approved the direction and the D row before the spike ("Approve (Recommended)"), then ended the spike with "End spike, build (Recommended)". The plan is `calendar-plan.md` v2.2 and the spike report `calendar-spike-report.md`, both in the session notes. Phase P2 lands this ADR with the Firestore rules, their emulator tests and the shared domain types. P3 adds the Mac app (section "Mac app"). The web read (P4), Topic links (P5) and search (P5b) follow; the product documents (01 to 05, ADR-005, ADR-009, README) are updated in P6, after the owner's live check.
 
 ## Context
 
@@ -16,7 +16,7 @@ Status: Accepted (2026-11-17, D78). The owner approved the direction and the D r
 | Source | EventKit, one picked calendar, read-only. Full access is the only level that can read events. |
 | Uploader | "Thread Calendar", a Swift menu bar app in `macCompanion/` (SwiftPM, macOS 14+, Apple Development signing, login item). It never changes events. |
 | Auth | Google "Desktop app" OAuth client (loopback redirect, PKCE, `openid email`), then Firebase `signInWithIdp`, the refresh token in the Keychain. No Firebase SDK. The client ID and secret come from the untracked `macCompanion/oauth-desktop.properties` (ignored by git). |
-| Writes | Firestore REST `commit` with the request-time transform for `updatedAt`; a diff against a local index; at most 250 writes per commit; on change, every 15 minutes, on wake and at day change. |
+| Writes | Firestore REST `commit` with the request-time transform for `updatedAt`; a diff against a local index; at most 250 writes per commit; on change (30 s debounce), every 15 minutes, on wake, at day change and when the network is back. A pass with no changes writes nothing; `meetingSource/main` is rewritten at most every 30 minutes as a heartbeat. |
 | Window | From the start of yesterday to the end of today + 14 days, in the workspace zone. The Mac app deletes what leaves it. |
 | Not stored | Declined and cancelled meetings; attendees, organizer, notes and e-mail addresses. |
 | Ids | Meeting id and series key: SHA-256 of the calendar ids, 32 lowercase hex, so no raw calendar id is stored. A moved occurrence keeps its series key (the `/RID=` suffix is stripped from a recurring id's end; spike U7). |
@@ -51,6 +51,23 @@ Status: Accepted (2026-11-17, D78). The owner approved the direction and the D r
 | `todayKnown`, `isMeetingSourceStale` | "No meetings today" only after a successful pass that covered today; the "Is your Mac awake?" hint after 1 hour |
 | `meetingsForTopic` | One row per linked series, with its next occurrence or the link's title snapshot |
 
+### Mac app (P3, `macCompanion/`)
+
+| Part | Choice |
+|---|---|
+| Layout | SwiftPM, no dependencies: `ThreadCalendarKit` (ids, mapper, join links, differ, Firestore and Auth REST, sign-in, Keychain, sync engine, diagnostics), the `ThreadCalendar` app (menu, EventKit reader, triggers), and tests. Ported from the spike's code and its tests. |
+| Upload pass | Signed in and online, read the picked calendar, map, diff with the local index. Nothing changed and the source written under 30 minutes ago with the same fields: done, no request. Otherwise GET the source first, then the meeting writes in commits of up to 250, `meetingSource/main` last. |
+| Failure states | `noAccess` and `noCalendar` write only the source, with the last good `calendarTitle`, `fromDay`, `toDay` and `lastSuccessAt` (null before any pass); the uploaded meetings stay. |
+| One uploader | Each Mac has a random `uploaderId`. If the source names another one written in the last 24 hours, the pass stops ("Another Mac is uploading meetings") until the owner approves a takeover in the menu. |
+| Strays | Once a day, after sign-in, and when the index is missing, the pass lists the remote ids: it deletes ids the calendar does not have and writes again those the index has but Firestore lost. |
+| Errors | 401: renew the token once, then sign out ("Sign in again"); nothing is deleted. 403: "Upload refused: update Thread Calendar", no retry until Sync now. Other failures wait 1, 5, then 15 minutes. Offline: skip. |
+| Zone | `prefs/main.timeZone`, read at most once an hour; `Asia/Tbilisi` when missing or invalid, as on the web. |
+| Stop syncing | Deletes every uploaded meeting and the source, clears the index, then signs out. Topic links stay. If a delete fails, the account and index stay. |
+| Config | `scripts/build-app.sh` reads the Web API key and project id (`firebase/web-config.properties`) and the Desktop client (`macCompanion/oauth-desktop.properties`) without printing them, into `Config.plist` inside the bundle in the cache build folder. No values: an emulator-only variant with its own bundle id. |
+| Keychain | The Firebase refresh token, uid and e-mail as one generic password item in the login keychain, not synchronizable. The login keychain unlocks at login; the data-protection keychain would need a provisioning profile (spike U11). |
+| Diagnostics | `~/Library/Application Support/ThreadCalendar/`: the last pass's counts and codes, and an event log with keys and values limited to `A-Z a-z 0-9 _ . : -`. No titles, times, links, e-mail, uid or tokens. |
+| Signing | The Apple Development identity, no hardened runtime, unsandboxed. A build fails if an EventKit write call appears. |
+
 ## Consequences
 
 - Meetings show on every device, also while the Mac is asleep, as of its last pass, with that time shown.
@@ -74,3 +91,4 @@ Status: Accepted (2026-11-17, D78). The owner approved the direction and the D r
 
 - **Spike (2026-11-17):** U0 to U4, U8, U9 and U11 pass; U7 passes with the `/RID=` id fix; cancelled meetings are hidden on Exchange; Zoom join links are found. Moved into the build as acceptance checks: the real sign-in, start at login, wake and day change, a night's energy (P3); declined, a response change, Teams join links (P6). The App Sandbox was not tried; the app ships unsandboxed.
 - **P2:** `FirestoreMeetingRulesEmulatorTest` runs every rules-side spike U9 case against these rules in the emulator: the 22 refused meeting shapes and more, UTF-16 sizes, owner updates and deletes, other accounts and signed-out visitors refused, the source's shape and kept `lastSuccessAt`, link ids, and a 250-write commit. The four auth REST cases and the mapper checks of U9 belong to the Mac app's Swift tests (P3). Domain unit tests cover `thread.domain.calendar`.
+- **P3:** Swift tests: the spike's tests ported (ids and the `/RID=` recipe, mapper, join links, differ, encoding, PKCE, loopback), U9's four mapper checks, the 30 s debounce, the 1/5/15 minute backoff, the sync engine against fakes (a quiet pass makes no request, heartbeat, change and delete, failure states, one uploader and takeover, 401, 403, 429, offline, drift counters in the diagnostics, strays, zone, stop syncing), and parity with the rules' field list and join-link pattern. With the emulators: U9's four auth REST cases and the engine against the committed rules (passes accepted; another user's path and a meeting outside the window refused). Still open: the owner's first real sign-in, start at login and a night running.

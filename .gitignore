@@ -14,6 +14,9 @@ local.properties
 firebase/web-config.properties
 # The Mac app's Google "Desktop app" OAuth client (adr/ADR-020-calendar-meetings-sync.md). The owner fills it.
 macCompanion/oauth-desktop.properties
+# Swift build output, if a build runs without the cache scratch path (macCompanion/README.md).
+macCompanion/.build
+macCompanion/.swiftpm
 
 # Firebase CLI and emulator logs
 firebase-debug.log
