@@ -670,6 +670,11 @@ main:has(.board) { max-width: 1520px; }
 .bcard__grip { cursor: grab; color: var(--text-3); width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; }
 .bcard__grip:hover { background: var(--ink-750); color: var(--text); }
 .bcard__next { font-size: var(--fs-13); color: var(--text-2); }
+/* D81: a Topic's Additional information or goal in place of a next Task, in the line's own style. Cards, and rows on a
+   phone, show at most two lines with an ellipsis; a list row keeps its one line. A long link breaks instead of
+   running out of the card. */
+.tabout { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: break-word; }
+.trow2__next > .tabout { display: inline; }
 .bcard__foot { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* ---------------- Topic details ---------------- */
@@ -1043,4 +1048,5 @@ body[data-page="index"] .app { padding-bottom: 48px; }
   .trow2 { grid-template-columns: auto minmax(0, 1fr); }
   .trow2__side { grid-column: 2; grid-row: auto; flex-direction: row; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-top: 6px; }
   .trow2__next { white-space: normal; }
+  .trow2__next > .tabout { display: -webkit-box; }
 }

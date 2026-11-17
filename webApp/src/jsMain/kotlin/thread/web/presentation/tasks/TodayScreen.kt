@@ -43,6 +43,7 @@ import thread.domain.time.clockText
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicGroup
+import thread.domain.topic.TopicLine
 import thread.domain.topic.TopicStatus
 import thread.domain.topic.statusOf
 import thread.domain.topic.todayStatuses
@@ -596,7 +597,7 @@ private fun ActiveRows(
                     }) {
                         TopicHex(topic.name, topic.color, HexSize.Md)
                         Span({ classes("trow2__name") }) { Text(topic.name) }
-                        Span({ classes("trow2__next") }) { NextTask(workspace.nextTask(topic.id)) }
+                        Span({ classes("trow2__next") }) { NextLine(workspace.nextLine(topic)) }
                         Span({ classes("trow2__side") }) { TopicProgress(topic, workspace.progress(topic.id)) }
                     }
                 }
@@ -671,7 +672,7 @@ private fun ActiveCards(
                             Span({ classes("acard__name") }) { Text(topic.name) }
                         }
                         if (showStatus) StatusLabel(statusOf(topic, statuses))
-                        Span({ classes("acard__next") }) { NextTask(workspace.nextTask(topic.id)) }
+                        Span({ classes("acard__next") }) { NextLine(workspace.nextLine(topic)) }
                         Span({ classes("acard__foot") }) { TopicProgress(topic, workspace.progress(topic.id)) }
                     }
                 }
@@ -680,14 +681,20 @@ private fun ActiveCards(
     }
 }
 
-/** D52: the Topic's first open Task, as on the Topics list. */
+/**
+ * A Topic's line, as on the Topics list (D81, refining D52): its first open Task, else its Additional information, else
+ * its goal, at most two lines (css `.tabout`). Today shows no Done Topics, so "Finished." is there for completeness.
+ */
 @Composable
-private fun NextTask(next: Task?) {
-    if (next != null) {
-        B { Text("Next:") }
-        Text(" ${next.title}")
-    } else {
-        Span({ classes("muted") }) { Text("No open tasks.") }
+private fun NextLine(line: TopicLine) {
+    when (line) {
+        is TopicLine.NextTask -> {
+            B { Text("Next:") }
+            Text(" ${line.title}")
+        }
+        is TopicLine.About -> Span({ classes("tabout") }) { Text(line.text) }
+        TopicLine.Finished -> Span({ classes("muted") }) { Text("Finished.") }
+        TopicLine.NoOpenTasks -> Span({ classes("muted") }) { Text("No open tasks.") }
     }
 }
 

@@ -139,7 +139,7 @@ A standalone object is not necessarily an untriaged Inbox object.
 
 - Both List and Board in v1.
 - Default List; remember the last selected view.
-- List shows status, the next open Task (D52), and personal Task progress.
+- List shows status, the next open Task (D52), and personal Task progress. A Topic with no open Task shows its Additional information instead, else its goal (D81); Board cards and Today's Topics do the same.
 - Board columns represent editable statuses, not just the four categories.
 - Drag a Topic to a column to change status.
 - Also provide a non-drag status-change action.

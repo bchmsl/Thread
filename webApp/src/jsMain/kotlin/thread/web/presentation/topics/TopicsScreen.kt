@@ -20,12 +20,12 @@ import org.jetbrains.compose.web.dom.Section
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.Ul
-import thread.domain.task.Task
 import thread.domain.task.TaskProgress
 import thread.domain.topic.StatusCategory
 import thread.domain.topic.StatusId
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicId
+import thread.domain.topic.TopicLine
 import thread.domain.topic.TopicStatus
 import thread.domain.topic.categoryOf
 import thread.domain.topic.statusOf
@@ -148,7 +148,7 @@ private fun TopicsList(
                                 }) {
                                     TopicHex(topic.name, topic.color, HexSize.Md)
                                     Span({ classes("trow2__name") }) { Text(topic.name) }
-                                    Span({ classes("trow2__next") }) { Text(nextLine(workspace.nextTask(topic.id), status)) }
+                                    Span({ classes("trow2__next") }) { NextLine(workspace.nextLine(topic)) }
                                     Span({ classes("trow2__side") }) { TopicProgress(topic, workspace.progress(topic.id)) }
                                 }
                             }
@@ -160,16 +160,19 @@ private fun TopicsList(
     }
 }
 
-/** A Topic row's second line (D52): its first open Task, the one Topic Details lists first. */
-private fun nextLine(
-    next: Task?,
-    status: TopicStatus,
-): String =
-    when {
-        next != null -> "Next: ${next.title}"
-        status.category == StatusCategory.Done -> "Finished"
-        else -> "No open tasks"
+/**
+ * A Topic row's second line (D81, refining D52): its first open Task, the one Topic Details lists first, else its
+ * Additional information, else its goal, at most two lines on a phone (css `.tabout`).
+ */
+@Composable
+private fun NextLine(line: TopicLine) {
+    when (line) {
+        is TopicLine.NextTask -> Text("Next: ${line.title}")
+        is TopicLine.About -> Span({ classes("tabout") }) { Text(line.text) }
+        TopicLine.Finished -> Text("Finished")
+        TopicLine.NoOpenTasks -> Text("No open tasks")
     }
+}
 
 /** The Board: drag a card by its handle to another lane, or use its "Move to" menu (keyboard and touch). */
 @Composable
@@ -232,7 +235,7 @@ private fun TopicsBoard(
                                 key(topic.id) {
                                     BoardCard(
                                         topic = topic,
-                                        next = workspace.nextTask(topic.id),
+                                        line = workspace.nextLine(topic),
                                         progress = workspace.progress(topic.id),
                                         statuses = statuses,
                                         dragging = dragging == topic.id,
@@ -256,7 +259,7 @@ private fun TopicsBoard(
 @Composable
 private fun BoardCard(
     topic: Topic,
-    next: Task?,
+    line: TopicLine,
     progress: TaskProgress,
     statuses: List<TopicStatus>,
     dragging: Boolean,
@@ -287,7 +290,12 @@ private fun BoardCard(
                 attr("aria-hidden", "true")
             }) { IconView(Icon.Grip, 18) }
         }
-        if (next != null) P({ classes("bcard__next") }) { Text("Next: ${next.title}") }
+        // A card with nothing to say shows no line (D52).
+        when (line) {
+            is TopicLine.NextTask -> P({ classes("bcard__next") }) { Text("Next: ${line.title}") }
+            is TopicLine.About -> P({ classes("bcard__next") }) { Span({ classes("tabout") }) { Text(line.text) } }
+            TopicLine.Finished, TopicLine.NoOpenTasks -> Unit
+        }
         Div({ classes("bcard__foot") }) {
             TopicProgress(topic, progress)
             Span({ classes("bcard__move") }) {

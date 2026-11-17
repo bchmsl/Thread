@@ -41,8 +41,11 @@ import thread.domain.topic.StatusId
 import thread.domain.topic.TOPIC_NAME_MAX_LENGTH
 import thread.domain.topic.Topic
 import thread.domain.topic.TopicId
+import thread.domain.topic.TopicLine
 import thread.domain.topic.TopicStatus
+import thread.domain.topic.categoryOf
 import thread.domain.topic.newTopic
+import thread.domain.topic.topicLine
 import thread.domain.topic.topicsInOrder
 import thread.domain.topic.visibleStatuses
 import thread.domain.trash.TrashEntry
@@ -217,8 +220,11 @@ internal class WorkspaceModel(
 
     fun progress(topicId: TopicId): TaskProgress = derived().progress.getOrPut(topicId) { progressOf(topicId, storedTasks) }
 
-    /** The Task a Topic row shows as "Next": its oldest open Task, the first one in Topic Details (D52). */
-    fun nextTask(topicId: TopicId): Task? = derived().nextTasks[topicId]
+    /**
+     * What a Topic row or card says under its name (D81): its oldest open Task, the first one in Topic Details (D52), else
+     * its Additional information, else its goal ([topicLine]).
+     */
+    fun nextLine(topic: Topic): TopicLine = topicLine(topic, derived().nextTasks[topic.id]?.title, categoryOf(topic, statuses))
 
     /** The lists screens read many times per frame, worked out once per store snapshot. */
     private class Derived(

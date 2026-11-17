@@ -64,6 +64,7 @@ Next step: <nextStep>
 
 - Topic Details: the same `pickup` section with the Topic color, titled **Additional information**. One text box, 4 rows, labelled by the heading (`aria-labelledby`), placeholder "Context, links, decisions: anything worth keeping with this Topic". It saves as "Pick up here" did: on blur, a second after typing stops, and when the page leaves it. The section is one column at every width.
 - Topics list rows, Board cards and Today's Active Topics show **"Next: <first open Task>"**: the Topic's oldest open Task, not in Trash, the first one Topic Details lists (`firstOpenTasks`). Without one, a list row shows "Finished" for a Done-category status, else "No open tasks"; a Board card shows nothing; an Active Topics card shows "No open tasks." The old `nextStep` text would freeze once nobody can edit it.
+- Refined by D81 (2026-11-17): without an open Task, all of these show the Topic's Additional information (`topicInfo`, so the old text until it is edited), else its goal, as one line of plain text with no label, before the empty text above (`topicLine`).
 - Search matches the Topic name, goal and `topicInfo(topic)`. Saved `info` hides the old text it replaced.
 - The sync panel's refused-change text shows an "Additional information" line.
 - Suggestions (ADR-017, S1) read `topicInfo(topic)` in place of the two old fields. The reason reads "Mentioned in Additional information".

@@ -190,4 +190,89 @@ class TopicRulesTest {
         val longest = t.copy(leftOff = "x".repeat(TOPIC_TEXT_MAX_LENGTH), nextStep = "y".repeat(TOPIC_TEXT_MAX_LENGTH))
         assertTrue(topicInfo(longest).length <= TOPIC_INFO_MAX_LENGTH, "both old fields at their limit still fit")
     }
+
+    // D81: the line under a Topic's name. Every text below is SYNTHETIC.
+    private val full = topic("a", active).copy(info = "SYNTHETIC context", goal = "SYNTHETIC goal")
+
+    @Test
+    fun anOpenTaskComesFirst() {
+        assertEquals(TopicLine.NextTask("Write tests"), topicLine(full, "Write tests", StatusCategory.Active))
+        assertEquals(TopicLine.NextTask("Write tests"), topicLine(topic("b", active), "Write tests", StatusCategory.Active))
+        assertEquals(TopicLine.NextTask("Ship"), topicLine(full, "Ship", StatusCategory.Done), "an open Task shows in Done too")
+    }
+
+    @Test
+    fun withoutATaskTheAdditionalInformationShows() {
+        val infoOnly = topic("a", active).copy(info = "SYNTHETIC context")
+        assertEquals(TopicLine.About("SYNTHETIC context"), topicLine(infoOnly, null, StatusCategory.Active))
+        assertEquals(TopicLine.About("SYNTHETIC context"), topicLine(full, null, StatusCategory.Active), "before the goal")
+    }
+
+    @Test
+    fun withoutInformationTheGoalShows() {
+        val goalOnly = topic("a", active).copy(goal = "SYNTHETIC goal")
+        assertEquals(TopicLine.About("SYNTHETIC goal"), topicLine(goalOnly, null, StatusCategory.Paused))
+        val blankInfo = goalOnly.copy(info = " \n\t ")
+        assertEquals(TopicLine.About("SYNTHETIC goal"), topicLine(blankInfo, null, StatusCategory.Active), "blank info")
+        assertEquals(TopicLine.About("SYNTHETIC goal"), topicLine(goalOnly.copy(info = ""), null, StatusCategory.Active), "saved empty")
+        assertEquals(
+            TopicLine.About("SYNTHETIC goal"),
+            topicLine(goalOnly.copy(leftOff = "Halfway", info = ""), null, StatusCategory.Active),
+            "a saved empty text does not fall back to the old text, so the goal shows",
+        )
+    }
+
+    @Test
+    fun theOldPickUpTextCountsAsInformation() {
+        val legacy = topic("a", active).copy(leftOff = "Halfway", nextStep = "Call QA", goal = "SYNTHETIC goal")
+        assertEquals(TopicLine.About("Where I left off: Halfway Next step: Call QA"), topicLine(legacy, null, StatusCategory.Active))
+        assertEquals(
+            TopicLine.About("Next step: Call QA"),
+            topicLine(legacy.copy(leftOff = " "), null, StatusCategory.Active),
+            "a blank old part is left out",
+        )
+    }
+
+    @Test
+    fun withNothingToSayTheStatusDecides() {
+        val empty = topic("a", active).copy(info = "  ", goal = "\n")
+        assertEquals(TopicLine.NoOpenTasks, topicLine(empty, null, StatusCategory.Active))
+        assertEquals(TopicLine.NoOpenTasks, topicLine(topic("b", planned), null, StatusCategory.Planned))
+        assertEquals(TopicLine.NoOpenTasks, topicLine(topic("c", paused), null, StatusCategory.Paused))
+        assertEquals(TopicLine.Finished, topicLine(topic("d", done), null, StatusCategory.Done))
+        assertEquals(
+            TopicLine.About("SYNTHETIC goal"),
+            topicLine(topic("e", done).copy(goal = "SYNTHETIC goal"), null, StatusCategory.Done),
+            "a Done Topic with a goal shows it",
+        )
+    }
+
+    @Test
+    fun theTextIsOneLine() {
+        val info = topic("a", active).copy(info = "  First line\n\nSecond\t  line\r\n- third  ")
+        assertEquals(TopicLine.About("First line Second line - third"), topicLine(info, null, StatusCategory.Active))
+    }
+
+    @Test
+    fun aLongTextEndsAtAWordWithAnEllipsis() {
+        val words = "SYNTHETIC context ".repeat(20) // 360 characters
+        val line = topicLine(topic("a", active).copy(info = words), null, StatusCategory.Active) as TopicLine.About
+        assertTrue(line.text.endsWith("context…") || line.text.endsWith("SYNTHETIC…"), line.text)
+        assertTrue(line.text.length <= TOPIC_LINE_MAX_LENGTH + 1, "${line.text.length}")
+        assertTrue(words.startsWith(line.text.dropLast(1)))
+
+        val oneWord = topicLine(topic("b", active).copy(goal = "x".repeat(300)), null, StatusCategory.Active)
+        assertEquals(TopicLine.About("x".repeat(TOPIC_LINE_MAX_LENGTH) + "…"), oneWord)
+
+        val exact = "y".repeat(TOPIC_LINE_MAX_LENGTH)
+        assertEquals(TopicLine.About(exact), topicLine(topic("c", active).copy(info = exact), null, StatusCategory.Active))
+    }
+
+    @Test
+    fun aCutNeverSplitsAnEmoji() {
+        // 199 letters, then an emoji (two UTF-16 units) across the limit.
+        val text = "z".repeat(TOPIC_LINE_MAX_LENGTH - 1) + "🚀" + "z"
+        val line = topicLine(topic("a", active).copy(info = text), null, StatusCategory.Active)
+        assertEquals(TopicLine.About("z".repeat(TOPIC_LINE_MAX_LENGTH - 1) + "…"), line)
+    }
 }

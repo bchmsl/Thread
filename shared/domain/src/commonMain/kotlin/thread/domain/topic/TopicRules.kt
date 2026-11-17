@@ -24,6 +24,63 @@ fun topicInfo(topic: Topic): String =
     ).joinToString("\n\n")
 
 /**
+ * Longest Additional information or goal text a Topic's line carries (D81). Rows and cards show at most two lines, so
+ * this only keeps a link's spoken name and the page short.
+ */
+const val TOPIC_LINE_MAX_LENGTH: Int = 200
+
+/** What a Topic row or card says under its name (D81, refining D52). See [topicLine]. */
+sealed interface TopicLine {
+    /** The Topic's first open Task, the one Topic Details lists first: "Next: <title>". */
+    data class NextTask(
+        val title: String,
+    ) : TopicLine
+
+    /** No open Task: the Additional information, else the goal, as one line of plain text with no label. */
+    data class About(
+        val text: String,
+    ) : TopicLine
+
+    /** Nothing to say, in a Done-category status. */
+    data object Finished : TopicLine
+
+    /** Nothing to say, in any other status. */
+    data object NoOpenTasks : TopicLine
+}
+
+/**
+ * The line under [topic]'s name on its rows and cards (D81, refining D52): its first open Task ([nextTaskTitle]);
+ * without one, its Additional information ([topicInfo], the old "Pick up here" text included); without that, its goal.
+ * Blank text counts as empty. Line breaks and runs of spaces become one space, and a text longer than
+ * [TOPIC_LINE_MAX_LENGTH] ends at a word with "…". With nothing to say, a Topic in a Done-category [category] is
+ * [TopicLine.Finished], any other [TopicLine.NoOpenTasks].
+ */
+fun topicLine(
+    topic: Topic,
+    nextTaskTitle: String?,
+    category: StatusCategory,
+): TopicLine {
+    if (nextTaskTitle != null) return TopicLine.NextTask(nextTaskTitle)
+    val about = oneLine(topicInfo(topic)).ifEmpty { oneLine(topic.goal) }
+    return when {
+        about.isNotEmpty() -> TopicLine.About(about)
+        category == StatusCategory.Done -> TopicLine.Finished
+        else -> TopicLine.NoOpenTasks
+    }
+}
+
+/** [text] on one line, at most [TOPIC_LINE_MAX_LENGTH] characters and the "…" (see [topicLine]). */
+private fun oneLine(text: String): String {
+    val flat = text.trim().replace(WHITESPACE, " ")
+    if (flat.length <= TOPIC_LINE_MAX_LENGTH) return flat
+    val cut = flat.take(TOPIC_LINE_MAX_LENGTH)
+    // At the last space in the second half; a text without one is cut where it reaches the limit, never inside an emoji.
+    val atWord = cut.lastIndexOf(' ').takeIf { it >= TOPIC_LINE_MAX_LENGTH / 2 }?.let(cut::take)
+    val kept = atWord ?: cut.dropLastWhile { it.isHighSurrogate() }
+    return kept.trimEnd() + "…"
+}
+
+/**
  * The statuses of a new workspace: Planned, Active, Paused, Done (01-product-spec.md). The ids are fixed, so two
  * devices that seed the same new workspace write the same documents.
  */

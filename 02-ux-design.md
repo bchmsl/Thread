@@ -78,7 +78,7 @@ Empty state should support quick capture, not just show an illustration.
 ### Topics List
 
 Rows: title, semantic status, next step, personal Task progress.
-The next step is the Topic's first open Task, the oldest one, as Topic Details lists it (D52): "Next: <title>". Without one: "Finished" for a Done-category status, else "No open tasks". Board cards and Today's Active Topics use the same Task; a Board card without one shows no line.
+The next step is the Topic's first open Task, the oldest one, as Topic Details lists it (D52): "Next: <title>". Without one, the line shows the Topic's Additional information, else its goal (D81): plain text with no label, line breaks as spaces, in the line's own colour. Blank text counts as empty. Without any of them: "Finished" for a Done-category status, else "No open tasks". Board cards and Today's Active Topics use the same rule; a Board card with nothing to say shows no line. A list row keeps its one line with an ellipsis on a wide screen; cards, and rows on a phone, show at most two lines with an ellipsis.
 Progress counts personal Tasks only; do not imply Jira completion.
 List / Board toggle preserves selected mode.
 Filtering and sorting controls should remain unobtrusive; exact options are open.
