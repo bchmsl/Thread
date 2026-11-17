@@ -1,6 +1,7 @@
 package thread.domain.external
 
 import thread.domain.note.LinkHref
+import thread.domain.time.LocalDay
 import thread.domain.topic.TopicId
 import kotlin.jvm.JvmInline
 
@@ -39,8 +40,9 @@ data class JiraStatus(
  * A Jira issue as Thread shows it (v3 Jira detail). Read-only. Person fields hold display names.
  *
  * [comments] are the newest comments, oldest first. [commentTotal] counts all comments in Jira. [related] are its
- * issue links, as Jira lists them. [parentKey] is its parent (an Epic, or the ticket a Subtask belongs to); a copy saved
- * before Thread asked for it has none until the next refresh.
+ * issue links, as Jira lists them. [parentKey] is its parent (an Epic, or the ticket a Subtask belongs to). [attachments],
+ * [subtasks], [fixVersions] and [dueDate] are in Jira's order (D75). A copy saved before Thread asked for a field has
+ * none until the next refresh.
  */
 data class JiraIssue(
     val key: JiraIssueKey,
@@ -59,9 +61,26 @@ data class JiraIssue(
     val webUrl: LinkHref?,
     val related: List<JiraRelated> = emptyList(),
     val parentKey: JiraIssueKey? = null,
+    val attachments: List<JiraAttachment> = emptyList(),
+    val subtasks: List<JiraIssueSummary> = emptyList(),
+    val fixVersions: List<String> = emptyList(),
+    val dueDate: LocalDay? = null,
 ) {
     fun summary(): JiraIssueSummary = JiraIssueSummary(key, type, title, status, updatedAtMillis, parentKey)
 }
+
+/**
+ * A file attached to a Jira issue: its name, size in bytes, type and when it was added (D75). Thread never fetches the
+ * file. [openUrl] opens it on the Jira site in a new tab, where Jira asks the person to sign in if needed.
+ */
+data class JiraAttachment(
+    val id: String,
+    val filename: String,
+    val sizeBytes: Long?,
+    val mimeType: String?,
+    val createdAtMillis: Long?,
+    val openUrl: LinkHref?,
+)
 
 /** One issue link: how it relates ("blocks", "is blocked by"), and the other issue as Jira names it. */
 data class JiraRelated(

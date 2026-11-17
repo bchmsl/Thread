@@ -155,6 +155,81 @@ img.ProseMirror-separator {
 .desc--md .ta-center { text-align: center; }
 .desc--md .ta-right { text-align: right; }
 
+/* D74: Jira descriptions and comments use the same look, plus Jira's own kinds; v3 had none of them. A code block can
+   name its language. A decision gets an arrow where a task has its checkbox. A panel is a box tinted in its tone, with
+   the tone's icon, so color never carries the meaning alone (a custom panel's own color is not kept). An expand is the
+   browser's own disclosure, closed at first. A status lozenge keeps Jira's six colors, tuned for the dark theme; text
+   on each fill is at least 7:1. A Jira table keeps every row in the body: header cells sit in the first row or the
+   first column, cells span rows and columns, and a numbered table gets a quiet number column. Each cell draws all four
+   borders and the table hides its outer edge, so a row span never leaves a gap; the box draws the outer edge. Text and
+   cell colors are not kept. */
+.desc--md .md-code { margin: 0 0 12px; }
+.desc--md .md-code__lang { display: block; margin: 0 0 4px; font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--text-3); }
+.desc--md .md-code > pre { margin: 0; }
+.desc--md li.md-decision { list-style: none; position: relative; }
+.desc--md li.md-decision > .icon > svg { position: absolute; left: -1.6em; top: 0.3em; color: var(--cat-done); }
+.adf-panel {
+  --tone: var(--fog-500);
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; margin: 0 0 12px; padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, var(--tone) 32%, transparent); border-radius: 8px;
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+}
+.adf-panel__icon { display: flex; padding-top: 3px; color: var(--tone); }
+.adf-panel__body { min-width: 0; }
+.adf-panel__body > :last-child { margin-bottom: 0; }
+.adf-panel--info { --tone: var(--cat-active); }
+.adf-panel--note { --tone: var(--topic-purple); }
+.adf-panel--success { --tone: var(--cat-done); }
+.adf-panel--warning { --tone: var(--warning); }
+.adf-panel--error { --tone: var(--danger); }
+.adf-panel--neutral { background: var(--ink-800); border-color: var(--border-strong); }
+.adf-expand { margin: 0 0 12px; border: 1px solid var(--border); border-radius: 8px; }
+.adf-expand__sum {
+  display: flex; gap: 8px; align-items: center; min-height: 40px; padding: 8px 12px; border-radius: 7px;
+  list-style: none; cursor: pointer; font-weight: 600; color: var(--text); overflow-wrap: anywhere;
+}
+.adf-expand__sum::-webkit-details-marker { display: none; }
+.adf-expand__sum:hover { background: var(--bg-hover); }
+.adf-expand__sum .i { flex: none; color: var(--text-3); transition: transform 0.15s ease; }
+.adf-expand[open] > .adf-expand__sum { border-radius: 7px 7px 0 0; }
+.adf-expand[open] > .adf-expand__sum .i { transform: rotate(90deg); }
+.adf-expand__body { padding: 4px 14px 12px 36px; }
+.adf-expand__body > :last-child { margin-bottom: 0; }
+.adf-st {
+  display: inline-block; max-width: 100%; padding: 0 6px; border-radius: 4px; vertical-align: 1px;
+  font-size: 11px; line-height: 18px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.adf-st--neutral { background: #2c3446; color: #d3d9e6; }
+.adf-st--purple { background: #3a2d5c; color: #ddccff; }
+.adf-st--blue { background: #1d3a66; color: #b3d4ff; }
+.adf-st--red { background: #5c2328; color: #ffc4c0; }
+.adf-st--yellow { background: #4d3b0c; color: #ffe08a; }
+.adf-st--green { background: #1c3d2f; color: #94e3b5; }
+.desc--md .adf-table { border-style: hidden; }
+.desc--md .adf-table tbody tr :is(th, td) { border: 1px solid var(--border); }
+.desc--md .adf-table :is(th, td) > :last-child { margin-bottom: 0; }
+.desc--md .adf-table .adf-num {
+  width: 1%; padding: 7px 10px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
+  color: var(--text-3); background: var(--ink-850);
+}
+
+/* D75: a Jira ticket's attachments as a list: the file's kind icon, its name (a link that opens it in Jira, in a new
+   tab) and a line with its type, size and when it was added. Sub-tasks use the related-issues rows, with their status
+   on the right. v3 had neither. */
+.att { list-style: none; margin: 0; padding: 0; }
+.att__row { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); }
+.att__row:first-child { border-top: 0; padding-top: 2px; }
+.att__icon { display: flex; padding-top: 1px; color: var(--text-3); }
+.att__main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.att__name { font-size: var(--fs-14); font-weight: 550; color: var(--text); overflow-wrap: anywhere; }
+.att__name .i { margin-left: 5px; vertical-align: -1px; color: var(--text-3); }
+.att__meta { font-size: var(--fs-13); color: var(--text-3); }
+/* A sub-task's status stays on its first line, even when a long title wraps on a phone. */
+.rel--sub li { flex-wrap: nowrap; }
+.rel--sub li > :first-child { flex: 1 1 auto; min-width: 0; }
+.rel--sub .jst { flex: none; }
+
 /* Phase 12: a change the server refused gets Retry, Copy and Discard under its line in the sync panel. v3 only had
    the line and its red state (owner-review-queue Q14, adr/ADR-009-workspace-entities-and-sync.md). */
 .syncp__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

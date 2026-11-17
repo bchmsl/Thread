@@ -61,7 +61,11 @@ class GitHubMarkdownTest {
             is Table -> (block.header + block.rows.flatten()).flatMap { it.content }
             is Code -> listOf(ExternalInline.Text(block.text))
             is Unsupported -> listOf(ExternalInline.Text(block.kind))
-            is ExternalBlock.Rich, Rule -> emptyList()
+            // Jira's kinds (D74); GitHub Markdown never makes them.
+            is ExternalBlock.BlockTable -> block.rows.flatMap { row -> row.cells.flatMap { it.blocks.flatMap(::inlines) } }
+            is ExternalBlock.Panel -> block.blocks.flatMap(::inlines)
+            is ExternalBlock.Expand -> block.blocks.flatMap(::inlines)
+            Rule -> emptyList()
         }
 
     private fun ExternalDocument.text(): String = inlines().joinToString("") { if (it is ExternalInline.Text) it.text else "\n" }

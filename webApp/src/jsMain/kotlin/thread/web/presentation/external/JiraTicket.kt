@@ -42,6 +42,7 @@ import thread.web.presentation.topics.TopicTag
 import thread.web.presentation.topics.TopicsPickerDialog
 import thread.web.presentation.topics.topicPlace
 import thread.web.presentation.topics.topicProblemText
+import kotlin.js.Date
 
 /** The id of a ticket's title (v3 `xd-title`). Opening a ticket moves focus there. */
 internal const val XD_TITLE_ID = "xd-title"
@@ -51,7 +52,8 @@ internal val CONNECTIONS_PLACE: Place = Place.of("settings", "connections")
 
 /**
  * One Jira ticket (v3 `X.jiraDetail`), read-only: the copy on screen and when it is from, the Topics it is linked to,
- * Link to Topic, Create Topic from ticket, Open in Jira, then description, comments, related issues and fields.
+ * Link to Topic, Create Topic from ticket, Open in Jira, then description, attachments and sub-tasks (D75), comments,
+ * related issues and fields.
  * [heading1] on the ticket's own page. A related ticket links to [relatedHref]; [onOpenRelated] may open it in place
  * instead and returns true when it did.
  */
@@ -141,8 +143,8 @@ private fun JiraArticle(
 ) {
     val reference = jira.reference(issue.key)
     val level = partLevel(heading1)
-    // The ticket as cards (D68): the head card, then Description, Comments and Related issues on the left, Details and
-    // Topics on the right.
+    // The ticket as cards (D68): the head card, then Description, Attachments and Sub-tasks when there are some (D75),
+    // Comments and Related issues on the left, Details and Topics on the right.
     DetailCards(
         kind = CardKind.Jira,
         heading1 = heading1,
@@ -170,8 +172,30 @@ private fun JiraArticle(
                 if (issue.description.blocks.isEmpty()) {
                     P({ classes("scard__empty") }) { Text("No description.") }
                 } else {
-                    Div({ classes("desc") }) { ExternalDocumentView(issue.description, DocumentSource.Jira) }
+                    Div({ classes("desc", "desc--md") }) { ExternalDocumentView(issue.description, DocumentSource.Jira) }
                 }
+            }
+            if (issue.attachments.isNotEmpty()) {
+                SectionCard(
+                    kind = CardKind.Part,
+                    headingId = "xd-att-h",
+                    bodyId = "xd-att-b",
+                    title = "Attachments",
+                    count = issue.attachments.size.toString(),
+                    level = level,
+                    mark = Icon.Attach,
+                ) { JiraAttachments(issue.attachments, linksHidden = jira.isSynthetic) }
+            }
+            if (issue.subtasks.isNotEmpty()) {
+                SectionCard(
+                    kind = CardKind.Part,
+                    headingId = "xd-sub-h",
+                    bodyId = "xd-sub-b",
+                    title = "Sub-tasks",
+                    count = issue.subtasks.size.toString(),
+                    level = level,
+                    mark = Icon.Checklist,
+                ) { Subtasks(issue, jira, relatedHref, onOpenRelated) }
             }
             SectionCard(
                 kind = CardKind.Part,
@@ -199,7 +223,9 @@ private fun JiraArticle(
                     Field("Priority", issue.priority)
                     Field("Assignee", issue.assignee)
                     Field("Reporter", issue.reporter)
+                    Field("Due", issue.dueDate?.let { dueDayText(it, Date(Times.now().toDouble()).getFullYear()) })
                     Field("Sprint", issue.sprint)
+                    Field("Fix versions", issue.fixVersions.joinToString(", ").ifEmpty { null })
                     Field("Labels", issue.labels.joinToString(", ").ifEmpty { null })
                     Field("Updated", issue.updatedAtMillis?.let { Times.whenText(it) })
                 }
@@ -322,26 +348,57 @@ private fun RelatedIssues(
             val type = related.type ?: saved?.type
             Li {
                 Span({ classes("rel__type") }) { Text(related.relation) }
-                if (title != null && jira.canShow(related.key.value)) {
-                    A(relatedHref(related.key), {
-                        classes("lnk")
-                        attr("data-key", related.key.value)
-                        // A click with a modifier key follows the link, so the ticket opens in a new tab.
-                        onClick { if (isPlainClick(it.nativeEvent) && onOpenRelated(related.key)) it.preventDefault() }
-                    }) {
-                        if (type != null) JiraTypeIcon(type)
-                        B { Text(related.key.value) }
-                        Text(" $title")
-                    }
-                } else {
-                    Span {
-                        if (type != null) JiraTypeIcon(type)
-                        B { Text(related.key.value) }
-                        Text(" ")
-                        Span({ classes("muted") }) { Text(if (title != null) "$title (not on this device)" else "not shared with you") }
-                    }
-                }
+                TicketLink(related.key, type, title, jira, relatedHref, onOpenRelated)
             }
+        }
+    }
+}
+
+/** A ticket's sub-tasks (D75), as Jira listed them with this ticket, each with its status. */
+@Composable
+private fun Subtasks(
+    issue: JiraIssue,
+    jira: JiraModel,
+    relatedHref: (JiraIssueKey) -> String,
+    onOpenRelated: (JiraIssueKey) -> Boolean,
+) {
+    Ul({ classes("rel", "rel--sub") }) {
+        issue.subtasks.forEach { subtask ->
+            Li {
+                TicketLink(subtask.key, subtask.type, subtask.title, jira, relatedHref, onOpenRelated)
+                subtask.status?.let { JiraStatusLozenge(it) }
+            }
+        }
+    }
+}
+
+/** Another ticket: a link when it can be shown here, else its key and why not. */
+@Composable
+private fun TicketLink(
+    key: JiraIssueKey,
+    type: String?,
+    title: String?,
+    jira: JiraModel,
+    relatedHref: (JiraIssueKey) -> String,
+    onOpenRelated: (JiraIssueKey) -> Boolean,
+) {
+    if (title != null && jira.canShow(key.value)) {
+        A(relatedHref(key), {
+            classes("lnk")
+            attr("data-key", key.value)
+            // A click with a modifier key follows the link, so the ticket opens in a new tab.
+            onClick { if (isPlainClick(it.nativeEvent) && onOpenRelated(key)) it.preventDefault() }
+        }) {
+            if (type != null) JiraTypeIcon(type)
+            B { Text(key.value) }
+            Text(" $title")
+        }
+    } else {
+        Span {
+            if (type != null) JiraTypeIcon(type)
+            B { Text(key.value) }
+            Text(" ")
+            Span({ classes("muted") }) { Text(if (title != null) "$title (not on this device)" else "not shared with you") }
         }
     }
 }
@@ -369,7 +426,7 @@ private fun Comments(issue: JiraIssue) {
                         Text(comment.author ?: "Someone")
                         comment.createdAtMillis?.let { Span({ classes("cmt__at") }) { Text(Times.whenText(it)) } }
                     }
-                    Div({ classes("cmt__x", "desc") }) { ExternalDocumentView(comment.body, DocumentSource.Jira) }
+                    Div({ classes("cmt__x", "desc", "desc--md") }) { ExternalDocumentView(comment.body, DocumentSource.Jira) }
                 }
             }
         }

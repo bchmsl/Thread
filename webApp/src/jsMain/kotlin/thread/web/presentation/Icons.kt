@@ -13,6 +13,12 @@ internal enum class Icon(
     ArrowDown("""<path d="M12 5v13.5M6.5 13l5.5 5.5 5.5-5.5"/>"""),
     ArrowRight("""<path d="M5 12h13.5M13 6.5l5.5 5.5-5.5 5.5"/>"""),
     ArrowUp("""<path d="M12 19V5.5M6.5 11L12 5.5l5.5 5.5"/>"""),
+
+    /** A paper clip, the mark of a Jira ticket's Attachments card (D75). Drawn by Thread. */
+    Attach(
+        """<path d="M19.5 11.5l-7.6 7.6a4.8 4.8 0 0 1-6.8-6.8l8.2-8.2a3.2 3.2 0 0 1 4.5 4.5l-8.1 8.1a1.6 1.6 0 0 1-2.3-2.3""" +
+            """l7.4-7.4"/>""",
+    ),
     Bell("""<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.8a2.1 2.1 0 0 0 4 0"/>"""),
     Bold("""<path d="M7.5 5h5.5a3.5 3.5 0 0 1 0 7H7.5zM7.5 12h6.5a3.5 3.5 0 0 1 0 7H7.5z" stroke-width="2.1"/>"""),
     Branch(
@@ -86,10 +92,16 @@ internal enum class Icon(
 
     /** A Topic's hex, the kind mark of a Topic card (owner change #12). */
     Hex("""<polygon points="12,3 19.8,7.5 19.8,16.5 12,21 4.2,16.5 4.2,7.5"/>"""),
+
+    /** A picture file in a Jira ticket's attachments (D75). Drawn by Thread. */
+    Image("""<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 15.5l-4.5-4.5-8.5 8"/>"""),
     Inbox(
         """<path d="M3.5 13.5L6.5 5h11l3 8.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19z"/>""" +
             """<path d="M3.5 13.5h4.5l1.5 2.5h5l1.5-2.5h4.5"/>""",
     ),
+
+    /** A Jira info panel (D74). Drawn by Thread. */
+    Info("""<circle cx="12" cy="12" r="8.3"/><path d="M12 11v5.5M12 7.8v.1"/>"""),
     Italic("""<path d="M10.5 5h8M5.5 19h8M14.5 5l-5 14"/>"""),
     Jira(
         """<path d="M4 7.5A2 2 0 0 1 6 5.5h12a2 2 0 0 1 2 2v2.2a2.3 2.3 0 0 0 0 4.6v2.2a2 2 0 0 1-2 2H6a2 2 0 0""" +

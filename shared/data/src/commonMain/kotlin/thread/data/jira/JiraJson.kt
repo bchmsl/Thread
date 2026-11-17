@@ -12,11 +12,13 @@ import thread.data.external.asObject
 import thread.data.external.bool
 import thread.data.external.copy
 import thread.data.external.int
+import thread.data.external.long
 import thread.data.external.obj
 import thread.data.external.objects
 import thread.data.external.pick
 import thread.data.external.putIfNotNull
 import thread.data.external.str
+import thread.domain.external.JiraAttachment
 import thread.domain.external.JiraComment
 import thread.domain.external.JiraFamily
 import thread.domain.external.JiraIssue
@@ -28,26 +30,35 @@ import thread.domain.external.JiraSite
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
 import thread.domain.note.LinkHref
+import thread.domain.time.LocalDay
 
 /**
  * Reads Jira REST v3 answers (adr/ADR-006).
  *
- * [bundle] cuts the issue and comment answers down to what Thread shows: no account ids, e-mails, avatars or other
- * fields. The bundle is what the device stores, and [issue] reads it, so a fresh answer and a saved copy go through
- * the same code.
+ * [bundle] cuts the issue and comment answers down to what Thread shows: no account ids (also none in the mentions of
+ * the description and comments), e-mails, avatars or other fields. Of an attachment it keeps the name, size, type and
+ * date, not who added it or its file links (D75). The bundle is what the device stores, and [issue] reads it, so a
+ * fresh answer and a saved copy go through the same code.
  */
 internal object JiraJson {
     /** The schema type of Jira Software's Sprint field. Its field id differs per site, so `/field` finds it. */
     const val SPRINT_SCHEMA: String = "com.pyxis.greenhopper.jira:gh-sprint"
 
-    /** An opened ticket's fields. Of `parent` only the key is kept, to nest linked tickets in a Topic (D64). */
-    const val ISSUE_FIELDS: String = "summary,issuetype,status,priority,assignee,reporter,labels,updated,description,issuelinks,parent"
+    /**
+     * An opened ticket's fields. Of `parent` only the key is kept, to nest linked tickets in a Topic (D64). Attachments,
+     * sub-tasks, fix versions and the due date come in the same answer (D75).
+     */
+    const val ISSUE_FIELDS: String =
+        "summary,issuetype,status,priority,assignee,reporter,labels,updated,description,issuelinks,parent," +
+            "attachment,subtasks,fixVersions,duedate"
 
     /** The fields of a list or search row (v3 `jiraRow`). */
     const val SUMMARY_FIELDS: String = "summary,issuetype,status,updated"
 
     /** The row fields and the parent, for the Topic suggestion search (D49 S4). Only the parent's key is kept. */
     const val FAMILY_FIELDS: String = "$SUMMARY_FIELDS,parent"
+
+    private val ATTACHMENT_ID = Regex("^[0-9]{1,20}$")
 
     fun sprintFieldId(fields: JsonElement): String? =
         fields
@@ -79,12 +90,19 @@ internal object JiraJson {
                     putIfNotNull("reporter", fields.obj("reporter")?.pick("displayName"))
                     copy(fields, "labels")
                     copy(fields, "updated")
-                    copy(fields, "description")
+                    putIfNotNull("description", AdfMapper.forStorage(fields["description"]))
                     val links = fields.objects("issuelinks").mapNotNull(::issueLink)
                     if (links.isNotEmpty()) put("issuelinks", JsonArray(links))
                     putIfNotNull("parent", fields.obj("parent")?.pick("key"))
                     val sprints = sprintFieldId?.let { fields.objects(it) }
                     if (!sprints.isNullOrEmpty()) put("sprint", JsonArray(sprints.map { it.pick("name", "state") }))
+                    val attachments = fields.objects("attachment").mapNotNull(::attachment)
+                    if (attachments.isNotEmpty()) put("attachment", JsonArray(attachments))
+                    val subtasks = fields.objects("subtasks").mapNotNull(::summaryBundle)
+                    if (subtasks.isNotEmpty()) put("subtasks", JsonArray(subtasks))
+                    val versions = fields.objects("fixVersions").mapNotNull { it.str("name")?.let(::JsonPrimitive) }
+                    if (versions.isNotEmpty()) put("fixVersions", JsonArray(versions))
+                    copy(fields, "duedate")
                 },
             )
             put(
@@ -97,7 +115,7 @@ internal object JiraJson {
                                 copy(comment, "id")
                                 putIfNotNull("author", comment.obj("author")?.pick("displayName"))
                                 copy(comment, "created")
-                                copy(comment, "body")
+                                putIfNotNull("body", AdfMapper.forStorage(comment["body"]))
                             }
                         }
                     put("comments", JsonArray(kept))
@@ -119,6 +137,19 @@ internal object JiraJson {
             if (fields != null) copy(fields, "summary")
             putIfNotNull("status", fields?.obj("status")?.let(::status))
             putIfNotNull("issuetype", fields?.obj("issuetype")?.pick("name"))
+        }
+    }
+
+    /** One attachment: its id (digits only, as Jira gives it), name, size, type and date. */
+    private fun attachment(file: JsonObject): JsonObject? {
+        val id = file.str("id")?.takeIf { ATTACHMENT_ID.matches(it) } ?: return null
+        if (file.str("filename").isNullOrBlank()) return null
+        return buildJsonObject {
+            put("id", JsonPrimitive(id))
+            copy(file, "filename")
+            copy(file, "size")
+            copy(file, "mimeType")
+            copy(file, "created")
         }
     }
 
@@ -189,8 +220,7 @@ internal object JiraJson {
             rows = data.objects("issues").mapNotNull(::summary),
         )
 
-    private fun issueKey(element: JsonElement): JiraIssueKey? =
-        (element as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(JiraIssueKey::parse)
+    private fun issueKey(element: JsonElement): JiraIssueKey? = string(element)?.let(JiraIssueKey::parse)
 
     private fun status(status: JsonObject): JsonObject =
         buildJsonObject {
@@ -217,7 +247,7 @@ internal object JiraJson {
             assignee = fields.obj("assignee")?.str("displayName"),
             reporter = fields.obj("reporter")?.str("displayName"),
             sprint = sprint(fields.objects("sprint")),
-            labels = fields.arr("labels").orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { label -> label.isString }?.content },
+            labels = fields.arr("labels").orEmpty().mapNotNull(::string),
             updatedAtMillis = ExternalTime.parseMillis(fields.str("updated")),
             description = AdfMapper.document(fields["description"]),
             comments = comments,
@@ -225,8 +255,36 @@ internal object JiraJson {
             webUrl = LinkHref.parse("https://${site.host}/browse/${key.value}"),
             related = fields.objects("issuelinks").mapNotNull(::related),
             parentKey = fields.obj("parent")?.str("key")?.let(JiraIssueKey::parse),
+            attachments = fields.objects("attachment").mapNotNull { attachment(it, site) },
+            subtasks = fields.objects("subtasks").mapNotNull(::summary),
+            fixVersions =
+                fields
+                    .arr("fixVersions")
+                    .orEmpty()
+                    .mapNotNull(::string)
+                    .filter { it.isNotBlank() },
+            dueDate = fields.str("duedate")?.let(LocalDay::parse),
         )
     }
+
+    /** Opens on the Jira site with the person's own Jira sign-in. Thread never fetches the file (D75). */
+    private fun attachment(
+        file: JsonObject,
+        site: JiraSite,
+    ): JiraAttachment? {
+        val id = file.str("id")?.takeIf { ATTACHMENT_ID.matches(it) } ?: return null
+        val name = file.str("filename")?.takeIf { it.isNotBlank() } ?: return null
+        return JiraAttachment(
+            id = id,
+            filename = name,
+            sizeBytes = file.long("size")?.takeIf { it >= 0 },
+            mimeType = file.str("mimeType")?.takeIf { it.isNotBlank() },
+            createdAtMillis = ExternalTime.parseMillis(file.str("created")),
+            openUrl = LinkHref.parse("https://${site.host}/rest/api/3/attachment/content/$id"),
+        )
+    }
+
+    private fun string(element: JsonElement): String? = (element as? JsonPrimitive)?.takeIf { it.isString }?.content
 
     private fun related(link: JsonObject): JiraRelated? {
         val key = link.str("key")?.let(JiraIssueKey::parse) ?: return null

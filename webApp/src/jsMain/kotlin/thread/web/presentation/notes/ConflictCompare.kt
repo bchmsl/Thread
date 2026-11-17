@@ -15,7 +15,6 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.H1
 import org.jetbrains.compose.web.dom.H2
 import org.jetbrains.compose.web.dom.H3
-import org.jetbrains.compose.web.dom.H4
 import org.jetbrains.compose.web.dom.I
 import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.Li
@@ -125,29 +124,22 @@ internal fun RichTextView(document: RichTextDocument) {
     document.blocks.forEach { RichTextBlockView(it) }
 }
 
-/**
- * One read-only block. [smallHeadings] shows every heading as h4, for text inside a page section such as a Jira
- * description (v3 external detail).
- */
+/** One read-only block. */
 @Composable
-internal fun RichTextBlockView(
-    block: RichTextBlock,
-    smallHeadings: Boolean = false,
-) {
+private fun RichTextBlockView(block: RichTextBlock) {
     when (block) {
         is RichTextBlock.Paragraph -> P { Inlines(block.content) }
         is RichTextBlock.Heading ->
             when {
-                smallHeadings -> H4 { Inlines(block.content) }
                 block.level == 1 -> H1 { Inlines(block.content) }
                 block.level == 2 -> H2 { Inlines(block.content) }
                 else -> H3 { Inlines(block.content) }
             }
         is RichTextBlock.BulletList ->
-            Ul { block.items.forEach { item -> Li { item.blocks.forEach { RichTextBlockView(it, smallHeadings) } } } }
+            Ul { block.items.forEach { item -> Li { item.blocks.forEach { RichTextBlockView(it) } } } }
         is RichTextBlock.OrderedList ->
             Ol({ if (block.start != 1) attr("start", block.start.toString()) }) {
-                block.items.forEach { item -> Li { item.blocks.forEach { RichTextBlockView(it, smallHeadings) } } }
+                block.items.forEach { item -> Li { item.blocks.forEach { RichTextBlockView(it) } } }
             }
         is RichTextBlock.TaskList ->
             Ul({ attr("data-type", "taskList") }) {
@@ -159,7 +151,7 @@ internal fun RichTextBlockView(
                                 attr("aria-label", if (item.checked) "Done checklist item" else "Open checklist item")
                             }
                         }
-                        Div { item.blocks.forEach { RichTextBlockView(it, smallHeadings) } }
+                        Div { item.blocks.forEach { RichTextBlockView(it) } }
                     }
                 }
             }

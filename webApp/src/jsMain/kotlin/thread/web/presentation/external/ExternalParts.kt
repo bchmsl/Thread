@@ -41,6 +41,8 @@ import org.jetbrains.compose.web.dom.Tr
 import org.jetbrains.compose.web.dom.Ul
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLHeadingElement
+import org.w3c.dom.HTMLTableCellElement
+import thread.domain.external.BlockTableCell
 import thread.domain.external.CellAlign
 import thread.domain.external.CiState
 import thread.domain.external.CiSummary
@@ -52,6 +54,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
+import thread.domain.external.PanelTone
 import thread.domain.external.ReviewState
 import thread.domain.external.Saved
 import thread.domain.note.LinkHref
@@ -62,7 +65,6 @@ import thread.web.presentation.IconView
 import thread.web.presentation.notes.Banner
 import thread.web.presentation.notes.BannerButton
 import thread.web.presentation.notes.BannerTone
-import thread.web.presentation.notes.RichTextBlockView
 import kotlin.js.Date
 import kotlin.math.ceil
 
@@ -279,8 +281,8 @@ internal fun CacheBar(
 internal enum class DocumentSource { Jira, GitHub }
 
 /**
- * Jira rich text (adr/ADR-006) or GitHub Markdown (adr/ADR-007, D57), read-only. Built from DOM elements only, never
- * HTML strings. Content Thread does not show becomes the v3 placeholder.
+ * Jira rich text (adr/ADR-006, D74) or GitHub Markdown (adr/ADR-007, D57), read-only, in a `desc desc--md` box. Built
+ * from DOM elements only, never HTML strings. Content Thread does not show becomes the v3 placeholder.
  */
 @Composable
 internal fun ExternalDocumentView(
@@ -296,8 +298,7 @@ private fun ExternalBlockView(
     source: DocumentSource,
 ) {
     when (block) {
-        is ExternalBlock.Rich -> RichTextBlockView(block.block, smallHeadings = true)
-        is ExternalBlock.Code -> Pre { Code { Text(block.text) } }
+        is ExternalBlock.Code -> CodeBlock(block)
         is ExternalBlock.Unsupported ->
             P({ classes("unsup") }) {
                 IconView(Icon.Doc, 16)
@@ -314,8 +315,131 @@ private fun ExternalBlockView(
         is ExternalBlock.Quote -> Blockquote { block.blocks.forEach { ExternalBlockView(it, source) } }
         ExternalBlock.Rule -> Hr()
         is ExternalBlock.Table -> MarkdownTable(block)
+        is ExternalBlock.BlockTable -> BlockTable(block, source)
+        is ExternalBlock.Panel -> Panel(block, source)
+        is ExternalBlock.Expand -> Expand(block, source)
     }
 }
+
+/** A code block, under the name of its language when the author gave one (D74). */
+@Composable
+private fun CodeBlock(code: ExternalBlock.Code) {
+    val language = code.language
+    if (language == null) {
+        Pre { Code { Text(code.text) } }
+        return
+    }
+    Div({ classes("md-code") }) {
+        Span({ classes("md-code__lang") }) { Text(language) }
+        Pre { Code { Text(code.text) } }
+    }
+}
+
+/**
+ * A Jira panel (D74): its blocks in a box of its tone, with the tone's icon, so color never carries the meaning alone.
+ * A custom panel's own color and emoji are not kept.
+ */
+@Composable
+private fun Panel(
+    panel: ExternalBlock.Panel,
+    source: DocumentSource,
+) {
+    Div({
+        classes("adf-panel", "adf-panel--${panel.tone.name.lowercase()}")
+        attr("role", "note")
+        attr("aria-label", panelLabel(panel.tone))
+    }) {
+        Span({ classes("adf-panel__icon") }) { IconView(panelIcon(panel.tone), 18) }
+        Div({ classes("adf-panel__body") }) { panel.blocks.forEach { ExternalBlockView(it, source) } }
+    }
+}
+
+private fun panelIcon(tone: PanelTone): Icon =
+    when (tone) {
+        PanelTone.Info -> Icon.Info
+        PanelTone.Note -> Icon.Edit
+        PanelTone.Success -> Icon.CiPass
+        PanelTone.Warning -> Icon.Alert
+        PanelTone.Error -> Icon.CiFail
+        PanelTone.Neutral -> Icon.Doc
+    }
+
+private fun panelLabel(tone: PanelTone): String =
+    when (tone) {
+        PanelTone.Info -> "Info"
+        PanelTone.Note -> "Note"
+        PanelTone.Success -> "Success"
+        PanelTone.Warning -> "Warning"
+        PanelTone.Error -> "Error"
+        PanelTone.Neutral -> "Panel"
+    }
+
+/** A Jira expand (D74): the browser's own disclosure, closed at first as in Jira. */
+@Composable
+private fun Expand(
+    expand: ExternalBlock.Expand,
+    source: DocumentSource,
+) {
+    TagElement<HTMLElement>("details", { classes("adf-expand") }) {
+        TagElement<HTMLElement>("summary", { classes("adf-expand__sum") }) {
+            IconView(Icon.ChevRight, 16)
+            Span { Text(expand.title ?: "Details") }
+        }
+        Div({ classes("adf-expand__body") }) { expand.blocks.forEach { ExternalBlockView(it, source) } }
+    }
+}
+
+/**
+ * A Jira table (D74). It scrolls sideways inside its own box like a Markdown table. Header cells in the first row head
+ * their column and the first cell of a later row heads its row. Cell widths and colors are not kept.
+ */
+@Composable
+private fun BlockTable(
+    table: ExternalBlock.BlockTable,
+    source: DocumentSource,
+) {
+    val numbers = blockTableRowNumbers(table)
+    Div({ classes("md-table") }) {
+        Table({ classes("adf-table") }) {
+            Tbody {
+                table.rows.forEachIndexed { rowIndex, row ->
+                    Tr {
+                        if (table.numbered) {
+                            Td({ classes("adf-num") }) { numbers[rowIndex]?.let { Text(it.toString()) } }
+                        }
+                        row.cells.forEachIndexed { column, cell ->
+                            val attrs: AttrsScope<HTMLTableCellElement>.() -> Unit = {
+                                if (cell.colspan > 1) attr("colspan", cell.colspan.toString())
+                                if (cell.rowspan > 1) attr("rowspan", cell.rowspan.toString())
+                                headerScope(cell, rowIndex, column)?.let { attr("scope", it) }
+                            }
+                            val content: @Composable () -> Unit = { cell.blocks.forEach { ExternalBlockView(it, source) } }
+                            if (cell.header) Th(attrs) { content() } else Td(attrs) { content() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The number Jira shows before each row of a numbered table: none for a row of only header cells. */
+internal fun blockTableRowNumbers(table: ExternalBlock.BlockTable): List<Int?> {
+    var number = 0
+    return table.rows.map { row -> if (row.cells.all { it.header }) null else ++number }
+}
+
+private fun headerScope(
+    cell: BlockTableCell,
+    row: Int,
+    column: Int,
+): String? =
+    when {
+        !cell.header -> null
+        row == 0 -> if (cell.colspan > 1) "colgroup" else "col"
+        column == 0 -> if (cell.rowspan > 1) "rowgroup" else "row"
+        else -> null
+    }
 
 /** The page's own heading is an H3, so Markdown levels 1 and 2 are H4, level 3 is H5 and the rest H6. */
 @Composable
@@ -336,12 +460,19 @@ private fun MarkdownList(
     val items: @Composable () -> Unit = {
         list.items.forEach { item ->
             val checked = item.checked
-            Li({ if (checked != null) classes("md-task") }) {
+            Li({
+                if (checked != null) classes("md-task")
+                if (item.decision) classes("md-decision")
+            }) {
                 if (checked != null) {
                     CheckboxInput(checked) {
                         disabled()
                         attr("aria-label", if (checked) "Done checklist item" else "Open checklist item")
                     }
+                }
+                if (item.decision) {
+                    IconView(Icon.ArrowRight, 16)
+                    Span({ classes("vh") }) { Text("Decision: ") }
                 }
                 item.blocks.forEach { ExternalBlockView(it, source) }
             }
@@ -398,6 +529,8 @@ private fun ExternalInlines(content: List<ExternalInline>) {
     content.forEach { inline ->
         when (inline) {
             ExternalInline.HardBreak -> Br()
+            // The status text stays, so the color never carries the meaning alone (D74).
+            is ExternalInline.Status -> Span({ classes("adf-st", "adf-st--${inline.color.name.lowercase()}") }) { Text(inline.text) }
             is ExternalInline.Text -> {
                 val link = inline.link
                 if (link != null) {

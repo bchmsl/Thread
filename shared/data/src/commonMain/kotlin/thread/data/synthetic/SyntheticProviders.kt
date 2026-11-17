@@ -331,7 +331,7 @@ object SyntheticFixtures {
             {"type":"text","text":" "},{"type":"inlineCard","attrs":{"url":"https://example.test/synthetic-card"}},
             {"type":"text","text":" <b>not html</b>"}
           ]},
-          {"type":"heading","attrs":{"level":5},"content":[{"type":"text","text":"A level 5 heading shows as level 3"}]},
+          {"type":"heading","attrs":{"level":5},"content":[{"type":"text","text":"A level 5 heading"}]},
           {"type":"bulletList","content":[
             {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"First synthetic point"}]},
               {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Nested point"}]}]}]}]},
@@ -345,21 +345,87 @@ object SyntheticFixtures {
           {"type":"taskList","attrs":{"localId":"synthetic-tasks"},"content":[
             {"type":"taskItem","attrs":{"localId":"t1","state":"DONE"},"content":[{"type":"text","text":"Done synthetic task"}]},
             {"type":"taskItem","attrs":{"localId":"t2","state":"TODO"},"content":[{"type":"text","text":"Open synthetic task"}]},
+            {"type":"blockTaskItem","attrs":{"localId":"t4","state":"DONE"},"content":[
+              {"type":"paragraph","content":[{"type":"text","text":"Done block task"}]},
+              {"type":"paragraph","content":[{"type":"text","text":"Its second paragraph"}]}]},
             {"type":"taskList","attrs":{"localId":"synthetic-nested"},"content":[
               {"type":"taskItem","attrs":{"localId":"t3","state":"TODO"},"content":[{"type":"text","text":"Nested task"}]}
             ]}
           ]},
           {"type":"decisionList","attrs":{"localId":"synthetic-decisions"},"content":[
-            {"type":"decisionItem","attrs":{"localId":"d1","state":"DECIDED"},"content":[{"type":"text","text":"Synthetic decision"}]}
+            {"type":"decisionItem","attrs":{"localId":"d1","state":"DECIDED"},"content":[{"type":"text","text":"Synthetic decision"}]},
+            {"type":"decisionItem","attrs":{"localId":"d2","state":"DECIDED"},"content":[{"type":"text","text":"Keep tables scrollable on phones"}]}
           ]},
           {"type":"codeBlock","attrs":{"language":"json"},"content":[{"type":"text","text":"{\n  \"synthetic\": true\n}"}]},
           {"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"A quoted synthetic line"}]}]},
-          {"type":"panel","attrs":{"panelType":"info"},"content":[{"type":"paragraph","content":[{"type":"text","text":"Panel text"}]}]},
-          {"type":"expand","attrs":{"title":"Synthetic expand"},"content":[{"type":"paragraph","content":[{"type":"text","text":"Expanded text"}]}]},
+          {"type":"paragraph","content":[
+            {"type":"text","text":"Statuses "},
+            {"type":"status","attrs":{"text":"To do","color":"neutral"}},{"type":"text","text":" "},
+            {"type":"status","attrs":{"text":"In review","color":"purple"}},{"type":"text","text":" "},
+            {"type":"status","attrs":{"text":"In progress","color":"blue"}},{"type":"text","text":" "},
+            {"type":"status","attrs":{"text":"At risk","color":"yellow"}},{"type":"text","text":" "},
+            {"type":"status","attrs":{"text":"Done","color":"green"}},
+            {"type":"text","text":", underline keeps its text","marks":[{"type":"underline"}]},
+            {"type":"text","text":" and so does color.","marks":[{"type":"textColor","attrs":{"color":"#ff5630"}}]}
+          ]},
+          {"type":"panel","attrs":{"panelType":"info"},"content":[{"type":"paragraph","content":[{"type":"text","text":"SYNTHETIC info panel."}]}]},
+          {"type":"panel","attrs":{"panelType":"note"},"content":[{"type":"paragraph","content":[{"type":"text","text":"SYNTHETIC note panel."}]}]},
+          {"type":"panel","attrs":{"panelType":"success"},"content":[{"type":"paragraph","content":[{"type":"text","text":"SYNTHETIC success panel."}]}]},
+          {"type":"panel","attrs":{"panelType":"warning"},"content":[{"type":"paragraph","content":[{"type":"text","text":"SYNTHETIC warning panel."}]}]},
+          {"type":"panel","attrs":{"panelType":"error"},"content":[
+            {"type":"paragraph","content":[{"type":"text","text":"SYNTHETIC error panel with a list:"}]},
+            {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"First problem"}]}]}]}]},
+          {"type":"panel","attrs":{"panelType":"custom","panelColor":"#ffd6d6","panelIcon":":star:"},"content":[
+            {"type":"paragraph","content":[{"type":"text","text":"SYNTHETIC custom panel keeps no color."}]}]},
+          {"type":"expand","attrs":{"title":"Synthetic expand"},"content":[
+            {"type":"paragraph","content":[{"type":"text","text":"Expanded text"}]},
+            {"type":"nestedExpand","attrs":{"title":"Nested synthetic expand"},"content":[
+              {"type":"codeBlock","attrs":{"language":"kotlin"},"content":[{"type":"text","text":"val nested = true"}]}]}]},
+          {"type":"expand","attrs":{"title":""},"content":[{"type":"paragraph","content":[{"type":"text","text":"An expand without a title"}]}]},
           {"type":"rule"},
-          {"type":"table","attrs":{"layout":"default"},"content":[{"type":"tableRow","content":[
-            {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Cell"}]}]}]}]},
-          {"type":"mediaSingle","attrs":{"layout":"center"},"content":[{"type":"media","attrs":{"id":"synthetic-media","type":"file","collection":"synthetic"}}]},
+          {"type":"table","attrs":{"layout":"default","isNumberColumnEnabled":false},"content":[
+            {"type":"tableRow","content":[
+              {"type":"tableHeader","attrs":{"colwidth":[120]},"content":[{"type":"paragraph","content":[{"type":"text","text":"Area"}]}]},
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Owner"}]}]},
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"State"}]}]},
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Notes"}]}]}]},
+            {"type":"tableRow","content":[
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Mapper"}]}]},
+              {"type":"tableCell","attrs":{"background":"#deebff"},"content":[{"type":"paragraph","content":[{"type":"text","text":"Synthetic Person A"}]}]},
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"status","attrs":{"text":"Done","color":"green"}}]}]},
+              {"type":"tableCell","attrs":{"rowspan":2},"content":[
+                {"type":"bulletList","content":[
+                  {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Spans two rows"}]}]},
+                  {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Holds a list"}]}]}]}]}]},
+            {"type":"tableRow","content":[
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Renderer"}]}]},
+              {"type":"tableCell","attrs":{"colspan":2},"content":[{"type":"paragraph","content":[
+                {"type":"text","text":"One cell across "},{"type":"text","text":"two columns","marks":[{"type":"strong"}]}]}]}]},
+            {"type":"tableRow","content":[
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Docs"}]}]},
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Synthetic Person B"}]}]},
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"status","attrs":{"text":"To do","color":"neutral"}}]}]},
+              {"type":"tableCell","content":[{"type":"codeBlock","content":[{"type":"text","text":"D74, D75"}]}]}]}
+          ]},
+          {"type":"table","attrs":{"isNumberColumnEnabled":true},"content":[
+            {"type":"tableRow","content":[
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Step"}]}]},
+              {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Result"}]}]}]},
+            {"type":"tableRow","content":[
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Open SYN-101"}]}]},
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"The card opens"}]}]}]},
+            {"type":"tableRow","content":[
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Make the window narrow"}]}]},
+              {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Only the table scrolls"}]}]}]}
+          ]},
+          {"type":"layoutSection","content":[
+            {"type":"layoutColumn","attrs":{"width":50},"content":[{"type":"paragraph","content":[{"type":"text","text":"Left layout column"}]}]},
+            {"type":"layoutColumn","attrs":{"width":50},"content":[{"type":"paragraph","content":[{"type":"text","text":"Right layout column"}]}]}]},
+          {"type":"mediaSingle","attrs":{"layout":"center"},"content":[
+            {"type":"media","attrs":{"id":"synthetic-media","type":"file","collection":"synthetic","alt":"synthetic-screen.png"}}]},
+          {"type":"mediaGroup","content":[
+            {"type":"media","attrs":{"id":"synthetic-media-2","type":"file","collection":"synthetic","alt":"synthetic-spec.pdf"}},
+            {"type":"media","attrs":{"id":"synthetic-media-3","type":"file","collection":"synthetic"}}]},
           {"type":"extension","attrs":{"extensionType":"com.example.synthetic","extensionKey":"synthetic-macro"}},
           {"type":"syncBlock","content":[]}
         ]}
@@ -396,7 +462,36 @@ object SyntheticFixtures {
                         "issuetype":{"id":"10001","name":"Story","iconUrl":"https://synthetic.example.test/icon"}}}}
                    ],
                    "parent":{"id":"10110","key":"SYN-110","fields":{"summary":"SYNTHETIC: Workspace polish epic",
-                     "status":{"name":"To Do","statusCategory":{"key":"new"}},"issuetype":{"name":"Epic"}}}
+                     "status":{"name":"To Do","statusCategory":{"key":"new"}},"issuetype":{"name":"Epic"}}},
+                   "attachment":[
+                     {"self":"https://synthetic.example.test/attachment/10501","id":"10501","filename":"synthetic-screen.png",
+                      "author":{"accountId":"synthetic-account-a","displayName":"Synthetic Person A","emailAddress":"a@example.test"},
+                      "created":"2026-11-12T16:40:00.000+0400","size":245760,"mimeType":"image/png",
+                      "content":"https://synthetic.example.test/attachment-content/10501",
+                      "thumbnail":"https://synthetic.example.test/attachment-thumbnail/10501"},
+                     {"self":"https://synthetic.example.test/attachment/10502","id":"10502","filename":"synthetic-spec-with-a-long-file-name-for-narrow-screens.pdf",
+                      "author":{"accountId":"synthetic-account-b","displayName":"Synthetic Person B"},
+                      "created":"2026-11-10T09:15:00.000+0400","size":1572864,"mimeType":"application/pdf",
+                      "content":"https://synthetic.example.test/attachment-content/10502"},
+                     {"id":"10503","filename":"synthetic-logs.zip","created":"2026-11-03T12:00:00.000+0400","size":512,
+                      "mimeType":"application/zip","content":"https://synthetic.example.test/attachment-content/10503"}
+                   ],
+                   "subtasks":[
+                     {"id":"10111","key":"SYN-111","self":"https://synthetic.example.test/issue/10111",
+                      "fields":{"summary":"SYNTHETIC: Draw the attachment icons",
+                        "status":{"name":"Done","statusCategory":{"key":"done"}},"priority":{"name":"Medium"},
+                        "issuetype":{"name":"Subtask","subtask":true,"iconUrl":"https://synthetic.example.test/icon"}}},
+                     {"id":"10112","key":"SYN-112","self":"https://synthetic.example.test/issue/10112",
+                      "fields":{"summary":"SYNTHETIC: Check tables on a narrow screen",
+                        "status":{"name":"To Do","statusCategory":{"key":"new"}},
+                        "issuetype":{"name":"Subtask","subtask":true}}}
+                   ],
+                   "fixVersions":[
+                     {"self":"https://synthetic.example.test/version/1","id":"1","name":"Synthetic 1.4","archived":false,"released":false,
+                      "releaseDate":"2026-12-01"},
+                     {"id":"2","name":"Synthetic 1.5","archived":false,"released":false}
+                   ],
+                   "duedate":"2026-11-20"
                  }}
                 """.trimIndent(),
             "SYN-102" to
@@ -425,7 +520,9 @@ object SyntheticFixtures {
                    "created":"2026-11-11T10:05:00.000+0400",
                    "body":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[
                      {"type":"text","text":"Older synthetic comment for "},{"type":"mention","attrs":{"id":"x","text":"@Synthetic Person A"}}]},
-                     {"type":"table","content":[]}]}}
+                     {"type":"table","content":[{"type":"tableRow","content":[
+                       {"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"Checked"}]}]},
+                       {"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"Yes"}]}]}]}]}]}}
                 ]}
                 """.trimIndent(),
             "SYN-102" to """{"startAt":0,"maxResults":100,"total":0,"comments":[]}""",

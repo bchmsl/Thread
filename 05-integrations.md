@@ -15,6 +15,7 @@ Read-only capabilities:
 - Link existing ticket to one or more Topics.
 - Create a Topic from a ticket.
 - Detailed title, formatted description, status, assignee, priority, fields, comments, related issues/subtasks, attachment links.
+  - Built (D74, D75): tables, panels, expands, status lozenges and decisions in the text; an attachment list (name, size, type, date) whose names open `https://{site}/rest/api/3/attachment/content/{id}` in a new tab; sub-tasks, fix versions and the due date, all from the one ticket request. Thread never downloads a file, so no new host or CSP entry is needed. That the link opens with the person's own Jira sign-in in that browser is inferred, not yet checked live. Thumbnails, previews and inline pictures wait for a live check with the owner's token.
 - Changelog can be loaded on demand where useful; exhaustive history is not required on first paint.
 - Open the source ticket in Jira.
 

@@ -1,24 +1,33 @@
 package thread.data.jira
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import thread.data.CapturingTransport
 import thread.data.NOW
 import thread.data.answer
 import thread.data.external.InMemoryKeyValueStore
 import thread.data.external.KeyValueConnectionStore
+import thread.data.http.HttpResponse
 import thread.data.synthetic.SyntheticConnections
 import thread.data.synthetic.SyntheticScenario
 import thread.data.syntheticTransport
 import thread.domain.external.ExternalBlock
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
+import thread.domain.external.JiraAttachment
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
+import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraRelated
 import thread.domain.external.JiraSite
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
 import thread.domain.external.Refreshed
+import thread.domain.note.LinkHref
+import thread.domain.time.LocalDay
 import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -68,7 +77,7 @@ class JiraIssueRepositoryTest {
                 issue.comments
                     .first()
                     .body.blocks
-                    .any { it == ExternalBlock.Unsupported("Table") },
+                    .any { it is ExternalBlock.BlockTable },
             )
             assertTrue(issue.description.blocks.isNotEmpty())
             assertEquals(
@@ -96,6 +105,97 @@ class JiraIssueRepositoryTest {
         }
 
     @Test
+    fun refreshReadsAttachmentsSubtasksFixVersionsAndTheDueDate() =
+        runTest {
+            val issue = repository(syntheticTransport()).refresh(key, NOW).issue()
+
+            val site = "https://synthetic-site.atlassian.net/rest/api/3/attachment/content"
+            assertEquals(
+                listOf(
+                    JiraAttachment(
+                        "10501",
+                        "synthetic-screen.png",
+                        245_760,
+                        "image/png",
+                        1_794_487_200_000L,
+                        LinkHref.parse("$site/10501"),
+                    ),
+                    JiraAttachment(
+                        "10502",
+                        "synthetic-spec-with-a-long-file-name-for-narrow-screens.pdf",
+                        1_572_864,
+                        "application/pdf",
+                        // 2026-11-10T09:15:00+04:00
+                        1_794_287_700_000L,
+                        LinkHref.parse("$site/10502"),
+                    ),
+                    // 2026-11-03T12:00:00+04:00
+                    JiraAttachment(
+                        "10503",
+                        "synthetic-logs.zip",
+                        512,
+                        "application/zip",
+                        1_793_692_800_000L,
+                        LinkHref.parse("$site/10503"),
+                    ),
+                ),
+                issue.attachments,
+            )
+            assertEquals(
+                listOf(
+                    JiraIssueSummary(
+                        requireNotNull(JiraIssueKey.parse("SYN-111")),
+                        "Subtask",
+                        "SYNTHETIC: Draw the attachment icons",
+                        JiraStatus("Done", JiraStatusCategory.Done),
+                        null,
+                    ),
+                    JiraIssueSummary(
+                        requireNotNull(JiraIssueKey.parse("SYN-112")),
+                        "Subtask",
+                        "SYNTHETIC: Check tables on a narrow screen",
+                        JiraStatus("To Do", JiraStatusCategory.ToDo),
+                        null,
+                    ),
+                ),
+                issue.subtasks,
+            )
+            assertEquals(listOf("Synthetic 1.4", "Synthetic 1.5"), issue.fixVersions)
+            assertEquals(LocalDay(2026, 11, 20), issue.dueDate)
+        }
+
+    @Test
+    fun attachmentsWithoutASafeIdOrANameAreLeftOut() =
+        runTest {
+            val synthetic = syntheticTransport()
+            val odd =
+                Json
+                    .parseToJsonElement(
+                        """
+                        {"attachment":[{"id":"../10501","filename":"a.png"},{"id":"10502","filename":" "},{"id":10503,"filename":"b.png"},
+                          {"id":"10504","filename":"ok.txt","size":-1,"mimeType":""}],
+                         "duedate":"2026-02-30","fixVersions":[{"id":"1"},{"name":"Synthetic 2.0"}]}
+                        """,
+                    ).jsonObject
+            val transport =
+                CapturingTransport { request ->
+                    val response = synthetic.respond(request)
+                    if (!request.endpoint.endsWith("/issue/{key}")) return@CapturingTransport response
+                    val issue = Json.parseToJsonElement(response.body).jsonObject
+                    val fields = JsonObject(issue.getValue("fields").jsonObject + odd)
+                    HttpResponse(response.status, response.headers, JsonObject(issue + ("fields" to fields)).toString())
+                }
+
+            val issue = repository(transport).refresh(key, NOW).issue()
+
+            assertEquals(listOf("10504"), issue.attachments.map { it.id })
+            assertEquals(null, issue.attachments.single().sizeBytes)
+            assertEquals(null, issue.attachments.single().mimeType)
+            assertEquals(listOf("Synthetic 2.0"), issue.fixVersions)
+            assertNull(issue.dueDate)
+        }
+
+    @Test
     fun requestsUseTheScopedTokenPathWithBasicAuthAndNothingElse() =
         runTest {
             val transport = syntheticTransport()
@@ -108,7 +208,8 @@ class JiraIssueRepositoryTest {
                 listOf(
                     "$base/field",
                     "$base/issue/SYN-101?fields=summary%2Cissuetype%2Cstatus%2Cpriority%2Cassignee%2Creporter%2Clabels" +
-                        "%2Cupdated%2Cdescription%2Cissuelinks%2Cparent%2Ccustomfield_10020",
+                        "%2Cupdated%2Cdescription%2Cissuelinks%2Cparent%2Cattachment%2Csubtasks%2CfixVersions%2Cduedate" +
+                        "%2Ccustomfield_10020",
                     "$base/issue/SYN-101/comment?orderBy=-created&maxResults=100",
                 ),
                 urls,
@@ -148,8 +249,40 @@ class JiraIssueRepositoryTest {
             assertEquals(fresh, saved.value)
             assertEquals(NOW, saved.savedAtMillis)
             val stored = assertNotNull(issues.get("SYN-101"))
-            for (dropped in listOf("emailAddress", "accountId", "avatarUrls", "iconUrl", "self", "goal")) {
-                assertFalse(dropped in stored, "The saved copy keeps $dropped")
+            val dropped =
+                listOf(
+                    "emailAddress",
+                    "accountId",
+                    "avatarUrls",
+                    "iconUrl",
+                    "self",
+                    "goal",
+                    // Mention account ids in the description and a comment (adr/ADR-006).
+                    "synthetic-account",
+                    "\"id\":\"x\"",
+                    // An attachment's file links (D75).
+                    "attachment-content",
+                    "attachment-thumbnail",
+                    "releaseDate",
+                )
+            for (text in dropped) {
+                assertFalse(text in stored, "The saved copy keeps $text")
+            }
+            assertTrue("@Synthetic Person B" in stored, "A mention keeps its text")
+            // Of an attachment only its name, size, type and date are kept, not who added it (D75).
+            val attachments =
+                Json
+                    .parseToJsonElement(stored)
+                    .jsonObject
+                    .getValue("data")
+                    .jsonObject
+                    .getValue("fields")
+                    .jsonObject
+                    .getValue("attachment")
+                    .jsonArray
+            assertEquals(3, attachments.size)
+            for (attachment in attachments) {
+                assertEquals(setOf("id", "filename", "size", "mimeType", "created"), attachment.jsonObject.keys)
             }
             assertEquals(listOf(saved), repository.allSaved())
         }

@@ -21,7 +21,7 @@ Status: Proposed (2026-11-13). Written in Phase 10 while the owner was away. Bui
 
 ### What stays on the device
 
-- Each opened ticket is saved in IndexedDB `jiraIssues` with its fields, description and comments, tagged with the site host.
+- Each opened ticket is saved in IndexedDB `jiraIssues` with its fields, description and comments, tagged with the site host. Since D74 and D75 that copy also holds the attachment list (name, size, type, date; no file or thumbnail links), sub-tasks, fix versions and the due date, and its text keeps no mention account ids (ADR-006). No file is downloaded or saved.
 - The "Assigned to me" rows are saved in `jiraMeta` under `list:assigned`, next to the Sprint field id. Search results are kept only in memory for the page load.
 - Disconnect hides lists and copies until the same site connects again. "Delete saved copies" removes them from this device; the connection stays.
 
@@ -38,6 +38,7 @@ Status: Proposed (2026-11-13). Written in Phase 10 while the owner was away. Bui
 - Jira page: "Assigned to me" and "Search" tabs, with the ticket next to the list at 1000px and wider, else on its own.
 - From outside the Jira tab a ticket opens as a card on top of the screen (`?jira=KEY`, D70), with "Open full page" to the Jira tab. The old `#/item/jira/KEY` page is gone; its links open the ticket in the Jira tab.
 - Topic details: the Jira section lists linked tickets. A ticket opens as a card on top of the Topic (D70; before D70, a side panel at 1000px and wider).
+- A ticket's parts (D68, D69): Description, Attachments and Sub-tasks (D75, shown only when the ticket has them), Comments and Related issues on the left; Details (Due and Fix versions since D75) and Topics on the right. An attachment's name opens the file on the Jira site in a new tab; a sub-task opens as the next card, like a related ticket.
 - A ticket can be linked to several Topics ("Link to Topic"), and a Topic can be created from a ticket ("Create Topic from ticket"). The Topic name is the ticket title cut to the Topic name limit, and its "where I left off" says "Created from KEY.".
 - ⌘K adds "Jira (downloaded)" for tickets saved on this device (key or title). When nothing is found, it links to Jira search.
 - Settings > Connections: a token form (site, Cloud ID, e-mail, API token). The token field is never filled back in. GitHub shows its status only; its form is Phase 11.
