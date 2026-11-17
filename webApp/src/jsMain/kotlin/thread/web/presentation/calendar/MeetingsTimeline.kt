@@ -1,8 +1,13 @@
 package thread.web.presentation.calendar
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import kotlinx.browser.window
+import org.jetbrains.compose.web.attributes.AttrsScope
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.type
 import org.jetbrains.compose.web.dom.Button
@@ -17,16 +22,22 @@ import thread.domain.calendar.MeetingResponse
 import thread.domain.calendar.MeetingTimeline
 import thread.domain.calendar.MeetingsState
 import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.TIMELINE_BLOCK_PX
+import thread.domain.calendar.TIMELINE_LANE_GAP_PX
 import thread.domain.calendar.TimelineBlock
+import thread.domain.calendar.TimelineFlag
+import thread.domain.calendar.TitleTurn
 import thread.domain.calendar.TodayMeeting
 import thread.domain.calendar.joinServiceOf
 import thread.domain.calendar.meetingTimeline
 import thread.domain.time.WallTime
 import thread.domain.time.clockText
 import thread.domain.topic.Topic
+import thread.web.platform.observeSize
 import thread.web.presentation.CardKind
 import thread.web.presentation.LocalNow
 import thread.web.presentation.SectionCard
+import thread.web.presentation.cardKind
 import thread.web.presentation.itemCard
 import kotlin.math.round
 
@@ -34,9 +45,12 @@ import kotlin.math.round
  * Today's meetings as a timeline across the page (D79, Settings "Meetings layout: Horizontal"). It is the Meetings card
  * of [MeetingsRail], with the same note and footer, and its body runs the day's hours from left to right
  * ([meetingTimeline]): all-day meetings in a strip above the hours, timed ones as blocks placed by start and end, in
- * lanes while they overlap, and a line at now. A block is one button named by the row's sentence ([meetingRowLabel]);
- * it opens the Meeting card. Blocks come in time order, so Tab follows the day. Join for the meeting now and the next
- * one sits in the card's head, since a block is too narrow for it. A narrow screen scrolls the hours sideways inside the
+ * lanes while they overlap, and a line at now. The hours share the box's width, so the layout waits for it. A block too
+ * narrow for the start of its title turns it up the block, taller when it needs to, and a meeting too narrow even for
+ * that is a flag in a band above the lanes ([thread.domain.calendar.titleFit], D85). A block or a flag's title is one
+ * button named by the row's sentence ([meetingRowLabel]); it opens the Meeting card.
+ * Flags and blocks come in one list in time order, so Tab follows the day. Join for the meeting now and the next one
+ * sits in the card's head, since a block is too narrow for it. A narrow screen scrolls the hours sideways inside the
  * card, starting at now; the page never scrolls sideways.
  */
 @Composable
@@ -48,6 +62,8 @@ internal fun MeetingsTimeline(
 ) {
     val now = LocalNow.current
     val view = todayMeetingsView(model.state, now, zone)
+    // The box's width in px, once measured: the hours share it (D85).
+    var widthPx by remember { mutableStateOf<Double?>(null) }
     val joinable =
         view.rows.filter { row ->
             (row.phase == MeetingPhase.Now || row.phase == MeetingPhase.Next) && row.meeting.joinUrl?.let(::joinServiceOf) != null
@@ -71,9 +87,9 @@ internal fun MeetingsTimeline(
         when {
             view.loading -> LoadingTrack()
             view.state is MeetingsState.Ready -> {
-                val line = meetingTimeline(view.rows, now)
+                val line = meetingTimeline(view.rows, now, widthPx ?: 0.0)
                 if (line.allDay.isNotEmpty()) AllDayStrip(line.allDay, now, topicsOf, onOpen)
-                Track(line, now, topicsOf, onOpen)
+                Track(line, now, sized = widthPx != null, onWidth = { widthPx = it }, topicsOf, onOpen)
             }
             else -> Unit
         }
@@ -112,18 +128,22 @@ private fun AllDayStrip(
 
 /**
  * The hours, their meetings and now, inside a box that scrolls sideways when the card is narrower than the hours need
- * (88 px each, css/cards.css). The box starts with now about a third from its left edge, again when the hours change.
+ * ([thread.domain.calendar.TIMELINE_MIN_HOUR_PX] each, css/cards.css). The box starts with now about a third from its
+ * left edge, again when the hours change. It tells [onWidth] its width whenever that changes, and hides the hours until
+ * it is [sized], so they never show laid out for another width first.
  */
 @Composable
 private fun Track(
     line: MeetingTimeline,
     now: WallTime,
+    sized: Boolean,
+    onWidth: (Double) -> Unit,
     topicsOf: (SeriesKey) -> List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
     val nowOffset = line.nowMinute?.let(line::offsetOf)
     // A new box for new hours (a meeting across midnight came or went), so it starts at now again.
-    key(line.startMinute, line.endMinute) { TrackBox(line, nowOffset, now, topicsOf, onOpen) }
+    key(line.startMinute, line.endMinute) { TrackBox(line, nowOffset, now, sized, onWidth, topicsOf, onOpen) }
 }
 
 @Composable
@@ -131,13 +151,18 @@ private fun TrackBox(
     line: MeetingTimeline,
     nowOffset: Double?,
     now: WallTime,
+    sized: Boolean,
+    onWidth: (Double) -> Unit,
     topicsOf: (SeriesKey) -> List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
     Div({
         classes("mtl")
+        if (!sized) classes("is-unsized")
         style { property("--hours", line.hours.toString()) }
         ref { element ->
+            // The hours fill the box's width, so the box's width decides which titles turn and which meetings are flags.
+            val stop = observeSize(element) { onWidth(element.getBoundingClientRect().width) }
             // Once, when the box appears: later minutes leave the place the person scrolled to.
             if (nowOffset != null) {
                 window.requestAnimationFrame {
@@ -147,7 +172,7 @@ private fun TrackBox(
                     }
                 }
             }
-            onDispose { }
+            onDispose { stop() }
         }
     }) {
         Div({ classes("mtl__track") }) {
@@ -159,10 +184,28 @@ private fun TrackBox(
             }
             Ul({
                 classes("mtl__lanes")
-                style { property("--lanes", maxOf(1, line.lanes).toString()) }
+                // Each lane is as tall as its tallest block. A day of only flags has no empty lane under them; a day with
+                // no meeting keeps one.
+                val lanesPx =
+                    if (line.lanes == 0 && line.flagRows == 0) {
+                        TIMELINE_LANE_GAP_PX + TIMELINE_BLOCK_PX + TIMELINE_LANE_GAP_PX
+                    } else {
+                        line.laneTopPx(line.lanes)
+                    }
+                if (line.flagRows > 0) classes("has-flags")
+                style {
+                    property("--lanes-h", "${lanesPx}px")
+                    if (line.flagRows > 0) property("--flag-rows", line.flagRows.toString())
+                }
             }) {
-                line.blocks.forEach { block ->
-                    key(block.meeting.meeting.id.value) { Block(block, line, now, topicsOf(block.meeting.meeting.seriesKey), onOpen) }
+                line.items.forEach { item ->
+                    val topics = topicsOf(item.meeting.meeting.seriesKey)
+                    key(item.meeting.meeting.id.value) {
+                        when (item) {
+                            is TimelineBlock -> Block(item, line, now, topics, onOpen)
+                            is TimelineFlag -> Flag(item, line, now, topics, onOpen)
+                        }
+                    }
                 }
             }
             if (nowOffset != null) NowLine(nowOffset, now)
@@ -173,7 +216,9 @@ private fun TrackBox(
 /**
  * One timed meeting: its title, then Now or Next and when it starts. Placed by start and end; a part that runs into
  * yesterday or tomorrow has a square edge on that side. Now is tinted and Next outlined, so a block too narrow for its
- * badge still shows it. Tentative and not answered have a dashed edge.
+ * badge still shows it. Tentative and not answered have a dashed edge. A block too narrow for the start of its title
+ * turns it up the block, read from the bottom, and is as tall as the domain says ([TimelineBlock.heightPx]); its lane
+ * grows with it.
  */
 @Composable
 private fun Block(
@@ -192,22 +237,19 @@ private fun Block(
         style {
             property("--x", percent(from))
             property("--w", percent(line.offsetOf(block.toMinute) - from))
-            property("--lane", block.lane.toString())
+            property("--top", "${line.laneTopPx(block.lane)}px")
+            property("--h", "${block.heightPx}px")
         }
     }) {
         Button({
             type(ButtonType.Button)
             itemCard(CardKind.Meeting)
             classes("mblock")
-            when (row.phase) {
-                MeetingPhase.Ended -> classes("is-ended")
-                MeetingPhase.Now -> classes("is-now")
-                MeetingPhase.Next -> classes("is-next")
-                else -> Unit
-            }
+            phase(row.phase)
             if (meeting.response.isOpen) classes("is-open")
             if (row.startsBeforeToday) classes("is-from-yesterday")
             if (row.endsAfterToday) classes("is-to-tomorrow")
+            if (block.turn == TitleTurn.Up) classes("is-turned")
             attr("aria-label", label)
             onClick { onOpen(meeting) }
         }) {
@@ -219,6 +261,65 @@ private fun Block(
                 attr("title", label)
             }) { BlockText(row) }
         }
+    }
+}
+
+/**
+ * One meeting too narrow for a turned title as a flag (D85): a pole up from its start to its title, in its row above the lanes,
+ * and a bar on the time line for its real length. Only the title is a button, named by the row's sentence, and it opens
+ * the Meeting card as a block does; its target is 24 px tall on every screen. Now has the strongest fill, Next
+ * an outline in the meeting color, and an ended one is grey. Tentative and not answered have a dashed pole. A flag has
+ * no badge or time: the title needs the room, and the sentence says them.
+ */
+@Composable
+private fun Flag(
+    flag: TimelineFlag,
+    line: MeetingTimeline,
+    now: WallTime,
+    topics: List<Topic>,
+    onOpen: (Meeting) -> Unit,
+) {
+    val row = flag.meeting
+    val meeting = row.meeting
+    val label = meetingRowLabel(row, now, topics.map { it.name })
+    Li({
+        classes("mtl__flag")
+        cardKind(CardKind.Meeting)
+        phase(row.phase)
+        if (meeting.response.isOpen) classes("is-open")
+        style {
+            property("--x", percent(line.offsetOf(flag.fromMinute)))
+            property("--room", percent(flag.roomMinutes.toDouble() / (line.endMinute - line.startMinute)))
+            property("--len", ((flag.toMinute - flag.fromMinute).toDouble() / flag.roomMinutes.coerceAtLeast(1)).toString())
+            property("--row", flag.row.toString())
+        }
+    }) {
+        Span({ classes("mflag__len") })
+        Span({ classes("mflag__pole") })
+        Span({ classes("mflag__foot") })
+        Button({
+            type(ButtonType.Button)
+            classes("mflag")
+            attr("aria-label", label)
+            onClick { onOpen(meeting) }
+        }) {
+            // As on a block: the tooltip sits on the hidden part, so a screen reader reads the sentence once.
+            Span({
+                classes("mflag__in")
+                attr("aria-hidden", "true")
+                attr("title", label)
+            }) { Span({ classes("mflag__name") }) { Text(meeting.displayTitle) } }
+        }
+    }
+}
+
+/** Ended, now or next, for the timeline's styles. */
+private fun AttrsScope<*>.phase(phase: MeetingPhase) {
+    when (phase) {
+        MeetingPhase.Ended -> classes("is-ended")
+        MeetingPhase.Now -> classes("is-now")
+        MeetingPhase.Next -> classes("is-next")
+        else -> Unit
     }
 }
 

@@ -260,10 +260,13 @@
 .lchip--hit .iconbtn::after { inset: -7px; }
 .dmeet__link::after { inset: -4px 0; }
 
-/* Meetings timeline (D79, "Meetings layout: Horizontal"): the Meetings card across the page. The hours run left to right
-   at 88 px each or more, so a half-hour block keeps a few letters; a card narrower than that scrolls them inside .mtl,
-   never the page. Blocks sit by start and end, in lanes 60 px tall while they overlap; the grid's hour lines echo the
-   band's calendar pattern. */
+/* Meetings timeline (D79, "Meetings layout: Horizontal"): the Meetings card across the page. The hours share the card's
+   width at 88 px each or more; a card narrower than that scrolls them inside .mtl, never the page. Blocks sit by start
+   and end, in lanes while they overlap; the grid's hour lines echo the band's calendar pattern. The domain's titleFit
+   (D85) picks each meeting's look from its width and its title's length, with the px below: a block's title lies flat,
+   or turns up the block, which then may be taller than 60 px (--h); its lane grows with it (--top, --lanes-h). A
+   meeting too narrow for a turned line is a flag in a band above the lanes. A block is at least 21 px wide, one turned
+   line, the room the lanes keep for it, so it never covers the next one. */
 .scard--tl { margin-bottom: 28px; }
 .scard--tl > .scard__head { flex-wrap: wrap; row-gap: 6px; }
 .scard--tl > .scard__head > .scard__h { flex: 1 1 auto; }
@@ -281,6 +284,8 @@
 .mday__k { flex: none; font-size: var(--fs-12); font-weight: 600; color: var(--text-2); }
 .mday__name { min-width: 0; overflow: hidden; font-size: var(--fs-14); font-weight: 550; white-space: nowrap; text-overflow: ellipsis; }
 .mtl { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; padding-bottom: 4px; }
+/* Until the box is measured, the hours stay hidden: they are laid out for its width. */
+.mtl.is-unsized .mtl__track { visibility: hidden; }
 .mtl__track { position: relative; min-width: calc(var(--hours) * 88px); }
 .mtl__ruler { display: grid; grid-template-columns: repeat(var(--hours), minmax(0, 1fr)); height: 24px; }
 .mtl__hour {
@@ -288,24 +293,26 @@
   color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .mtl__lanes {
-  position: relative; height: calc(var(--lanes) * 66px + 6px); margin: 0; padding: 0; list-style: none;
+  --band: 0px; --flag-p: 26px; --flag-h: 24px; --flag-c: 20px;
+  position: relative; height: calc(var(--band) + var(--lanes-h)); margin: 0; padding: 0; list-style: none;
   border-right: 1px solid var(--border);
   background-image: linear-gradient(to right, var(--border) 1px, transparent 1px);
   background-size: calc(100% / var(--hours)) 100%;
 }
 .mtl__slot {
-  position: absolute; z-index: 1; top: calc(6px + var(--lane) * 66px); left: min(var(--x), calc(100% - 26px));
-  width: var(--w); min-width: 26px; height: 60px; padding-right: 2px; container-type: inline-size;
+  position: absolute; z-index: 1; top: calc(var(--band) + var(--top)); left: min(var(--x), calc(100% - 21px));
+  width: var(--w); min-width: 21px; height: var(--h); padding-right: 2px;
 }
 .icard.mblock {
   width: 100%; height: 100%; padding: 0; overflow: hidden; border-left: 3px solid var(--k);
   font: inherit; color: inherit; text-align: left; cursor: pointer;
 }
 /* The block's text, with the whole sentence as a pointer's tooltip: the title on top, Now or Next and the time below.
-   Inside the 1 px border, 5 px above and below leave the 48 px two title lines and the meta line need. */
+   Compact (D85), so a short block keeps its title: 3 px after the colour edge and 2 px before the right border
+   (TIMELINE_FLAT_SIDES_PX), 12 px titles on two 15 px lines over an 18 px meta line. */
 .mblock__in {
   display: flex; flex-direction: column; justify-content: space-between; width: 100%; height: 100%; min-width: 0;
-  padding: 5px 7px;
+  padding: 4px 2px 4px 3px;
 }
 .icard.mblock:focus-visible { outline-offset: -2px; }
 .icard.mblock.is-now { background-color: color-mix(in srgb, var(--k) 14%, var(--bg-raised)); }
@@ -316,19 +323,82 @@
 .icard.mblock.is-to-tomorrow { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .mblock__name {
   display: -webkit-box; flex: none; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-width: 100%; overflow: hidden;
-  font-size: var(--fs-13); font-weight: 600; line-height: 16px; overflow-wrap: anywhere; hyphens: auto;
+  font-size: var(--fs-12); font-weight: 600; line-height: 15px; overflow-wrap: normal; word-break: normal; hyphens: manual;
+  text-overflow: ellipsis;
 }
 .mblock.is-ended .mblock__name { color: var(--text-3); font-weight: 500; }
 .mblock__meta {
-  display: flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; font-size: var(--fs-12); line-height: 16px;
-  color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 5px; max-width: 100%; height: 18px; overflow: hidden;
+  font-size: var(--fs-12); line-height: 18px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.mblock__meta > .mbadge { margin-right: 0; line-height: 16px; }
-/* A narrow block keeps what fits: the badge before the time, then the title alone (Now's tint and Next's outline stay),
-   then nothing but its edge. */
-@container (max-width: 96px) { .mbadge + .mblock__time { display: none; } }
-@container (max-width: 50px) { .mblock__meta { display: none; } }
-@container (max-width: 36px) { .mblock__name { visibility: hidden; } }
+/* Each part shows only while it fits whole: one that does not wraps to a second line, which is cut off. */
+.mblock__meta > .mbadge { margin-right: 0; line-height: 18px; }
+/* A block too narrow for the start of its title turns it up the block, read from the bottom (D85, .is-turned): one
+   12 px line centred across, 4 px inside the border at each end (TIMELINE_TURNED_ENDS_PX), cut with an ellipsis, so it
+   never reaches a neighbour or the ruler. The block is --h tall: taller than 60 px when the line needs it. Now's tint
+   and Next's outline say the phase. */
+.mblock.is-turned .mblock__in { position: relative; padding: 0; }
+.mblock.is-turned .mblock__meta { display: none; }
+.mblock.is-turned .mblock__name {
+  position: absolute; left: 50%; top: 50%; display: block; width: calc(var(--h) - 10px); max-width: none;
+  line-height: 15px; white-space: nowrap; transform: translate(-50%, -50%) rotate(-90deg);
+}
+/* A meeting too narrow for a turned title is a flag (D85): a pole up from a time line at its start, its title on a small
+   flag at the top. Neighbours whose titles would overlap step up a row, so a busy hour reads as a staircase, earliest
+   highest. Each row is --flag-p high; the flag's cloth is --flag-c high inside a target of --flag-h, 24 px on every
+   screen (WCAG 2.5.8). */
+.mtl__lanes.has-flags { --axis: calc(var(--flag-rows) * var(--flag-p) + 4px); --band: calc(var(--axis) + 8px); }
+.mtl__lanes.has-flags::before {
+  content: ''; position: absolute; left: 0; right: 0; top: var(--axis); height: 1px; background: var(--border-strong);
+}
+.mtl__flag {
+  --top: calc(var(--axis) - 6px - var(--flag-c) - var(--row) * var(--flag-p)); --mark: var(--k);
+  position: absolute; z-index: 3; top: 0; left: var(--x); width: var(--room); height: var(--band); pointer-events: none;
+}
+.mtl__flag.is-ended { --mark: var(--border-strong); }
+/* The real length, on the time line from the start. Decorative: the sentence has the times. */
+.mflag__len {
+  position: absolute; left: 0; top: calc(var(--axis) - 1px); width: calc(100% * var(--len)); min-width: 3px; height: 3px;
+  border-radius: 2px; background: var(--mark);
+}
+.mflag__pole {
+  position: absolute; left: -1px; top: var(--top); width: 2px; height: calc(var(--axis) - var(--top)); background: var(--mark);
+}
+.mflag__foot {
+  position: absolute; left: -4px; top: calc(var(--axis) - 3.5px); width: 8px; height: 8px; border-radius: 50%; background: var(--mark);
+}
+.mflag {
+  position: absolute; left: 1px; top: calc(var(--top) - (var(--flag-h) - var(--flag-c)) / 2); display: flex; align-items: center;
+  max-width: calc(100% - 8px); height: var(--flag-h); padding: 0; border: 0; background: none;
+  font: inherit; color: var(--text); text-align: left; cursor: pointer; pointer-events: auto;
+}
+/* The ring goes around the flag, not the larger target. */
+.mflag:focus-visible { outline: none; }
+.mflag:focus-visible .mflag__in { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+/* The flag: a swallowtail cloth drawn behind the title. Next has a 1.5 px outline in the meeting color, as a Next
+   block has: an outer cloth under an inner one. */
+.mflag__in {
+  --cloth: polygon(0 0, 100% 0, calc(100% - 7px) 50%, 100% 100%, 0 100%);
+  --fill: color-mix(in srgb, var(--k) 20%, var(--bg-raised));
+  position: relative; isolation: isolate; display: flex; align-items: center; min-width: 0; max-width: 100%;
+  height: var(--flag-c); padding: 0 16px 0 8px; font: 600 var(--fs-13)/18px var(--font-text);
+}
+.mflag__in::before, .mflag__in::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; clip-path: var(--cloth); background: var(--fill);
+  transition: background-color var(--t-fast);
+}
+.mflag__in::after { display: none; }
+.mflag__name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mflag:hover .mflag__in { --fill: color-mix(in srgb, var(--k) 32%, var(--bg-raised)); }
+.mtl__flag.is-now .mflag__in { --fill: color-mix(in srgb, var(--k) 42%, var(--bg-raised)); }
+.mtl__flag.is-now .mflag:hover .mflag__in { --fill: color-mix(in srgb, var(--k) 48%, var(--bg-raised)); }
+.mtl__flag.is-next .mflag__in::before { background: var(--k); }
+.mtl__flag.is-next .mflag__in::after { display: block; inset: 1.5px 1.5px 1.5px 0; }
+.mtl__flag.is-ended .mflag__in { --fill: var(--bg-raised); color: var(--text-3); font-weight: 500; }
+.mtl__flag.is-ended .mflag:hover .mflag__in { --fill: var(--ink-750); }
+/* Tentative or not answered: a dashed pole and length, as a block has a dashed edge. */
+.mtl__flag.is-open .mflag__pole { background: repeating-linear-gradient(to bottom, var(--mark) 0 4px, transparent 4px 7px); }
+.mtl__flag.is-open .mflag__len { background: repeating-linear-gradient(to right, var(--mark) 0 4px, transparent 4px 7px); }
 .mtl__now {
   position: absolute; z-index: 2; top: 0; bottom: 0; left: var(--x); width: 2px; margin-left: -1px;
   background: var(--fog-100); pointer-events: none;
