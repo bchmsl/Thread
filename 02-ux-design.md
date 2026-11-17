@@ -135,6 +135,7 @@ The rule: an item opened from its own tab opens there (a Note from the Notes lis
 - **Topic card:** Topic Details on the page color, with its own Edit dialog and Additional information's Edit and Done; the band has no Edit. The foot has Move to Trash with Undo.
 - **Closing a Note** whose latest changes are not saved on this device (Close, Esc, a click outside) asks "Close this note?" with "Close anyway". The browser's Back does not ask.
 - Closing the last card returns focus to the row that opened the first one. Ids inside a card carry their own prefix.
+- **The page stays still (D76):** while a card or any other dialog is open, the page under it never scrolls: not at a card's top or bottom, not on a card that does not scroll, not over the frame around a card, not by its own scrollbar. The card and the boxes inside it (wide tables, code blocks) scroll as usual. Closing the card leaves the page where it was. The page always keeps its scrollbar's room, so nothing shifts sideways when the page grows or a dialog opens.
 - A row that is a link, and a Jira card's related ticket, keeps the item's own page as its address: a middle click or a click with a modifier key opens that page in a new tab instead of a card.
 
 ### Quick capture

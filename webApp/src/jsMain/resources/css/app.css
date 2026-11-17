@@ -33,6 +33,9 @@ body {
     * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
   }
 }
+/* The page always keeps room for its scrollbar (D76), so neither a page growing past the window nor the page lock
+   under a dialog (Dialogs, below) shifts it sideways. Overlay scrollbars, as on touch screens, take no room. */
+html { scrollbar-gutter: stable; }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, h4, p { margin: 0; }
@@ -443,6 +446,13 @@ body.has-selbar .toast { bottom: calc(var(--line-live, var(--line-h)) + 92px); }
   background: var(--bg-raised); color: var(--text); box-shadow: var(--shadow-pop);
 }
 .dlg::backdrop { background: rgba(4, 7, 15, 0.62); }
+/* The page behind a modal dialog (an item card, Cmd+K, a confirm, a picker) stays still (D76). A modal dialog makes the
+   page inert but not still: a wheel or a touch drag that reached a card's end, a card that does not scroll, the frame
+   around a card and the page's own scrollbar all moved it. The scrollbar's room stays (above) and is dimmed like the
+   rest of the page: the backdrop color over --bg-app. */
+html:has(dialog:modal) { overflow: hidden; background-color: color-mix(in srgb, rgb(4 7 15) 62%, var(--bg-app)); }
+/* A scroll that reaches a dialog's end stops there and never passes to the page, also where :has() is missing. */
+.dlg { overscroll-behavior: contain; }
 .dlg[open] { animation: dlg-in var(--t-med) var(--ease-out); }
 @keyframes dlg-in { from { opacity: 0; transform: translateY(8px); } }
 .dlg__in { padding: 24px; }
