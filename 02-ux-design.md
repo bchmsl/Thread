@@ -190,6 +190,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Notes | The editor is a notebook page on a faint dot grid. |
 | Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). A Task's reminder day counts as a date (D54). |
 | Motion | Short transitions (120 and 220 ms) that drop to zero with reduced motion. |
+| Scrollbars (D73) | Every scroller, the page included, has a 10 px bar with no track, so the surface shows through, and a 6 px rounded thumb in fog `#5b6681`, brighter (`#8792ae`) under the pointer. Only where the main pointer is a mouse or trackpad; touch screens keep their own overlay scrollbars. Chromium and Safari draw it with `::-webkit-scrollbar`; Firefox gets the thin standard bar in the same colors, without the hover change. |
 | Cards (D68) | Every section is a card with a tinted head band; every item is a card shaped like its object. See "Card language" below. |
 
 ### Card language (D68, D69)

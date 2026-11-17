@@ -125,6 +125,10 @@
   --hex-sm: 24px;
   --hex-md: 34px;
   --hex-lg: 84px;
+  /* Scrollbars (D73): a thin thumb on no track; the bar is --scroll-size, the thumb 4 px narrower. */
+  --scroll-size: 10px;
+  --scroll-thumb: var(--fog-700);
+  --scroll-thumb-hover: var(--fog-500);
 
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --t-fast: 120ms;

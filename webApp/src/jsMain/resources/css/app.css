@@ -13,6 +13,26 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* Scrollbars (D73): every scroller, the page included, shows a thin thumb on no track, a little brighter under the
+   pointer. Only where the main pointer is a mouse or trackpad: touch screens keep their own overlay scrollbars.
+   Chromium and Safari style the ::-webkit-scrollbar parts; Firefox, which has none, gets the standard properties.
+   The two never meet, because Chromium 121+ ignores the ::-webkit-scrollbar parts once scrollbar-width or
+   scrollbar-color is set. */
+@media (hover: hover) and (pointer: fine) {
+  @supports selector(::-webkit-scrollbar) {
+    ::-webkit-scrollbar { width: var(--scroll-size); height: var(--scroll-size); background: transparent; }
+    ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scroll-thumb) padding-box;
+      border: 2px solid transparent;
+      border-radius: var(--r-pill);
+    }
+    ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--scroll-thumb-hover); }
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+  }
+}
 a { color: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, h4, p { margin: 0; }
