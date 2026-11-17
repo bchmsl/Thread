@@ -11,6 +11,7 @@ import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import thread.domain.topic.StatusCategory
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.PAST_MEETINGS_MAX
@@ -25,6 +26,7 @@ import thread.web.presentation.external.JiraModel
 import thread.web.presentation.shell.CaptureState
 import thread.web.presentation.shell.CaptureType
 import thread.web.presentation.tasks.deviceTodayTopicsView
+import thread.web.presentation.topics.categoryLabel
 
 /*
  * The preferences, one block per screen (owner change #25, D84). Every one syncs to the workspace (Q6). Later phases
@@ -32,8 +34,9 @@ import thread.web.presentation.tasks.deviceTodayTopicsView
  */
 
 /**
- * Settings > Today, in the owner's order (D84, D86): Topics open as, Show completed tasks, Hide empty sections, Meetings
- * layout, Show past meetings. Group tasks by and Topics shown take their places in later phases.
+ * Settings > Today, in the owner's order (D84, D86, D89): Topics open as, Show completed tasks, Hide empty sections,
+ * Meetings layout, Show past meetings, Topics shown. Group tasks by takes its place, before Show past meetings, in a
+ * later phase.
  */
 @Composable
 internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
@@ -44,7 +47,7 @@ internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
         ChoicePref(
             labelId = "ttv-l",
             label = "Topics open as",
-            hint = "Active and paused Topics. You can also switch on Today.",
+            hint = "The Topics card on Today. You can also switch it there.",
             options = TopicsView.entries.map { it to topicsViewLabel(it) },
             picked = prefs.todayTopicsLayout(topicsOnThisDevice),
         ) { workspace.setPrefs(workspace.prefs.copy(todayTopicsView = it)) }
@@ -71,8 +74,50 @@ internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
                 classes = listOf("input"),
             ) { picked -> workspace.setPrefs(workspace.prefs.copy(todayPastMeetings = picked.toIntOrNull())) }
         }
+        TopicsShownPref(workspace)
     }
 }
+
+/**
+ * Topics shown (owner change #7, D89): a checkbox per status category. Today's Topics card shows the Topics whose status
+ * is in a checked one, and is left out with none checked. Each change saves the whole set, so none checked stays none.
+ */
+@Composable
+private fun TopicsShownPref(workspace: WorkspaceModel) {
+    val shown = workspace.prefs.todayTopicCategories
+    Div({ classes("pref", "pref--checks") }) {
+        Div {
+            P({
+                classes("pref__label")
+                id("tc-l")
+            }) { Text("Topics shown") }
+            P({
+                classes("pref__hint")
+                id("tc-hint")
+            }) { Text(TOPICS_SHOWN_HINT) }
+        }
+        Div({
+            classes("pref-checks")
+            attr("role", "group")
+            attr("aria-labelledby", "tc-l")
+            attr("aria-describedby", "tc-hint")
+        }) {
+            StatusCategory.entries.forEach { category ->
+                val id = "tc-${category.id}"
+                Span({ classes("pref-check") }) {
+                    CheckBox(category in shown, label = null, id = id) { on ->
+                        val now = workspace.prefs.todayTopicCategories
+                        workspace.setPrefs(workspace.prefs.copy(todayTopicCategories = if (on) now + category else now - category))
+                    }
+                    Label(id) { Text(categoryLabel(category)) }
+                }
+            }
+        }
+    }
+}
+
+private const val TOPICS_SHOWN_HINT =
+    "Today shows the Topics whose status is in a checked category, grouped by status. With none checked, it leaves Topics out."
 
 /**
  * Hide empty sections (D86): a checkbox per Today section that can hide when empty. Each change saves the whole list,

@@ -278,7 +278,8 @@ internal fun categoryLabel(category: StatusCategory): String =
 internal fun categoryHint(category: StatusCategory): String =
     when (category) {
         StatusCategory.Planned -> "not started"
-        StatusCategory.Active -> "shows in Today"
+        // Not "shows in Today": since D89 Settings > Today picks which categories Today shows.
+        StatusCategory.Active -> "in progress"
         StatusCategory.Paused -> "on hold"
         StatusCategory.Done -> "finished"
     }

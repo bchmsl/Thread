@@ -108,7 +108,7 @@ Two more groups follow Earlier planned (D53):
 
 Every group opens and closes from its heading. Upcoming and No date start closed, and each device remembers the choice.
 
-Below the Tasks, Today shows the Topics whose status is in the Active or Paused category, grouped by status in Settings order (D59). Planned and Done Topics are not shown. A List / Board switch picks the layout; List is the default. The choice syncs and is also in Settings > Today (D84); until it is first changed, a device keeps the layout it showed before. On wide screens the Board, like the Topics Board, uses more width and then narrower lanes before it scrolls sideways (D66).
+Below the Tasks, Today shows the Topics whose status is in a category checked under "Topics shown" in Settings > Today (D89, synced): Active and Paused by default, and any mix of Planned, Active, Paused and Done. They are grouped by status in Settings order (D59). The section's title names the checked categories: "Active and paused Topics" by default, "Planned and done Topics", "All Topics" for all four. With none checked, Today leaves its Topics out. A List / Board switch picks the layout; List is the default. The choice syncs and is also in Settings > Today (D84); until it is first changed, a device keeps the layout it showed before. On wide screens the Board, like the Topics Board, uses more width and then narrower lanes before it scrolls sideways (D66).
 
 A Task added from Today without a Topic is planned for today and also waits in Inbox until it is filed (D38).
 

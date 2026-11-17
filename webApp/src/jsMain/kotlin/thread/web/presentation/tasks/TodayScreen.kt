@@ -90,7 +90,7 @@ import thread.web.presentation.topics.topicPlace
 
 /**
  * Today (v3 today.html): the date and the personal checklist lead, meetings, reminders and review requests sit on the rail,
- * active and paused Topics below. With "Meetings layout" set to Horizontal (D79), the meetings leave the rail for a
+ * the picked Topics below (D89). With "Meetings layout" set to Horizontal (D79), the meetings leave the rail for a
  * timeline across the page, under the heading and above both columns. Each Task shows once, in the first group it
  * qualifies for (D37). Upcoming and No date follow Earlier planned and start closed; every group opens and closes, and
  * this device remembers it (D53). An empty task group is left out; so are the Meetings, Reminders and Review requested
@@ -214,7 +214,7 @@ private val PREFERENCES_PLACE = Place.of("settings", "today")
 
 /**
  * No task to show and every section Settings hides when empty has nothing (D77, D86): one line says so in their place.
- * The page header, its add button and Active and paused Topics stay.
+ * The page header, its add button and the Topics card stay.
  */
 @Composable
 private fun NothingForToday() {
@@ -449,18 +449,22 @@ internal const val ACTIVE_LAYOUT_NAME = "thread.today.activeLayout"
 internal fun deviceTodayTopicsView(): TopicsView? = TopicsView.fromId(readDeviceText(ACTIVE_LAYOUT_NAME))
 
 /**
- * Active and paused Topics (owner change #1): only Topics whose status is in the Active or Paused category, grouped by
- * that status in Settings order. List: a heading per status that opens and closes, with the Topics as rows. Board: a
- * lane per status. With one such status there is nothing to group, so the list has no heading and the board is the
- * card grid.
+ * Today's Topics (owner change #1, D89): only Topics whose status is in a category Settings > Today "Topics shown" picks,
+ * Active and Paused by default, grouped by that status in Settings order. With no category picked the card is left
+ * out. The title names the picked categories. List: a heading per status that opens and closes, with the Topics as
+ * rows. Board: a lane per status. With one such status there is nothing to group, so the list has no heading and the
+ * board is the card grid.
  */
 @Composable
 private fun ActiveTopics(workspace: WorkspaceModel) {
+    val categories = workspace.prefs.todayTopicCategories
+    if (categories.isEmpty()) return
     val statuses = workspace.statuses
-    val shownStatuses = todayStatuses(statuses)
-    val groups = todayTopicGroups(workspace.topics, statuses)
+    val shownStatuses = todayStatuses(statuses, categories)
+    val groups = todayTopicGroups(workspace.topics, statuses, categories)
     val count = groups.sumOf { it.topics.size }
     val grouped = shownStatuses.size > 1
+    val title = todayTopicsTitle(categories)
     // List or Board syncs with Settings > Today (D84).
     val onThisDevice = remember { deviceTodayTopicsView() }
     val layout = workspace.prefs.todayTopicsLayout(onThisDevice)
@@ -470,28 +474,28 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
             null
         } else {
             val names = shownStatuses.joinToString(" and ") { it.name }
-            if (names.isEmpty()) "No status uses the Active or Paused category" else "Statuses in the Active or Paused category: $names"
+            val choice = todayCategoryChoice(categories)
+            if (names.isEmpty()) "No status uses the $choice category" else "Statuses in the $choice category: $names"
         }
     SectionCard(
         kind = CardKind.Topic,
         headingId = "at-h",
         bodyId = "at-b",
-        title = "Active and paused Topics",
+        title = title,
         count = count.toString(),
         hint = hint,
         attrs = { classes("atopics") },
         actions =
             if (count > 0) {
                 {
-                    LayoutSwitch(layout) { picked -> workspace.setPrefs(workspace.prefs.copy(todayTopicsView = picked)) }
+                    LayoutSwitch(title, layout) { picked -> workspace.setPrefs(workspace.prefs.copy(todayTopicsView = picked)) }
                 }
             } else {
                 null
             },
     ) {
         if (count == 0) {
-            val why = "Topics show here when their status is in the Active or Paused category."
-            EmptyState(Icon.Topics, "No active or paused Topics", why) {
+            EmptyState(Icon.Topics, todayNoTopicsText(categories), todayNoTopicsWhy(categories)) {
                 A(View.Topics.place.hash, { classes("btn", "btn--line") }) { Text("Open Topics") }
             }
             return@SectionCard
@@ -508,13 +512,14 @@ private fun ActiveTopics(workspace: WorkspaceModel) {
 
 @Composable
 private fun LayoutSwitch(
+    title: String,
     layout: TopicsView,
     onPick: (TopicsView) -> Unit,
 ) {
     Div({
         classes("seg")
         attr("role", "radiogroup")
-        attr("aria-label", "Active and paused Topics layout")
+        attr("aria-label", "$title layout")
     }) {
         TopicsView.entries.forEach { option ->
             Button({
@@ -599,8 +604,8 @@ private fun ActiveRows(
 }
 
 /**
- * The small board: a lane per Active or Paused status, in Settings order, so a status keeps its place. A lane no Topic uses
- * says so; on a phone, where lanes stack, it is left out.
+ * The small board: a lane per status in a picked category (D89), in Settings order, so a status keeps its place. A lane no
+ * Topic uses says so; on a phone, where lanes stack, it is left out.
  */
 @Composable
 private fun ActiveBoard(
@@ -675,7 +680,7 @@ private fun ActiveCards(
 
 /**
  * A Topic's line, as on the Topics list (D81, refining D52): its first open Task, else its Additional information, else
- * its goal, at most two lines (css `.tabout`). Today shows no Done Topics, so "Finished." is there for completeness.
+ * its goal, at most two lines (css `.tabout`). "Finished." shows only when "Topics shown" picks Done (D89).
  */
 @Composable
 private fun NextLine(line: TopicLine) {

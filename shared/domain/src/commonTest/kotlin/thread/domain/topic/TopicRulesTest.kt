@@ -13,6 +13,9 @@ class TopicRulesTest {
     private val done = TopicStatus(StatusId("s-done"), "Done", StatusCategory.Done, 3)
     private val statuses = listOf(planned, active, paused, done)
 
+    // Today's categories by default (D59), as Settings > Today "Topics shown" starts.
+    private val activeAndPaused = setOf(StatusCategory.Active, StatusCategory.Paused)
+
     private fun topic(
         id: String,
         status: TopicStatus,
@@ -81,27 +84,80 @@ class TopicRulesTest {
         val e = topic("e", hold, 1)
         val f = topic("f", finished, 1)
 
-        assertEquals(listOf("Analysis", "In Progress", "QA", "Hold"), todayStatuses(order).map { it.name })
-        val groups = todayTopicGroups(listOf(a, b, c, d, e, f), order)
+        assertEquals(listOf("Analysis", "In Progress", "QA", "Hold"), todayStatuses(order, activeAndPaused).map { it.name })
+        val groups = todayTopicGroups(listOf(a, b, c, d, e, f), order, activeAndPaused)
 
-        // QA has no Topic, so it has no group. Planned and Done never show.
+        // QA has no Topic, so it has no group. Planned and Done are not picked, so they don't show.
         assertEquals(listOf("Analysis", "In Progress", "Hold"), groups.map { it.status.name })
         assertEquals(listOf("c", "b"), groups[0].topics.map { it.id.value })
         assertEquals(listOf("a"), groups[1].topics.map { it.id.value })
         assertEquals(listOf("e"), groups[2].topics.map { it.id.value })
         // Moving Hold to the top in Settings moves its group first.
         val moved = listOf(hold, todo, analysis, inProgress, qa)
-        assertEquals(listOf("Hold", "Analysis", "In Progress"), todayTopicGroups(listOf(a, b, c, e), moved).map { it.status.name })
+        assertEquals(
+            listOf("Hold", "Analysis", "In Progress"),
+            todayTopicGroups(listOf(a, b, c, e), moved, activeAndPaused).map { it.status.name },
+        )
     }
 
     @Test
     fun todayHasNoGroupsWithoutActiveOrPausedTopics() {
-        assertTrue(todayTopicGroups(listOf(topic("a", planned), topic("b", done)), statuses).isEmpty())
-        assertTrue(todayTopicGroups(emptyList(), statuses).isEmpty())
+        assertTrue(todayTopicGroups(listOf(topic("a", planned), topic("b", done)), statuses, activeAndPaused).isEmpty())
+        assertTrue(todayTopicGroups(emptyList(), statuses, activeAndPaused).isEmpty())
         // A Topic whose status is gone counts under the first status, Planned here, so Today leaves it out.
         val orphan = Topic(TopicId("t1"), "Orphan", TopicColor.Blue, StatusId("s-gone"))
-        assertTrue(todayTopicGroups(listOf(orphan), statuses).isEmpty())
-        assertEquals(listOf("t1"), todayTopicGroups(listOf(orphan), listOf(paused, done)).single().topics.map { it.id.value })
+        assertTrue(todayTopicGroups(listOf(orphan), statuses, activeAndPaused).isEmpty())
+        assertEquals(
+            listOf("t1"),
+            todayTopicGroups(listOf(orphan), listOf(paused, done), activeAndPaused).single().topics.map { it.id.value },
+        )
+    }
+
+    @Test
+    fun todayShowsTheStatusesOfEveryPickedCategoryAndNoneWithoutAPick() {
+        // Two statuses per category, in a workspace order that mixes the categories.
+        val todo = TopicStatus(StatusId("s-todo"), "To-Do", StatusCategory.Planned, 0)
+        val analysis = TopicStatus(StatusId("s-analysis"), "Analysis", StatusCategory.Active, 1)
+        val hold = TopicStatus(StatusId("s-hold"), "Hold", StatusCategory.Paused, 2)
+        val shipped = TopicStatus(StatusId("s-shipped"), "Shipped", StatusCategory.Done, 3)
+        val idea = TopicStatus(StatusId("s-idea"), "Idea", StatusCategory.Planned, 4)
+        val qa = TopicStatus(StatusId("s-qa"), "QA", StatusCategory.Active, 5)
+        val blocked = TopicStatus(StatusId("s-blocked"), "Blocked", StatusCategory.Paused, 6)
+        val dropped = TopicStatus(StatusId("s-dropped"), "Dropped", StatusCategory.Done, 7)
+        val order = listOf(todo, analysis, hold, shipped, idea, qa, blocked, dropped)
+        val topics = order.mapIndexed { i, status -> topic("t$i", status, i.toLong()) }
+
+        // Every one of the 16 subsets of the four categories, the empty one included.
+        val subsets = (0 until 16).map { bits -> StatusCategory.entries.filterIndexed { i, _ -> bits and (1 shl i) != 0 }.toSet() }
+        assertEquals(16, subsets.toSet().size)
+        subsets.forEach { picked ->
+            val expected = order.filter { it.category in picked }
+            assertEquals(expected, todayStatuses(order, picked), "statuses for $picked")
+            val groups = todayTopicGroups(topics, order, picked)
+            assertEquals(expected, groups.map { it.status }, "groups for $picked, in workspace order")
+            assertEquals(expected.size, groups.sumOf { it.topics.size }, "one Topic per status for $picked")
+        }
+        assertTrue(todayStatuses(order, emptySet()).isEmpty())
+        assertTrue(todayTopicGroups(topics, order, emptySet()).isEmpty())
+        // All four categories show every status, Done included.
+        assertEquals(order, todayStatuses(order, StatusCategory.entries.toSet()))
+    }
+
+    @Test
+    fun aStatusMovedToAnotherCategoryMovesItsTopicsInOrOutOfToday() {
+        val plannedAndDone = setOf(StatusCategory.Planned, StatusCategory.Done)
+        val a = topic("a", active, 1)
+        val b = topic("b", planned, 2)
+        assertEquals(listOf("b"), todayTopicGroups(listOf(a, b), statuses, plannedAndDone).flatMap { it.topics }.map { it.id.value })
+        // Settings > Topic statuses moves Active into the Done category: its Topic now shows, after Planned's.
+        val moved = statuses.map { if (it == active) it.copy(category = StatusCategory.Done) else it }
+        assertEquals(
+            listOf("Planned", "Active"),
+            todayTopicGroups(listOf(a, b), moved, plannedAndDone).map { it.status.name },
+        )
+        // And back to Active, out again, while the default categories pick it up.
+        assertEquals(listOf("b"), todayTopicGroups(listOf(a, b), statuses, plannedAndDone).flatMap { it.topics }.map { it.id.value })
+        assertEquals(listOf("a"), todayTopicGroups(listOf(a, b), statuses, activeAndPaused).flatMap { it.topics }.map { it.id.value })
     }
 
     @Test

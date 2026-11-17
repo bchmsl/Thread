@@ -39,7 +39,8 @@ internal fun reviewContent(
  * Which of Today's sections show (D77, D86). A task group never shows empty (D53; Today too since D86, Q2). Settings
  * "Hide empty sections" names Meetings, Reminders and Review requested ([hidden], from
  * [thread.domain.workspace.todayHiddenWhenEmpty]): each one named there shows only while it has something, and comes
- * back as soon as something arrives. Active and paused Topics always shows.
+ * back as soon as something arrives. The Topics card is not one of these: it shows unless "Topics shown" picks no
+ * category (D89).
  *
  * [reminderRows]: today's reminders that have a row to show. [meetingsShown]: the meetings are set up
  * ([thread.web.presentation.calendar.MeetingsModel.cardShown]). [meetingsContent]: they have something to show

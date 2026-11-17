@@ -67,11 +67,14 @@ Meetings (D78, ADR-020): a section card at the top of the side column, above Rem
   - Each block or flag is one button named by the row's sentence, Tab in time order after the all-day cards; it opens the Meeting card. Topic tags are not drawn on blocks; the name says them.
   - Join for the meeting now and the next one sits in the card's head as "Join <title>"; under 760 px on its own row under the title.
   - Each hour takes at least 88 px. A narrower card scrolls the hours inside itself, starting with now a third from the left; the page never scrolls sideways.
-Active and paused Topics (D59): Topics whose status is in the Active or Paused category, one group per status in Settings order, oldest first.
+Today's Topics (D59, D89): Topics whose status is in a category checked under "Topics shown" in Settings > Today (Active and Paused by default), one group per status in Settings order, oldest first.
+- Title: the checked categories in their fixed order (Planned, Active, Paused, Done), the first capitalised, "and" before the last, no comma before it: "Active and paused Topics" (default), "Paused Topics", "Planned, active and paused Topics"; all four is "All Topics". The layout switch is named "<title> layout".
+- With none checked the section is not drawn, and nothing takes its place. It is not one of the "Hide empty sections": with a category checked and no Topic it shows its empty state, "No active or paused Topics" (the checked categories joined by "or"), with "Open Topics"; with all four, "No Topics".
+- A Done Topic with nothing else to say reads "Finished." (D81).
 - List / Board switch, List by default. The choice syncs and is also "Topics open as" in Settings > Today (D84); until it is first changed, a device shows the one it kept before.
 - List: a heading per status (chevron, status swatch, name, count) over Topics list rows. A status with no Topic has no group. Groups start open, and each device remembers which are closed.
 - Board: one read-only lane per status with the Today cards. A lane with no Topic says "No Topics", hidden on phones. At 760 px and wider, lanes that do not fit first widen the board (264 px a lane, up to the window less a 50 px gutter; the heading keeps the page width), then shrink evenly to 210 px, and only then scroll inside the section (D66). Below 760 px the lanes stack, as before.
-- With only one Active or Paused status there is no heading, and the hint names the status.
+- With only one status in the checked categories there is no heading, and the hint names it: "Statuses in the Paused category: Paused".
 Topic labels provide context.
 A Task that qualifies for multiple sections should not create confusing duplicates.
 Empty state should support quick capture, not just show an illustration.
@@ -179,7 +182,7 @@ Each device has its own timer (F2 A); the lengths and the history are the same e
 
 One page. Under the header a row of links (chips) jumps to each block and moves focus to its heading; `#/settings/<block>` opens a block directly, and the old `#/settings/prefs` opens Today.
 Blocks, in order: Connections, Calendar from your Mac, Topic statuses, Today, Topics, Jira, General, Appearance, Account. Owner change #25 adds Inbox, Topic Details and Pull requests blocks in later phases.
-- Today, in the owner's order (D86): Topics open as (List / Board), Show completed tasks, Hide empty sections (Meetings, Reminders and Review requested checkboxes in a labelled group), Meetings layout, Show past meetings (a select: All, None, 1 to 20). Group tasks by and Topics shown take their places in later phases.
+- Today, in the owner's order (D86, D89): Topics open as (List / Board), Show completed tasks, Hide empty sections (Meetings, Reminders and Review requested checkboxes in a labelled group), Meetings layout, Show past meetings (a select: All, None, 1 to 20), Topics shown (Planned, Active, Paused and Done checkboxes in a labelled group; Active and Paused by default). Group tasks by takes its place, before Show past meetings, in a later phase.
 - Topics: Topics open as (List / Board), the same choice as the Topics page switch (D21).
 - Jira: Current sprint only, the same choice as the Jira page checkbox. Disabled, with a hint, while Jira is not connected or the site has no sprints.
 - General: Capture starts as.

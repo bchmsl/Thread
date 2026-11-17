@@ -135,9 +135,14 @@ data class TopicGroup(
     val topics: List<Topic>,
 )
 
-/** The statuses Today groups its Topics by (owner change #1): those in the Active or Paused category, in workspace order. */
-fun todayStatuses(statuses: List<TopicStatus>): List<TopicStatus> =
-    statuses.filter { it.category == StatusCategory.Active || it.category == StatusCategory.Paused }
+/**
+ * The statuses Today groups its Topics by (owner change #1, D89): those in one of [categories], the ones Settings >
+ * Today "Topics shown" picks, in workspace order. No category picked means no status, and Today leaves its Topics out.
+ */
+fun todayStatuses(
+    statuses: List<TopicStatus>,
+    categories: Set<StatusCategory>,
+): List<TopicStatus> = statuses.filter { it.category in categories }
 
 /**
  * Today's Topics, grouped by status (owner change #1): one group per status in [todayStatuses], in workspace order,
@@ -147,9 +152,10 @@ fun todayStatuses(statuses: List<TopicStatus>): List<TopicStatus> =
 fun todayTopicGroups(
     topics: List<Topic>,
     statuses: List<TopicStatus>,
+    categories: Set<StatusCategory>,
 ): List<TopicGroup> {
     val byStatus = topicsInOrder(topics, statuses).groupBy { statusOf(it, statuses).id }
-    return todayStatuses(statuses).mapNotNull { status -> byStatus[status.id]?.let { TopicGroup(status, it) } }
+    return todayStatuses(statuses, categories).mapNotNull { status -> byStatus[status.id]?.let { TopicGroup(status, it) } }
 }
 
 /** How many Topics use [status]. */
