@@ -43,7 +43,8 @@ import kotlin.math.round
 
 /**
  * Today's meetings as a timeline across the page (D79, Settings "Meetings layout: Horizontal"). It is the Meetings card
- * of [MeetingsRail], with the same note and footer, and its body runs the day's hours from left to right
+ * of [MeetingsRail], with the same note and footer, and it keeps every meeting of the day: "Show past meetings" is for
+ * the card only (D86). Its body runs the day's hours from left to right
  * ([meetingTimeline]): all-day meetings in a strip above the hours, timed ones as blocks placed by start and end, in
  * lanes while they overlap, and a line at now. The hours share the box's width, so the layout waits for it. A block too
  * narrow for the start of its title turns it up the block, taller when it needs to, and a meeting too narrow even for
@@ -55,13 +56,11 @@ import kotlin.math.round
  */
 @Composable
 internal fun MeetingsTimeline(
-    model: MeetingsModel,
-    zone: String,
+    view: TodayMeetingsView,
     topicsOf: (SeriesKey) -> List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
     val now = LocalNow.current
-    val view = todayMeetingsView(model.state, now, zone)
     // The box's width in px, once measured: the hours share it (D85).
     var widthPx by remember { mutableStateOf<Double?>(null) }
     val joinable =

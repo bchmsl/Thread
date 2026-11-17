@@ -1000,6 +1000,12 @@ main:has(.board) { max-width: 1520px; }
 .pref__hint { font-size: var(--fs-13); color: var(--text-3); }
 .pref select.input { width: auto; min-width: 150px; }
 .pref .seg { flex-shrink: 0; }
+/* A preference with a few checkboxes (D86): they wrap under the label on a narrow screen. */
+.pref--checks { flex-wrap: wrap; }
+.pref--checks > :first-child { flex: 1 1 260px; }
+.pref-checks { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.pref-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.pref-check label { cursor: pointer; }
 
 @media (max-width: 899px) {
   .set { grid-template-columns: minmax(0, 1fr); gap: 14px; }

@@ -93,11 +93,11 @@ Groups (D37): Overdue, Today, and Earlier planned in the main column.
 Reminders and Review requested sit in a side column.
 
 Meetings (D78, ADR-020) head the side column once meetings are set up:
-- Today's work meetings from Apple Calendar on the owner's Mac, all-day ones first, then by start. Ended ones stay, greyed.
+- Today's work meetings from Apple Calendar on the owner's Mac, all-day ones first, then by start. Ended ones stay, greyed; Settings > Today "Show past meetings" (D86, synced) can keep only the latest few in this card, or none.
 - Each row shows the time, the title, Now or Next, "Tentative" or "Not answered", the place, the linked Topics, and Join for a Teams, Zoom, Google Meet or Webex link.
 - Declined and cancelled meetings are not shown.
 - The card says when the Mac last uploaded. After an hour without an upload it asks whether the Mac is awake. "No meetings today." shows only after an upload that covered today.
-- "Hide empty sections" in Settings > Today (D77) never hides it.
+- With Meetings checked under "Hide empty sections" in Settings > Today (D86), it is hidden while it has no meeting left to show today. A problem keeps it: no upload for over an hour, a problem on the Mac, meetings that cannot load, or Thread needing an update.
 - Settings > Today, "Meetings layout" (D79, synced): Vertical, the default, is the card described here. Horizontal moves the same card across the page under the heading, above both columns, as a timeline of today's hours, 10:00 to 19:00 unless a meeting falls outside them: all-day meetings above, timed ones as compact blocks by start and end, overlaps in rows, a block too narrow to show the start of its title flat turning that title up the block (and growing taller when needed), a meeting too narrow even for that as a flag on a thin line at its start, in a band above the blocks (D85), a line at now, and Join for the meeting now and the next one in the card's head.
 - A row opens a read-only Meeting card: when, where, your answer, Join, and its Topics with Link to Topic and Unlink.
 - The status line names the next meeting in the hour before it starts ("Standup in 12 min") and opens its card.

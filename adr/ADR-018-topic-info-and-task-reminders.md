@@ -119,7 +119,7 @@ The owner's words: "in today view it would be better another collapsible section
 ### UI
 
 - Upcoming lists its Tasks under small day headings (`h3`): "Tomorrow", then "Mon 17 Nov". Each row keeps its "Planned" and "Due" lines, so it says which date it is.
-- Upcoming and No date show 10 rows, then "Show all (N)", which becomes "Show fewer". An empty group is not shown; Today keeps "Nothing planned for today yet."
+- Upcoming and No date show 10 rows, then "Show all (N)", which becomes "Show fewer". An empty group is not shown; Today keeps "Nothing planned for today yet." (Until D86: since then an empty Today group is not shown either.)
 - **Every group opens and closes.** The heading is a button with a chevron, `aria-expanded` and `aria-controls`, and the body is `hidden` and not drawn when closed, like a Topic Details section. The open count stays in the heading. Overdue, Today and Earlier planned start open; Upcoming and No date start closed.
 - **Remembered per device, not synced.** `thread.today.open.<group>` in `localStorage` holds `1` or `0`. Nothing stored, a value it does not know, or blocked storage falls back to the default (`readDeviceText`, which already catches storage errors).
 - The Task sheet's Today line names the new groups: "Shows in Today under Upcoming", "under No date", or "Not in Today while it waits in Inbox".

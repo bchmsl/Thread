@@ -112,6 +112,65 @@ class MeetingRulesTest {
         assertEquals(listOf(3), todayMeetings(listOf(twoDays, endedYesterday, startsTomorrow), at(0, day = tomorrow)).ids())
     }
 
+    // D86: Settings "Show past meetings" for the Vertical card.
+    private val day =
+        listOf(
+            allDay(9, today, tomorrow),
+            timed(1, at(8), at(9)),
+            timed(2, at(9), at(10)),
+            timed(3, at(10), at(11)),
+            timed(4, at(12), at(13)),
+            timed(5, at(15), at(16)),
+        )
+
+    @Test
+    fun pastMeetingsKeepTheLatestEndedOnesAndEveryOtherRow() {
+        val rows = todayMeetings(day, at(12, 30))
+        assertEquals(listOf(9, 1, 2, 3, 4, 5), limitPastMeetings(rows, null).ids(), "All: every row")
+        assertEquals(listOf(9, 4, 5), limitPastMeetings(rows, 0).ids(), "None: all-day, now and later stay")
+        assertEquals(listOf(9, 3, 4, 5), limitPastMeetings(rows, 1).ids(), "The one that ended last")
+        assertEquals(listOf(9, 2, 3, 4, 5), limitPastMeetings(rows, 2).ids())
+        assertEquals(listOf(9, 1, 2, 3, 4, 5), limitPastMeetings(rows, 3).ids(), "As many as there are")
+        assertEquals(listOf(9, 1, 2, 3, 4, 5), limitPastMeetings(rows, 20).ids(), "More than there are")
+    }
+
+    @Test
+    fun pastMeetingsNeverHideAllDayMeetingsOrADayWithoutEndedOnes() {
+        val allDayOnly = todayMeetings(listOf(allDay(9, yesterday, tomorrow), allDay(8, today, tomorrow)), at(23, 59))
+        assertEquals(listOf(9, 8), limitPastMeetings(allDayOnly, 0).ids())
+        val morning = todayMeetings(day, at(7))
+        assertEquals(listOf(9, 1, 2, 3, 4, 5), limitPastMeetings(morning, 0).ids())
+        assertEquals(emptyList<TodayMeeting>(), limitPastMeetings(emptyList(), 0))
+        val evening = todayMeetings(day, at(17))
+        assertEquals(listOf(9), limitPastMeetings(evening, 0).ids(), "Everything ended: only the all-day row is left")
+    }
+
+    @Test
+    fun theMeetingThatEndedLastStaysEvenWhenItStartedFirst() {
+        val long = timed(1, at(9), at(12))
+        val short = timed(2, at(10), at(10, 30))
+        val sameEndLaterStart = timed(3, at(11), at(12))
+        val rows = todayMeetings(listOf(long, short, sameEndLaterStart), at(13))
+        assertEquals(listOf(3), limitPastMeetings(rows, 1).ids(), "Same end: the later start")
+        assertEquals(listOf(1, 3), limitPastMeetings(rows, 2).ids(), "Then the long one, which ended after the short one")
+    }
+
+    @Test
+    fun pastMeetingsFollowTheDayChange() {
+        val crossing = timed(6, at(23, 30), at(0, 30, tomorrow))
+        val tomorrows = timed(7, at(8, day = tomorrow), at(9, day = tomorrow))
+        val meetings = day + crossing + tomorrows
+        // Before midnight: today's five timed meetings have ended; the one across midnight is on now.
+        val lateEvening = todayMeetings(meetings, at(23, 45))
+        assertEquals(listOf(9, 5, 6), limitPastMeetings(lateEvening, 1).ids())
+        // After midnight: yesterday's meetings are gone, so none is past until the one across midnight ends.
+        val justAfter = todayMeetings(meetings, at(0, 10, tomorrow))
+        assertEquals(listOf(6, 7), limitPastMeetings(justAfter, 0).ids())
+        val later = todayMeetings(meetings, at(0, 40, tomorrow))
+        assertEquals(listOf(7), limitPastMeetings(later, 0).ids())
+        assertEquals(listOf(6, 7), limitPastMeetings(later, 1).ids())
+    }
+
     @Test
     fun sameStartMeetingsAreOrderedByEndThenTitleThenId() {
         val list =

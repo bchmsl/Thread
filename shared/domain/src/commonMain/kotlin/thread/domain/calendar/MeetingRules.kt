@@ -84,6 +84,30 @@ fun hasEnded(
     now: WallTime,
 ): Boolean = if (time.startsAt == time.endsAt) now > time.startsAt else now >= time.endsAt
 
+/**
+ * [rows] of [todayMeetings] with at most [max] ended meetings, for Settings "Show past meetings" (D86): the ones that
+ * ended last stay, a tie going to the later start and then to the later row. Null keeps every row. All-day meetings
+ * and meetings not over yet always stay, and the rows keep their order.
+ */
+fun limitPastMeetings(
+    rows: List<TodayMeeting>,
+    max: Int?,
+): List<TodayMeeting> {
+    if (max == null) return rows
+    val ended = rows.withIndex().filter { it.value.phase == MeetingPhase.Ended }
+    if (ended.size <= max) return rows
+    val latestFirst =
+        compareBy<IndexedValue<TodayMeeting>>({ it.value.meeting.time.endsAt }, { it.value.meeting.time.startsAt }, { it.index })
+            .reversed()
+    val kept =
+        ended
+            .sortedWith(latestFirst)
+            .take(max.coerceAtLeast(0))
+            .map { it.index }
+            .toSet()
+    return rows.filterIndexed { index, row -> row.phase != MeetingPhase.Ended || index in kept }
+}
+
 /** The status line's meeting chip (Q6). */
 sealed interface NextMeeting {
     val meeting: Meeting

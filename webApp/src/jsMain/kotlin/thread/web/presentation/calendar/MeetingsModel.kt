@@ -24,7 +24,10 @@ internal class MeetingsModel(
 
     private var seen by mutableStateOf(readDeviceText(SEEN_NAME) == "1")
 
-    /** Today shows the Meetings card. It ignores "Hide empty sections in Today" (D77): set up, it always shows. */
+    /**
+     * The meetings are set up for Today. Then the Meetings card, or the timeline, shows unless Settings hides it while
+     * it has nothing to show (D86, [TodayMeetingsView.hasContent]).
+     */
     val cardShown: Boolean get() = meetingsCardShown(state, seen)
 
     /** The meetings, empty unless [state] is Ready. */

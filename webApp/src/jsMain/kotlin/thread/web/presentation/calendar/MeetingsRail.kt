@@ -24,6 +24,7 @@ import thread.domain.calendar.SeriesKey
 import thread.domain.calendar.TodayMeeting
 import thread.domain.calendar.isJoinTime
 import thread.domain.calendar.joinServiceOf
+import thread.domain.calendar.limitPastMeetings
 import thread.domain.calendar.todayMeetings
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
@@ -41,18 +42,16 @@ import thread.web.presentation.topics.PlainTopicTag
 /**
  * Today's Meetings card (D78, calendar-plan.md section 6): today's meetings from the Mac app, all-day first, then by
  * time. Each row opens the Meeting card; Join opens the meeting link in a new tab. Ended rows are greyed and say
- * "Ended" to screen readers. One status region per card says what is wrong or why the list is empty; the time of the
- * Mac app's last upload closes the card.
+ * "Ended" to screen readers, and Settings can keep only the last few of them (D86). One status region per card says
+ * what is wrong or why the list is empty; the time of the Mac app's last upload closes the card.
  */
 @Composable
 internal fun MeetingsRail(
-    model: MeetingsModel,
-    zone: String,
+    view: TodayMeetingsView,
     topicsOf: (SeriesKey) -> List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
     val now = LocalNow.current
-    val view = todayMeetingsView(model.state, now, zone)
     val rows = view.rows
     SectionCard(
         kind = CardKind.Meeting,
@@ -89,16 +88,28 @@ internal class TodayMeetingsView(
 
     /** The head's count, once the meetings are known. */
     val count: String? get() = if (state is MeetingsState.Ready) rows.size.toString() else null
+
+    /**
+     * The card has something to show while Settings hides it when empty (D86, plan A10): a meeting left to show today,
+     * or a problem that must not hide: the Mac app has not uploaded for over an hour or cannot, or meetings cannot load
+     * here. An answer still on its way, or one that does not cover today yet, is nothing yet, like Review requested's
+     * (D77).
+     */
+    val hasContent: Boolean get() = rows.isNotEmpty() || notice?.warning == true || state == MeetingsState.NeedsUpdate
 }
 
+/** [pastMeetings]: at most this many ended meetings, the latest ones (D86); null for every one. */
 internal fun todayMeetingsView(
     state: MeetingsState,
     now: WallTime,
     zone: String,
+    pastMeetings: Int? = null,
 ): TodayMeetingsView {
-    val rows = if (state is MeetingsState.Ready) todayMeetings(state.meetings, now) else emptyList()
+    val all = if (state is MeetingsState.Ready) todayMeetings(state.meetings, now) else emptyList()
+    val rows = limitPastMeetings(all, pastMeetings)
     val lastSuccess = (state as? MeetingsState.Ready)?.source?.lastSuccessAtMillis?.let { WallClock.wallTimeAt(it.toDouble(), zone) }
-    val notice = meetingsNotice(state, rows.isNotEmpty(), now.day, WallClock.nowMillis().toLong(), lastSuccess)
+    val notice =
+        meetingsNotice(state, rows.isNotEmpty(), now.day, WallClock.nowMillis().toLong(), lastSuccess, pastHidden = rows.size < all.size)
     return TodayMeetingsView(state, rows, notice, lastSuccess)
 }
 

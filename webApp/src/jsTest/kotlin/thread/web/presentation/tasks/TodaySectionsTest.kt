@@ -10,14 +10,20 @@ import thread.domain.task.Task
 import thread.domain.task.TaskId
 import thread.domain.task.TodayTasks
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TodayHideableSection.Meetings
+import thread.domain.workspace.TodayHideableSection.Reminders
+import thread.domain.workspace.TodayHideableSection.ReviewRequested
+import thread.domain.workspace.WorkspacePrefs
+import thread.domain.workspace.todayHiddenWhenEmpty
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * D77: which Today sections show with "Hide empty sections in Today" off and on, and the Meetings card (D78). SYNTHETIC
- * tasks and pull requests.
+ * D77, D86: which Today sections show for each mix of Settings "Hide empty sections" (Meetings, Reminders, Review
+ * requested), empty task groups (always hidden, Q2) and the meetings (D78, D79). SYNTHETIC tasks and pull requests.
  */
 class TodaySectionsTest {
     private val task = Task(TaskId("synthetic-task"), "Synthetic task")
@@ -32,7 +38,21 @@ class TodaySectionsTest {
             webUrl = null,
         )
 
+    /** Every mix of the three checkboxes, none checked first. */
+    private val everyMix: List<Set<TodayHideableSection>> =
+        (0 until 8).map { bits -> TodayHideableSection.entries.filterIndexed { index, _ -> bits and (1 shl index) != 0 }.toSet() }
+
     private fun page(vararg items: PullRequestSummary) = Saved(PullRequestListPage(items.toList(), items.size, isIncomplete = false), 0L)
+
+    private fun sections(
+        hidden: Set<TodayHideableSection>,
+        tasks: TodayTasks = noTasks,
+        reminderRows: Int = 0,
+        reviewContent: ReviewContent = ReviewContent.Nothing,
+        meetingsShown: Boolean = true,
+        meetingsContent: Boolean = false,
+        layout: MeetingsLayout = MeetingsLayout.Vertical,
+    ) = TodaySections(hidden, tasks, reminderRows, reviewContent, meetingsShown, meetingsContent, layout)
 
     @Test
     fun reviewRequestsCountOnlyWhenThereIsSomethingToActOn() {
@@ -52,174 +72,123 @@ class TodaySectionsTest {
     }
 
     @Test
-    fun withTheSettingOffEverySectionShowsAsBefore() {
-        val sections =
-            TodaySections(
-                hideEmpty = false,
-                tasks = noTasks,
-                reminderRows = 0,
-                reviewContent = ReviewContent.Nothing,
-                meetingsShown = false,
-            )
-        assertTrue(sections.today)
-        assertTrue(sections.reminders)
-        assertTrue(sections.review)
-        assertTrue(sections.main)
-        assertTrue(sections.rail)
-        assertFalse(sections.nothing)
+    fun withNothingCheckedEveryCardShowsButAnEmptyTaskGroupDoesNot() {
+        val empty = sections(emptySet())
+        assertTrue(empty.meetings)
+        assertTrue(empty.reminders)
+        assertTrue(empty.review)
+        assertTrue(empty.rail)
+        assertFalse(empty.main, "Q2: no task, no task group, Today's too")
+        assertFalse(empty.nothing)
     }
 
     @Test
-    fun withTheSettingOnEachNamedSectionShowsOnlyWithSomething() {
-        val empty =
-            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetingsShown = false)
-        assertFalse(empty.today)
-        assertFalse(empty.reminders)
-        assertFalse(empty.review)
-        assertFalse(empty.main)
-        assertFalse(empty.rail)
-        assertTrue(empty.nothing, "Today says it has nothing instead of an empty page")
+    fun eachCheckedSectionHidesOnlyWhileItIsEmpty() {
+        assertEquals(8, everyMix.toSet().size)
+        everyMix.forEach { hidden ->
+            val empty = sections(hidden)
+            assertEquals(Meetings !in hidden, empty.meetings, "Meetings with $hidden")
+            assertEquals(Reminders !in hidden, empty.reminders, "Reminders with $hidden")
+            assertEquals(ReviewRequested !in hidden, empty.review, "Review requested with $hidden")
+            assertEquals(hidden.size < 3, empty.rail, "Side column with $hidden")
+            assertFalse(empty.main)
+            assertEquals(hidden.size == 3, empty.nothing, "Nothing for today with $hidden")
 
-        val withToday = noTasks.copy(today = listOf(task))
-        val full =
-            TodaySections(
-                hideEmpty = true,
-                tasks = withToday,
-                reminderRows = 1,
-                reviewContent = ReviewContent.Requests,
-                meetingsShown = false,
-            )
-        assertTrue(full.today)
-        assertTrue(full.reminders)
-        assertTrue(full.review)
-        assertFalse(full.nothing)
-
-        val problem =
-            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Problem, meetingsShown = false)
-        assertTrue(problem.review, "GitHub could not answer and nothing is saved: say so")
-    }
-
-    @Test
-    fun anOtherDateGroupKeepsTheMainColumnWhileTodayIsHidden() {
-        listOf(
-            noTasks.copy(overdue = listOf(task)),
-            noTasks.copy(earlier = listOf(task)),
-            noTasks.copy(upcoming = listOf(task)),
-            noTasks.copy(noDate = listOf(task)),
-        ).forEach { tasks ->
-            val sections =
-                TodaySections(
-                    hideEmpty = true,
-                    tasks = tasks,
-                    reminderRows = 0,
-                    reviewContent = ReviewContent.Nothing,
-                    meetingsShown = false,
-                )
-            assertFalse(sections.today)
-            assertTrue(sections.main)
-            assertFalse(sections.rail)
-            assertFalse(sections.nothing)
+            val full = sections(hidden, reminderRows = 2, reviewContent = ReviewContent.Requests, meetingsContent = true)
+            assertTrue(full.meetings && full.reminders && full.review, "Something to show keeps every card with $hidden")
+            assertFalse(full.nothing)
         }
     }
 
     @Test
-    fun oneRailCardKeepsTheRailWhileTheMainColumnIsHidden() {
-        val reminders =
-            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 2, reviewContent = ReviewContent.Nothing, meetingsShown = false)
-        assertFalse(reminders.main)
-        assertTrue(reminders.rail)
-        assertTrue(reminders.reminders)
-        assertFalse(reminders.review)
-        assertFalse(reminders.nothing)
+    fun aCheckedSectionComesBackAloneWhenSomethingArrives() {
+        val all = setOf(Meetings, Reminders, ReviewRequested)
+        val meeting = sections(all, meetingsContent = true)
+        assertEquals(listOf(true, false, false), listOf(meeting.meetings, meeting.reminders, meeting.review))
+        assertFalse(meeting.nothing)
 
-        val review =
-            TodaySections(
-                hideEmpty = true,
-                tasks = noTasks,
-                reminderRows = 0,
-                reviewContent = ReviewContent.Requests,
-                meetingsShown = false,
-            )
-        assertTrue(review.rail)
-        assertFalse(review.reminders)
-        assertTrue(review.review)
+        val reminder = sections(all, reminderRows = 1)
+        assertEquals(listOf(false, true, false), listOf(reminder.meetings, reminder.reminders, reminder.review))
+
+        val review = sections(all, reviewContent = ReviewContent.Requests)
+        assertEquals(listOf(false, false, true), listOf(review.meetings, review.reminders, review.review))
+
+        val problem = sections(all, reviewContent = ReviewContent.Problem)
+        assertTrue(problem.review, "GitHub could not answer and nothing is saved: say so")
     }
 
     @Test
-    fun theMeetingsCardStaysWithTheSettingOnEvenWithNoMeetingsToday() {
-        // D77 with D78: once meetings are set up, the card shows, so "No meetings today" is said, not hidden.
-        val meetings =
-            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetingsShown = true)
-        assertTrue(meetings.meetings)
-        assertTrue(meetings.rail)
-        assertFalse(meetings.reminders)
-        assertFalse(meetings.review)
-        assertFalse(meetings.main)
-        assertFalse(meetings.nothing, "Today shows the Meetings card instead of saying it has nothing")
+    fun anyTaskGroupKeepsTheMainColumn() {
+        listOf(
+            noTasks.copy(overdue = listOf(task)),
+            noTasks.copy(today = listOf(task)),
+            noTasks.copy(earlier = listOf(task)),
+            noTasks.copy(upcoming = listOf(task)),
+            noTasks.copy(noDate = listOf(task)),
+        ).forEach { tasks ->
+            everyMix.forEach { hidden ->
+                val withTasks = sections(hidden, tasks = tasks)
+                assertTrue(withTasks.main)
+                assertFalse(withTasks.nothing, "A task to show with $hidden")
+            }
+        }
+    }
 
-        val notSetUp =
-            TodaySections(hideEmpty = true, tasks = noTasks, reminderRows = 0, reviewContent = ReviewContent.Nothing, meetingsShown = false)
-        assertFalse(notSetUp.rail)
-        assertTrue(notSetUp.nothing)
+    @Test
+    fun meetingsThatAreNotSetUpNeverShowWhateverIsChecked() {
+        everyMix.forEach { hidden ->
+            listOf(MeetingsLayout.Vertical, MeetingsLayout.Horizontal).forEach { layout ->
+                val notSetUp = sections(hidden, meetingsShown = false, meetingsContent = true, layout = layout)
+                assertFalse(notSetUp.meetings)
+                assertFalse(notSetUp.timeline)
+            }
+        }
+        val onlyMeetingsLeft = sections(setOf(Reminders, ReviewRequested), meetingsShown = false)
+        assertFalse(onlyMeetingsLeft.rail)
+        assertTrue(onlyMeetingsLeft.nothing)
     }
 
     @Test
     fun theHorizontalLayoutTakesTheMeetingsOutOfTheSideColumn() {
         // D79: the timeline runs above both columns; the side column keeps Reminders and Review requested.
-        val all =
-            TodaySections(
-                hideEmpty = false,
-                tasks = noTasks,
-                reminderRows = 0,
-                reviewContent = ReviewContent.Nothing,
-                meetingsShown = true,
-                meetingsLayout = MeetingsLayout.Horizontal,
-            )
+        val all = sections(emptySet(), layout = MeetingsLayout.Horizontal)
         assertTrue(all.timeline)
         assertFalse(all.meetings, "No Meetings card in the side column")
         assertTrue(all.reminders)
         assertTrue(all.review)
         assertTrue(all.rail)
 
-        val vertical =
-            TodaySections(
-                hideEmpty = false,
-                tasks = noTasks,
-                reminderRows = 0,
-                reviewContent = ReviewContent.Nothing,
-                meetingsShown = true,
-                meetingsLayout = MeetingsLayout.Vertical,
-            )
+        val vertical = sections(emptySet(), layout = MeetingsLayout.Vertical)
         assertTrue(vertical.meetings)
         assertFalse(vertical.timeline)
     }
 
     @Test
-    fun theTimelineStaysWithTheSettingOnEvenWithNothingElse() {
-        val timelineOnly =
-            TodaySections(
-                hideEmpty = true,
-                tasks = noTasks,
-                reminderRows = 0,
-                reviewContent = ReviewContent.Nothing,
-                meetingsShown = true,
-                meetingsLayout = MeetingsLayout.Horizontal,
-            )
-        assertTrue(timelineOnly.timeline)
-        assertFalse(timelineOnly.main)
-        assertFalse(timelineOnly.rail, "The side column has nothing left and is left out")
-        assertFalse(timelineOnly.nothing, "Today shows the timeline instead of saying it has nothing")
+    fun theTimelineHidesWhenEmptyAndComesBackLikeTheCard() {
+        val all = setOf(Meetings, Reminders, ReviewRequested)
+        val empty = sections(all, layout = MeetingsLayout.Horizontal)
+        assertFalse(empty.timeline)
+        assertTrue(empty.nothing)
 
-        val notSetUp =
-            TodaySections(
-                hideEmpty = true,
-                tasks = noTasks,
-                reminderRows = 0,
-                reviewContent = ReviewContent.Nothing,
-                meetingsShown = false,
-                meetingsLayout = MeetingsLayout.Horizontal,
-            )
-        assertFalse(notSetUp.timeline)
-        assertTrue(notSetUp.nothing)
+        val withMeetings = sections(all, meetingsContent = true, layout = MeetingsLayout.Horizontal)
+        assertTrue(withMeetings.timeline)
+        assertFalse(withMeetings.rail, "The side column has nothing left and is left out")
+        assertFalse(withMeetings.nothing, "Today shows the timeline instead of saying it has nothing")
+
+        val kept = sections(setOf(Reminders, ReviewRequested), layout = MeetingsLayout.Horizontal)
+        assertTrue(kept.timeline, "Meetings unchecked: the timeline stays on a day without meetings")
+        assertFalse(kept.nothing)
+    }
+
+    @Test
+    fun theOldSwitchHidesRemindersAndReviewButNotMeetings() {
+        // Q2: a workspace that only has the D77 switch reads as Reminders and Review requested checked.
+        val hidden = WorkspacePrefs(hideEmptySections = true).todayHiddenWhenEmpty
+        val empty = sections(hidden)
+        assertTrue(empty.meetings)
+        assertFalse(empty.reminders)
+        assertFalse(empty.review)
+        assertFalse(empty.nothing)
+        assertTrue(sections(WorkspacePrefs().todayHiddenWhenEmpty).reminders, "Off by default")
     }
 }

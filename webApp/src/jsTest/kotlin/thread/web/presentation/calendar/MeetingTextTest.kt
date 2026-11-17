@@ -9,9 +9,11 @@ import thread.domain.calendar.MeetingTime
 import thread.domain.calendar.MeetingsState
 import thread.domain.calendar.NextMeeting
 import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.TodayMeeting
 import thread.domain.calendar.todayMeetings
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
+import thread.web.platform.WallClock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -213,6 +215,62 @@ class MeetingTextTest {
         assertEquals("Meetings for today are not loaded yet.", notice(ready(fromDay = today.plusDays(1)))?.text)
         assertEquals(MeetingsNotice("No meetings today.", warning = false), notice(ready()))
         assertNull(notice(ready(), hasRows = true))
+    }
+
+    @Test
+    fun theCardKeepsTheLatestPastMeetingsAndSaysWhenNoneIsLeft() {
+        // D86. A fresh upload, so the card has no warning of its own.
+        val uploaded = WallClock.nowMillis().toLong()
+        val source = MeetingSource(MeetingSourceState.Ok, "Synthetic work calendar", uploaded, today.plusDays(-1), today)
+
+        fun view(
+            meetings: List<Meeting>,
+            past: Int?,
+        ) = todayMeetingsView(MeetingsState.Ready(source, meetings), now, "UTC", past)
+
+        val all = listOf(planning, review, standup, lateCall, nightCall, offsite)
+        assertEquals(rows, view(all, null).rows)
+        assertEquals(rows, view(all, 2).rows, "Two ended meetings, two kept")
+        assertEquals(rows - row(lateCall), view(all, 1).rows, "The standup ended last")
+        assertEquals(rows - row(lateCall) - row(standup), view(all, 0).rows)
+        assertEquals("4", view(all, 0).count, "The head counts what the card shows")
+        assertNull(view(all, 0).notice)
+
+        val morning = listOf(standup, lateCall)
+        assertEquals(MeetingsNotice("No more meetings today.", warning = false), view(morning, 0).notice)
+        assertFalse(view(morning, 0).hasContent, "Hidden when empty, it leaves")
+        assertNull(view(morning, null).notice)
+        assertTrue(view(morning, null).hasContent)
+        assertEquals(MeetingsNotice("No meetings today.", warning = false), view(emptyList(), 0).notice, "Nothing was hidden")
+    }
+
+    @Test
+    fun aCardHiddenWhenEmptyStaysForAMeetingOrAProblem() {
+        // D86, plan A10: what keeps the card while Settings hides it when empty.
+        val lastSuccess = WallTime.of(today, 8, 10)
+
+        fun ready(
+            state: MeetingSourceState = MeetingSourceState.Ok,
+            fromDay: LocalDay = today.plusDays(-1),
+        ) = MeetingsState.Ready(MeetingSource(state, "Synthetic work calendar", LAST_SUCCESS, fromDay, today.plusDays(14)), emptyList())
+
+        fun view(
+            state: MeetingsState,
+            rows: List<TodayMeeting> = emptyList(),
+            nowMillis: Long = LAST_SUCCESS + 10 * MINUTE,
+        ) = TodayMeetingsView(state, rows, meetingsNotice(state, rows.isNotEmpty(), today, nowMillis, lastSuccess), lastSuccess)
+
+        assertFalse(view(MeetingsState.Loading).hasContent, "The first answer is on its way")
+        assertFalse(view(MeetingsState.NotSetUp).hasContent)
+        assertFalse(view(ready()).hasContent, "No meetings today")
+        assertFalse(view(ready(fromDay = today.plusDays(1))).hasContent, "Today not loaded yet")
+        assertTrue(view(ready(), rows = listOf(row(planning))).hasContent)
+        assertTrue(view(ready(), nowMillis = LAST_SUCCESS + 2 * HOUR).hasContent, "The Mac has not uploaded for over an hour")
+        listOf(MeetingSourceState.NoAccess, MeetingSourceState.NoCalendar, MeetingSourceState.Paused).forEach { state ->
+            assertTrue(view(ready(state)).hasContent, "$state")
+        }
+        assertTrue(view(MeetingsState.Unavailable("permission-denied")).hasContent)
+        assertTrue(view(MeetingsState.NeedsUpdate).hasContent)
     }
 
     @Test

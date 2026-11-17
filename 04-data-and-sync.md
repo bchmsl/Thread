@@ -292,6 +292,7 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 - It saves like the other preferences: only a changed value is written, through the outbox, and a refused save stays in the sync panel with Retry.
 - **Rules:** `validPrefs` allows the key; when present it must be a bool.
 - **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the setting (turning it on or off, or the first preferences save of a new account).
+- **Since D86** Settings writes `todayHideEmpty` instead; this field is only read while that one is not set (see Per-screen preferences).
 
 ## Meetings layout (D79, 2026-11-17)
 
@@ -323,7 +324,8 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 
 - **Reading:** absent, or a value this build does not know, reads as the default; a list drops ids this build does not know. The "not set" fallbacks are pure domain readers (`todayTopicsLayout`, `todayHiddenWhenEmpty`, `currentSprintOnly` in `ScreenPrefs.kt`); the web passes the device value.
 - **Since D84 (P2):** Today's List or Board switch, Settings > Today and Settings > Topics write `todayTopicsView` and `topicsView`; the Jira page checkbox and Settings > Jira write `jiraCurrentSprintOnly`. The device keys `thread.today.activeLayout` and `thread.jira.currentSprintOnly` are no longer written, only read as the starting value while the field is not set.
-- **Writing:** like the other preferences, only changed fields are written, through the outbox. A value set back to not set (or to every past meeting) is written as null; a new document leaves not-set values out. Settings writes `hideEmptySections` until the Today block (P3) replaces that switch with `todayHideEmpty`; the old field stays valid.
+- **Writing:** like the other preferences, only changed fields are written, through the outbox. A value set back to not set (or to every past meeting) is written as null; a new document leaves not-set values out.
+- **Since D86 (P3):** Settings > Today writes `todayHideEmpty` and `todayPastMeetings`. A checkbox change writes the whole list, starting from what `todayHiddenWhenEmpty` reads, so the first change keeps what the old switch hid; with nothing checked it is an empty list, never null, so the old switch cannot come back. Settings no longer writes `hideEmptySections`; it stays valid, and older builds still read and write it.
 - **Older builds:** a change saved in the outbox by a build before D83 has none of these fields; it reads them as the defaults on both sides of the change, so it leaves the stored choices alone. A build before D83 changing its own fields in a document that has these keeps them (merge).
 - **Rules:** `validPrefs` allows the 14 keys. Strings must be one of their values; bools are bools; `todayPastMeetings` is an int 0 to 20 or null; a list holds known ids only, without repeats (which also bounds its size). Only `todayTopicsView`, `todayHideEmpty`, `todayPastMeetings` and `jiraCurrentSprintOnly` may be null.
 - **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores any of these: changing one (from P2), the first preferences save of a new account, or a save on a device before the account's preferences document has reached it; the last two write every set field. It stays in the sync panel with Retry; nothing is lost.

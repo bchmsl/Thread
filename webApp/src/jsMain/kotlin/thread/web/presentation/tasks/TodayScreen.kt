@@ -48,7 +48,9 @@ import thread.domain.topic.TopicStatus
 import thread.domain.topic.statusOf
 import thread.domain.topic.todayStatuses
 import thread.domain.topic.todayTopicGroups
+import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TopicsView
+import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.todayTopicsLayout
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
@@ -69,6 +71,7 @@ import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.calendar.MeetingsModel
 import thread.web.presentation.calendar.MeetingsRail
 import thread.web.presentation.calendar.MeetingsTimeline
+import thread.web.presentation.calendar.todayMeetingsView
 import thread.web.presentation.cardKind
 import thread.web.presentation.dayText
 import thread.web.presentation.external.GitHubModel
@@ -90,8 +93,8 @@ import thread.web.presentation.topics.topicPlace
  * active and paused Topics below. With "Meetings layout" set to Horizontal (D79), the meetings leave the rail for a
  * timeline across the page, under the heading and above both columns. Each Task shows once, in the first group it
  * qualifies for (D37). Upcoming and No date follow Earlier planned and start closed; every group opens and closes, and
- * this device remembers it (D53). With "Hide empty sections in Today" on, an empty Today, Reminders or Review requested
- * section is left out too (D77); see [TodaySections].
+ * this device remembers it (D53). An empty task group is left out; so are the Meetings, Reminders and Review requested
+ * sections Settings hides when empty (D77, D86); see [TodaySections].
  */
 @Composable
 internal fun TodayScreen(
@@ -142,18 +145,23 @@ internal fun TodayScreen(
     }
     val reminders = todayReminders(workspace.reminders, now)
     val reviews = rememberReviewRequested(gitHub)
+    val layout = workspace.prefs.meetingsLayout
+    // D86: "Show past meetings" is for the Vertical card only; the timeline keeps the whole day.
+    val pastMeetings = if (layout == MeetingsLayout.Vertical) workspace.prefs.todayPastMeetings else null
+    val meetingsView = todayMeetingsView(meetings.state, now, zone, pastMeetings)
     val sections =
         TodaySections(
-            hideEmpty = workspace.prefs.hideEmptySections,
+            hidden = workspace.prefs.todayHiddenWhenEmpty,
             tasks = groups,
             reminderRows = reminders.count { targetInfo(workspace, it.reminder.target) != null },
             reviewContent = reviewContent(gitHub.checked && gitHub.connected, reviews),
             meetingsShown = meetings.cardShown,
-            meetingsLayout = workspace.prefs.meetingsLayout,
+            meetingsContent = meetingsView.hasContent,
+            meetingsLayout = layout,
         )
     val cards = LocalCards.current
     // D79: Horizontal draws the meetings as a timeline across the page, above both columns.
-    if (sections.timeline) MeetingsTimeline(meetings, zone, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
+    if (sections.timeline) MeetingsTimeline(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
     if (sections.nothing) {
         NothingForToday()
     } else if (sections.main || sections.rail) {
@@ -168,14 +176,8 @@ internal fun TodayScreen(
                         TaskList(groups.overdue, workspace, onOpenTask)
                     }
                     // D54: a reminder day counts as a date, so the hints name reminders too.
-                    if (sections.today) {
-                        TaskGroup("today", "Today", Icon.Today, groups.today, "Planned, due or reminded today", openByDefault = true) {
-                            if (groups.today.isEmpty()) {
-                                P({ classes("scard__empty") }) { Text("Nothing planned for today yet.") }
-                            } else {
-                                TaskList(groups.today, workspace, onOpenTask)
-                            }
-                        }
+                    TaskGroup("today", "Today", Icon.Today, groups.today, "Planned, due or reminded today", openByDefault = true) {
+                        TaskList(groups.today, workspace, onOpenTask)
                     }
                     val earlierHint = "Planned before today, still open"
                     TaskGroup("earlier", "Earlier planned", Icon.Clock, groups.earlier, earlierHint, openByDefault = true) {
@@ -197,7 +199,7 @@ internal fun TodayScreen(
                     classes("today__rail")
                     attr("aria-label", if (sections.meetings) "Meetings, reminders and reviews" else "Reminders and reviews")
                 }) {
-                    if (sections.meetings) MeetingsRail(meetings, zone, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
+                    if (sections.meetings) MeetingsRail(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
                     if (sections.reminders) RemindersRail(workspace, reminders, onOpenTarget)
                     if (sections.review) ReviewRequestedRail(gitHub, reviews)
                 }
@@ -211,12 +213,12 @@ internal fun TodayScreen(
 private val PREFERENCES_PLACE = Place.of("settings", "today")
 
 /**
- * With "Hide empty sections in Today" on and every section it names empty (D77), one line says so in their place.
+ * No task to show and every section Settings hides when empty has nothing (D77, D86): one line says so in their place.
  * The page header, its add button and Active and paused Topics stay.
  */
 @Composable
 private fun NothingForToday() {
-    EmptyState(Icon.Today, "Nothing for today", "No tasks, reminders or review requests. Empty sections are hidden.") {
+    EmptyState(Icon.Today, "Nothing for today", "No tasks, meetings, reminders or review requests. Empty sections are hidden.") {
         A(PREFERENCES_PLACE.hash, { classes("btn", "btn--line") }) { Text("Change in Settings") }
     }
 }
@@ -285,7 +287,7 @@ private fun AddForTodayForm(
 /**
  * One group of Today's main column: a Task section card (D68) whose [mark] says which group it is. Its heading is a
  * button that opens and closes it (D53), like a Topic page section; the open count stays in the heading when it is
- * closed. An empty group is not shown, except Today.
+ * closed. An empty group is not shown, Today too (D86, Q2).
  */
 @Composable
 private fun TaskGroup(
@@ -297,7 +299,7 @@ private fun TaskGroup(
     openByDefault: Boolean,
     body: @Composable () -> Unit,
 ) {
-    if (tasks.isEmpty() && key != "today") return
+    if (tasks.isEmpty()) return
     var open by remember { mutableStateOf(isGroupOpen(key, openByDefault)) }
     SectionCard(
         kind = CardKind.Task,

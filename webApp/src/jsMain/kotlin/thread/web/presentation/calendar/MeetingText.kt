@@ -267,6 +267,7 @@ internal data class MeetingsNotice(
 /**
  * What the Meetings card says above its rows, or null when the rows speak for themselves. A problem on the Mac wins
  * over a stale upload, which wins over an empty list. [lastSuccess] is the source's last success in the workspace zone.
+ * [pastHidden]: Settings left out ended meetings (D86), so an empty list means none is left, not none at all.
  */
 internal fun meetingsNotice(
     state: MeetingsState,
@@ -274,6 +275,7 @@ internal fun meetingsNotice(
     today: LocalDay,
     nowMillis: Long,
     lastSuccess: WallTime?,
+    pastHidden: Boolean = false,
 ): MeetingsNotice? {
     val source =
         when (state) {
@@ -292,7 +294,7 @@ internal fun meetingsNotice(
         lastSuccess != null && isMeetingSourceStale(source, nowMillis) ->
             MeetingsNotice(staleText(lastSuccess, today), true, saysTime = true)
         !todayKnown(source, today) -> MeetingsNotice("Meetings for today are not loaded yet.", false)
-        !hasRows -> MeetingsNotice("No meetings today.", false)
+        !hasRows -> MeetingsNotice(if (pastHidden) "No more meetings today." else "No meetings today.", false)
         else -> null
     }
 }
