@@ -27,7 +27,7 @@ One bottom status line on every page replaces the sidebar:
 [workspace] [Today Inbox Topics Notes Jira PRs] [Task v | Capture a task | -> Inbox] [Search ⌘K] [Standup in 12 min] [Focus] [sync] [Trash] [Settings]
 ```
 
-- Views: Today, Inbox, Topics, Notes, Jira, Pull Requests. Inbox shows its count.
+- Views: Today, Inbox, Topics, Notes, Jira, Pull Requests. Inbox shows its count: what Inbox shows, so Notes and completed Tasks hidden in Settings > Inbox are left out (Q8, D91).
 - Capture: choose Task, Note or Topic, type a title, pick a destination. `C` focuses it from any page.
 - Tools: global search (⌘K), Focus timer panel, sync status, Trash, Settings.
 - Next meeting (D78): in the hour before a timed meeting that starts today, a teal chip names it ("Standup in 12 min"), then "Standup now" for 5 minutes after the start; "12m" or "Now" on a narrow line. It opens the Meeting card. It is not a live region; its name is a full sentence. All-day meetings never show.
@@ -185,8 +185,9 @@ Each device has its own timer (F2 A); the lengths and the history are the same e
 ### Settings (D84)
 
 One page. Under the header a row of links (chips) jumps to each block and moves focus to its heading; `#/settings/<block>` opens a block directly, and the old `#/settings/prefs` opens Today.
-Blocks, in order: Connections, Calendar from your Mac, Topic statuses, Today, Topics, Jira, General, Appearance, Account. Owner change #25 adds Inbox, Topic Details and Pull requests blocks in later phases.
+Blocks, in order: Connections, Calendar from your Mac, Topic statuses, Today, Inbox, Topics, Jira, General, Appearance, Account. Owner change #25 adds Topic Details and Pull requests blocks in later phases.
 - Today, in the owner's order (D86, D89, D90): Topics open as (List / Board), Show completed tasks, Hide empty sections (Meetings, Reminders and Review requested checkboxes in a labelled group), Meetings layout, Group tasks by (None / Topic / Due date; Due date by default), Show past meetings (a select: All, None, 1 to 20), Topics shown (Planned, Active, Paused and Done checkboxes in a labelled group; Active and Paused by default). A row of choices wraps under its label when the label would get too narrow beside it (at 390 px: Meetings layout and Group tasks by).
+- Inbox, in the owner's order (D91): Show completed tasks (on), Group by (None / Type / Due date; None by default), Show notes (on).
 - Topics: Topics open as (List / Board), the same choice as the Topics page switch (D21).
 - Jira: Current sprint only, the same choice as the Jira page checkbox. Disabled, with a hint, while Jira is not connected or the site has no sprints.
 - General: Capture starts as.
@@ -228,6 +229,7 @@ Source of truth: `design/claude-pilot-prototype-v3/assets/tokens.css`, in three 
 | Space and shape | 4 px spacing base. Radius 10 px for controls and rows, 14 px for surfaces, pills for primary actions. Controls 40 px, primary 44 px, rows 48 px minimum, status line 56 px. |
 | Notes | The editor is a notebook page on a faint dot grid. |
 | Today | Overdue, Today, Earlier planned, plus a side column for Reminders and Review requested (D37). Upcoming and No date added after v3 (D53). A Task's reminder day counts as a date (D54). Since D90 the groups follow "Group tasks by": Completed, Today, Tomorrow and Upcoming by default, or by Topic, or none. |
+| Inbox | One list of captures, newest first, with Select all and a selection bar (v3). Since D91 Settings > Inbox can group it by Type (Tasks, then Notes) or by Due date (Today's groups, then Notes), as section cards that do not fold, and can hide completed Tasks and Notes. A completed Task shows struck through. When only hidden items wait: "Inbox is clear", what is hidden, and a "Change in Settings" link. |
 | Motion | Short transitions (120 and 220 ms) that drop to zero with reduced motion. |
 | Scrollbars (D73) | Every scroller, the page included, has a 10 px bar with no track, so the surface shows through, and a 6 px rounded thumb in fog `#5b6681`, brighter (`#8792ae`) under the pointer. Only where the main pointer is a mouse or trackpad; touch screens keep their own overlay scrollbars. Chromium and Safari draw it with `::-webkit-scrollbar`; Firefox gets the thin standard bar in the same colors, without the hover change. |
 | Cards (D68) | Every section is a card with a tinted head band; every item is a card shaped like its object. See "Card language" below. |

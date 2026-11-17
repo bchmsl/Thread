@@ -77,6 +77,7 @@ import thread.web.presentation.notes.launchNoteWrite
 import thread.web.presentation.settings.CalendarBlock
 import thread.web.presentation.settings.ConnectionsBlock
 import thread.web.presentation.settings.GeneralPrefsBlock
+import thread.web.presentation.settings.InboxPrefsBlock
 import thread.web.presentation.settings.JiraPrefsBlock
 import thread.web.presentation.settings.SettingsScreen
 import thread.web.presentation.settings.StatusesBlock
@@ -340,6 +341,7 @@ private fun Workspace(
                             CalendarBlock(meetings, zone)
                             StatusesBlock(workspace)
                             TodayPrefsBlock(workspace)
+                            InboxPrefsBlock(workspace)
                             TopicsPrefsBlock(workspace)
                             JiraPrefsBlock(jira)
                             GeneralPrefsBlock(workspace, capture)

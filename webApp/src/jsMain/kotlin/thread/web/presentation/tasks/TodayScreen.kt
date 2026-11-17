@@ -349,14 +349,7 @@ private fun DueGroupCard(
 ) {
     val tasks = group.tasks
     val key = group.group.name.lowercase()
-    // D54: a reminder day counts as a date, so the hints name reminders too.
-    val (mark, hint) =
-        when (group.group) {
-            DueGroup.Completed -> Icon.Check to "Done today. They leave when the day ends"
-            DueGroup.Today -> Icon.Today to "Overdue, planned, due or reminded today, or planned earlier"
-            DueGroup.Tomorrow -> Icon.Calendar to "Planned, due or reminded tomorrow"
-            DueGroup.Upcoming -> Icon.ArrowRight to "Later dates, then no date"
-        }
+    val (mark, hint) = dueGroupLook(group.group)
     TaskGroup(key, key, dueGroupTitle(group.group), mark, tasks, hint, openByDefault = group.group in OPEN_DUE_GROUPS) {
         when (group.group) {
             DueGroup.Completed, DueGroup.Today -> TaskList(tasks, workspace, onOpenTask)
@@ -365,6 +358,18 @@ private fun DueGroupCard(
         }
     }
 }
+
+/**
+ * A due-date group's mark and hint (D90), on Today and in Inbox (D91). D54: a reminder day counts as a date, so the hints
+ * name reminders too.
+ */
+internal fun dueGroupLook(group: DueGroup): Pair<Icon, String> =
+    when (group) {
+        DueGroup.Completed -> Icon.Check to "Done today. They leave when the day ends"
+        DueGroup.Today -> Icon.Today to "Overdue, planned, due or reminded today, or planned earlier"
+        DueGroup.Tomorrow -> Icon.Calendar to "Planned, due or reminded tomorrow"
+        DueGroup.Upcoming -> Icon.ArrowRight to "Later dates, then no date"
+    }
 
 /** A due-date group's heading, also named by the Task sheet (D90). */
 internal fun dueGroupTitle(group: DueGroup): String =

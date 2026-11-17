@@ -60,6 +60,7 @@ import thread.domain.workspace.EditProblem
 import thread.domain.workspace.EditResult
 import thread.domain.workspace.ExternalProvider
 import thread.domain.workspace.ExternalReference
+import thread.domain.workspace.InboxShown
 import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.ReminderConversion
 import thread.domain.workspace.TopicReminderConverter
@@ -77,6 +78,7 @@ import thread.domain.workspace.createTopicLinkedTo
 import thread.domain.workspace.discardNote
 import thread.domain.workspace.discardTask
 import thread.domain.workspace.dismissReminder
+import thread.domain.workspace.inboxShown
 import thread.domain.workspace.linkExternal
 import thread.domain.workspace.linkMeeting
 import thread.domain.workspace.linkedTopicIdsOf
@@ -215,8 +217,12 @@ internal class WorkspaceModel(
     /** Notes waiting in Inbox, newest first. */
     val inboxNotes: List<NoteSummary> get() = derived().inboxNotes
 
-    /** Tasks and Notes waiting in Inbox. */
-    val inboxCount: Int get() = derived().inbox.size + derived().inboxNotes.size
+    /** What Inbox shows of the Tasks and Notes waiting in it, with Settings > Inbox (D91). */
+    val inboxShown: InboxShown
+        get() = inboxShown(derived().inbox, derived().inboxNotes, prefs.inboxShowCompleted, prefs.inboxShowNotes)
+
+    /** The Inbox count: what Inbox shows (Q8, D91), so hidden Notes and hidden completed Tasks are left out. */
+    val inboxCount: Int get() = inboxShown.count
 
     fun progress(topicId: TopicId): TaskProgress = derived().progress.getOrPut(topicId) { progressOf(topicId, storedTasks) }
 

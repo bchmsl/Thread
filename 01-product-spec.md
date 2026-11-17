@@ -121,6 +121,13 @@ A new Note made outside a Topic, for example from the Notes page, also arrives h
 They can later be linked to a Topic or kept standalone and marked triaged.
 A standalone object is not necessarily an untriaged Inbox object.
 
+Inbox preferences (D91, synced), in Settings > Inbox:
+- Show completed tasks (on by default): a completed Task still waiting in Inbox shows struck through until it is filed. Off hides it.
+- Group by (None by default): None is one list, newest first. Type is Tasks, then Notes. Due date is Today's groups (Completed, Today, Tomorrow and Upcoming, D90), then Notes. Empty groups hide. Completed holds every completed Task still in Inbox, not only today's.
+- Show notes (on by default): off hides Inbox Notes here only. They stay in Inbox, untriaged, and show on the Notes page.
+
+The Inbox count is what Inbox shows (Q8): hidden Notes and hidden completed Tasks are left out. Select all, the selection and triage act only on what shows. When only hidden items wait, Inbox says it is clear, says what is hidden and links to Settings > Inbox.
+
 ## Trash
 
 - Tasks, Notes, Reminders and Topics can be moved to Trash.

@@ -634,6 +634,8 @@ main:has(.scard--tl) { max-width: 1600px; }
 }
 .irow__title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--fog-500); }
 .irow__kind { font-size: var(--fs-13); color: var(--text-3); }
+/* D91: a completed Task still waiting in Inbox, while Settings > Inbox shows completed tasks. */
+.irow.is-done .irow__title { color: var(--text-3); text-decoration: line-through; }
 .selbar {
   position: fixed; left: 0; right: 0; bottom: calc(var(--line-h) + env(safe-area-inset-bottom)); z-index: 55;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

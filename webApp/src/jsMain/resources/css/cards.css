@@ -434,6 +434,11 @@
 
 /* Inbox: checkbox, mark and text on one line. */
 .ibx.tlist { margin-top: 10px; }
+/* D91: grouped Inbox. The first group sits below the tools at the list's gap, the groups 16px apart as on Today, and the
+   list in a group starts at the card's own padding. */
+.ibx-tools + .ibx-group { margin-top: 10px; }
+.ibx-group { margin-bottom: 16px; }
+.ibx-group .ibx.tlist { margin-top: 0; }
 .icard.irow { align-items: center; }
 .icard.irow > .check { margin-top: 0; }
 .icard.irow > .kmark { margin-top: 0; }

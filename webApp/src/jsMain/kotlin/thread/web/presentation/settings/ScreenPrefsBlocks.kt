@@ -13,6 +13,7 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import thread.domain.topic.StatusCategory
 import thread.domain.workspace.CaptureKind
+import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.PAST_MEETINGS_MAX
 import thread.domain.workspace.TodayGroupBy
@@ -31,7 +32,7 @@ import thread.web.presentation.topics.categoryLabel
 
 /*
  * The preferences, one block per screen (owner change #25, D84). Every one syncs to the workspace (Q6). Later phases
- * add Inbox, Topic Details and Pull requests blocks and more controls in these.
+ * add Topic Details and Pull requests blocks and more controls in these.
  */
 
 /**
@@ -184,6 +185,44 @@ private fun hideableLabel(section: TodayHideableSection): String =
         TodayHideableSection.Meetings -> "Meetings"
         TodayHideableSection.Reminders -> "Reminders"
         TodayHideableSection.ReviewRequested -> "Review requested"
+    }
+
+/**
+ * Settings > Inbox (D91), in the owner's order: Show completed tasks, Group by, then Show notes, which the owner added
+ * after the list. A hidden Task or Note still waits in Inbox, and the Inbox count leaves it out (Q8).
+ */
+@Composable
+internal fun InboxPrefsBlock(workspace: WorkspaceModel) {
+    SettingsBlock("inbox", "Inbox", null) {
+        val prefs = workspace.prefs
+        SwitchPref("pref-ibx-done", "Show completed tasks", INBOX_COMPLETED_HINT, prefs.inboxShowCompleted) { on ->
+            workspace.setPrefs(workspace.prefs.copy(inboxShowCompleted = on))
+        }
+        ChoicePref(
+            labelId = "ig-l",
+            label = "Group by",
+            hint = INBOX_GROUP_HINT,
+            options = InboxGroupBy.entries.map { it to inboxGroupByLabel(it) },
+            picked = prefs.inboxGroupBy,
+        ) { workspace.setPrefs(workspace.prefs.copy(inboxGroupBy = it)) }
+        SwitchPref("pref-ibx-notes", "Show notes", INBOX_NOTES_HINT, prefs.inboxShowNotes) { on ->
+            workspace.setPrefs(workspace.prefs.copy(inboxShowNotes = on))
+        }
+    }
+}
+
+private const val INBOX_COMPLETED_HINT = "Struck through until you file them. Off hides them, and the Inbox count leaves them out."
+
+private const val INBOX_GROUP_HINT =
+    "Type: Tasks, then Notes. Due date: Completed, Today, Tomorrow and Upcoming, then Notes. Empty groups hide."
+
+private const val INBOX_NOTES_HINT = "Off hides them here and from the Inbox count. They still wait in Inbox and show on the Notes page."
+
+private fun inboxGroupByLabel(groupBy: InboxGroupBy): String =
+    when (groupBy) {
+        InboxGroupBy.None -> "None"
+        InboxGroupBy.Type -> "Type"
+        InboxGroupBy.DueDate -> "Due date"
     }
 
 /** Settings > Topics. The Topics page switch saves the same choice (D21). */
