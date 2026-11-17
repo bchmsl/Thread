@@ -3,11 +3,13 @@ rules_version = '2';
 // Thread talks to Firestore straight from the browser, so these rules are the security boundary
 // (adr/ADR-005-auth-and-security-rules.md). Every document belongs to one signed-in account and lives under
 // users/{uid}. Only the shapes below can be written; anything not matched is denied. Only the saved versions of a Note
-// deleted forever, and the encrypted connections when sync is turned off, can be deleted.
+// deleted forever, the encrypted connections when sync is turned off, and the calendar meetings the Mac app uploads
+// can be deleted.
 // Document shapes: adr/ADR-004-note-revisions-and-conflicts.md (Notes), adr/ADR-009-workspace-entities-and-sync.md
 // (statuses, Topics, preferences), adr/ADR-010-tasks-reminders-and-dates.md (Tasks, Reminders),
 // adr/ADR-011-notes-in-the-workspace.md (Note listing fields, Topic links), adr/ADR-012-trash-and-search.md
-// (Topics in Trash, Delete forever) and adr/ADR-019-focus-timer.md (Focus timer lengths and history).
+// (Topics in Trash, Delete forever), adr/ADR-019-focus-timer.md (Focus timer lengths and history) and
+// adr/ADR-020-calendar-meetings-sync.md (calendar meetings, their source and their Topic links).
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedInAs(uid) {
@@ -365,6 +367,114 @@ service cloud.firestore {
     match /users/{uid}/vault/{vaultId} {
       allow read, delete: if signedInAs(uid) && vaultId == 'connections';
       allow create, update: if signedInAs(uid) && vaultId == 'connections' && validVault(request.resource.data);
+    }
+
+    // Calendar meetings (D78, adr/ADR-020-calendar-meetings-sync.md). The "Thread Calendar" Mac app reads one calendar
+    // with EventKit and is the only writer of meetings and meetingSource; Thread web only reads them and writes the
+    // Topic links. The rules cannot tell the two apart (same account, same provider), so "one writer" is a code rule.
+    // Only these fields, and timed meetings only from 3 days back to 16 days ahead, can be stored: no attendees,
+    // organizer, notes or e-mail addresses, and no declined meetings. Ids are SHA-256 hashes, 32 lowercase hex, so no
+    // raw calendar id is stored.
+    function hex32(value) {
+      return value is string && value.matches('[0-9a-f]{32}');
+    }
+
+    function optionalText(data, key, max) {
+      return !(key in data) || (data[key] is string && data[key].size() <= max);
+    }
+
+    // One https link on Teams, Zoom, Google Meet or Webex, with nothing between the host and the path, so a lookalike
+    // host or a user@host link is refused. The Mac app uses the same pattern (plan section 4, "Join link").
+    function validJoinUrl(meeting) {
+      return !('joinUrl' in meeting)
+        || (meeting.joinUrl is string && meeting.joinUrl.size() <= 2048
+          && meeting.joinUrl.matches('^https://(teams[.]microsoft[.]com|teams[.]live[.]com|([a-z0-9-]+[.])*zoom[.]us|meet[.]google[.]com|([a-z0-9-]+[.])+webex[.]com)([/?#].*)?$'));
+    }
+
+    // An all-day meeting has calendar days, like Tasks, and never instants. The rules cannot easily compare a day with
+    // request.time, so the window is the Mac app's for these.
+    function validAllDayMeeting(meeting) {
+      return validDay(meeting.firstDay) && validDay(meeting.lastDayExclusive) && meeting.lastDayExclusive > meeting.firstDay
+        && !('start' in meeting) && !('end' in meeting);
+    }
+
+    // A timed meeting has instants: at most 14 days long, not ended more than 3 days ago, starting less than 16 days
+    // ahead.
+    function validTimedMeeting(meeting) {
+      return meeting.start is timestamp && meeting.end is timestamp && meeting.end >= meeting.start
+        && meeting.end - meeting.start <= duration.value(14, 'd')
+        && meeting.end > request.time - duration.value(3, 'd')
+        && meeting.start < request.time + duration.value(16, 'd')
+        && !('firstDay' in meeting) && !('lastDayExclusive' in meeting);
+    }
+
+    // users/{uid}/meetings/{meetingId}: one meeting, or one occurrence of a repeating one. The id and the series key
+    // are hashes made by the Mac app. response is the owner's answer; declined meetings are never stored.
+    function validMeeting(meeting, meetingId) {
+      return hex32(meetingId)
+        && meeting.keys().hasOnly(['title', 'allDay', 'start', 'end', 'firstDay', 'lastDayExclusive', 'response', 'location',
+          'joinUrl', 'seriesKey', 'updatedAt', 'schemaVersion'])
+        && meeting.keys().hasAll(['title', 'allDay', 'response', 'seriesKey', 'updatedAt', 'schemaVersion'])
+        && meeting.schemaVersion == 1
+        && meeting.updatedAt == request.time
+        && meeting.title is string && meeting.title.size() <= 300
+        && meeting.allDay is bool
+        && (meeting.allDay ? validAllDayMeeting(meeting) : validTimedMeeting(meeting))
+        && meeting.response in ['accepted', 'tentative', 'pending', 'none']
+        && optionalText(meeting, 'location', 300)
+        && validJoinUrl(meeting)
+        && hex32(meeting.seriesKey);
+    }
+
+    // users/{uid}/meetingSource/main: the Mac app's last pass. lastSuccessAt is the time of the last pass that
+    // succeeded (a failed pass keeps it), fromDay and toDay the days that pass covered, so Thread says "No meetings
+    // today" only when today was covered.
+    function validMeetingSource(source) {
+      return source.keys().hasOnly(['state', 'calendarTitle', 'fromDay', 'toDay', 'zone', 'uploaderId', 'appVersion',
+          'lastSuccessAt', 'updatedAt', 'schemaVersion'])
+        && source.keys().hasAll(['state', 'zone', 'uploaderId', 'appVersion', 'lastSuccessAt', 'updatedAt', 'schemaVersion'])
+        && source.schemaVersion == 1
+        && source.updatedAt == request.time
+        && source.state in ['ok', 'noAccess', 'noCalendar', 'paused']
+        && optionalText(source, 'calendarTitle', 100)
+        && (!('fromDay' in source) || validDay(source.fromDay))
+        && (!('toDay' in source) || validDay(source.toDay))
+        && (source.lastSuccessAt == null || (source.lastSuccessAt is timestamp && source.lastSuccessAt <= request.time))
+        && source.zone is string && source.zone.size() <= 64
+        && source.uploaderId is string && source.uploaderId.size() <= 64
+        && source.appVersion is string && source.appVersion.size() <= 20;
+    }
+
+    // users/{uid}/topicMeetingLinks/{topicId}_{seriesKey}: one Topic's link to a meeting series, as topicNoteLinks.
+    // Unlinking writes linked: false. title is a snapshot, so the Topic still names the meeting after it leaves the
+    // window; it is the only meeting text kept past it.
+    function validMeetingLink(link, linkId) {
+      return link.keys().hasOnly(['topicId', 'seriesKey', 'linked', 'title', 'updatedAt', 'schemaVersion'])
+        && link.keys().hasAll(['topicId', 'seriesKey', 'linked', 'updatedAt', 'schemaVersion'])
+        && link.schemaVersion == 1
+        && link.updatedAt == request.time
+        && link.topicId is string && link.topicId.size() > 0 && link.topicId.size() <= 128
+        && hex32(link.seriesKey)
+        && linkId == link.topicId + '_' + link.seriesKey
+        && link.linked is bool
+        && optionalText(link, 'title', 300);
+    }
+
+    // The Mac app deletes meetings that leave the window, are cancelled or declined, and all of them on "Stop syncing
+    // and remove meetings".
+    match /users/{uid}/meetings/{meetingId} {
+      allow read, delete: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validMeeting(request.resource.data, meetingId);
+    }
+
+    match /users/{uid}/meetingSource/{sourceId} {
+      allow read, delete: if signedInAs(uid) && sourceId == 'main';
+      allow create, update: if signedInAs(uid) && sourceId == 'main' && validMeetingSource(request.resource.data);
+    }
+
+    match /users/{uid}/topicMeetingLinks/{linkId} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validMeetingLink(request.resource.data, linkId);
     }
   }
 }

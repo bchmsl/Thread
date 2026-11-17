@@ -22,7 +22,7 @@ Do not silently change product requirements or the stack.
 - Instant local-first behavior with truthful durable-save and sync status.
 - Jira v1 and GitHub v1 are read-only.
 - Jira descriptions/comments stay API + device-local cache.
-- Firebase stores app-owned content; do not upload external cache contents accidentally.
+- Firebase stores app-owned content and, as the one exception, calendar meetings the Mac app uploads; do not upload other external cache contents.
 - Never hardcode or commit credentials.
 - No large Pomodoro dashboard block.
 - Custom Topic statuses map to stable categories; Task completion stays a checkbox.

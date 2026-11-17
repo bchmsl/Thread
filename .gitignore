@@ -12,6 +12,8 @@ local.properties
 !.env.example
 # Real Firebase project web config (firebase/web-config.example.properties shows the keys).
 firebase/web-config.properties
+# The Mac app's Google "Desktop app" OAuth client (adr/ADR-020-calendar-meetings-sync.md). The owner fills it.
+macCompanion/oauth-desktop.properties
 
 # Firebase CLI and emulator logs
 firebase-debug.log
