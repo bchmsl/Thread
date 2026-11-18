@@ -627,9 +627,8 @@ main:has(.scard--tl) { max-width: 1600px; }
 
 @media (max-width: 1099px) {
   .today { grid-template-columns: minmax(0, 1fr); }
+  /* Which cards share a row: cards.css, "Today" (D96). */
   .today__rail { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
-  /* The other card is hidden while empty (D77). */
-  .today__rail > .scard:only-child { grid-column: 1 / -1; }
 }
 @media (max-width: 759px) {
   .today__rail { grid-template-columns: minmax(0, 1fr); }
@@ -1081,6 +1080,13 @@ body[data-page="index"] .app { padding-bottom: 48px; }
   .ph__title { font-size: 30px; }
   .rbanner { padding: 10px 16px; gap: 10px; }
   .selbar { padding: 10px 16px; }
+  .trow2 { grid-template-columns: auto minmax(0, 1fr); }
+  .trow2__side { grid-column: 2; grid-row: auto; flex-direction: row; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+  .trow2__next { white-space: normal; }
+  .trow2__next > .tabout { display: -webkit-box; }
+}
+/* D96: the same Topic rows in a narrow place on Today (a Topics card under 480 px wide), at any window width. */
+@container tcard (max-width: 479px) {
   .trow2 { grid-template-columns: auto minmax(0, 1fr); }
   .trow2__side { grid-column: 2; grid-row: auto; flex-direction: row; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-top: 6px; }
   .trow2__next { white-space: normal; }

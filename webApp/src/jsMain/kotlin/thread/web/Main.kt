@@ -83,7 +83,10 @@ fun main() {
             },
             conversionBackup = ::conversionBackup,
             focusStore = { accountId -> IndexedDbFocusRunStore(accountId) },
-            meetingStore = { accountId -> FirestoreMeetingStore(backend, accountId, WallClock::wallTimeAt) },
+            meetingStore = { accountId ->
+                val store = FirestoreMeetingStore(backend, accountId, WallClock::wallTimeAt)
+                if (backend.usesEmulators) TestMeetingStore(store) { testFlags.meetingsState } else store
+            },
             newId = ::randomWorkspaceId,
             notes = noteServices(backend, testFlags),
             jira =
@@ -98,7 +101,7 @@ fun main() {
                     synthetic,
                     connections,
                     cache,
-                    transport(synthetic, "github", requestLog, revision) { testFlags.gitHubScenario },
+                    transport(synthetic, "github", requestLog, revision, testFlags) { testFlags.gitHubScenario },
                 ),
             connectionSync = connectionSync(synthetic, backend, connections),
             backgroundProbe = backgroundProbe,
@@ -198,17 +201,22 @@ private fun externalCache(synthetic: Boolean): IndexedDbKeyValueDatabase =
 
 /**
  * The browser's fetch, or SYNTHETIC fixture answers that [scenario] can turn into one failure kind, at fixture
- * [revision]. SYNTHETIC requests are written to [requestLog] as [provider] when there is one.
+ * [revision]. SYNTHETIC requests are written to [requestLog] as [provider] when there is one. With [flags], a check can
+ * hold or resize the Review requested search (GitHub, D96).
  */
 private fun transport(
     synthetic: Boolean,
     provider: String,
     requestLog: InMemoryRequestLog?,
     revision: () -> Int,
+    flags: TestFlags? = null,
     scenario: () -> SyntheticScenario,
 ): HttpTransport {
     if (!synthetic) return FetchHttpTransport()
-    val fixtures = SyntheticHttpTransport(scenario, ::isOnline, ::nowMillis, latencyMillis = 400, revision = revision)
+    val answers = SyntheticHttpTransport(scenario, ::isOnline, ::nowMillis, latencyMillis = 400, revision = revision)
+    // GitHub's Review requested search can be held or resized by a check (D96).
+    val fixtures =
+        if (flags == null) answers else TestGitHubTransport(answers, { flags.holdReviewRequests }, { flags.reviewRequestCount })
     return requestLog?.let { RecordingTransport(provider, fixtures, it, ::nowMillis, ::isOnline) } ?: fixtures
 }
 

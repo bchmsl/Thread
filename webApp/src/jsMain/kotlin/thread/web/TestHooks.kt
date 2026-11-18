@@ -62,6 +62,15 @@ internal class TestFlags {
 
     /** What the SYNTHETIC GitHub answers, when the synthetic providers are on. */
     var gitHubScenario: SyntheticScenario = SyntheticScenario.Normal
+
+    /** A meetings answer forced from the next sign-in on (TestSources.kt); null follows the server. */
+    var meetingsState: TestMeetingsState? = null
+
+    /** When true, the SYNTHETIC Review requested search never answers, so its card stays Loading. */
+    var holdReviewRequests: Boolean = false
+
+    /** When set, the SYNTHETIC Review requested search answers this many rows. */
+    var reviewRequestCount: Int? = null
 }
 
 private val hookScope = MainScope()
@@ -130,6 +139,17 @@ internal fun installTestHooks(
     }
     // The refresh-on-show requests started in this page load, as `provider:ITEM+ITEM`.
     hooks.showRuns = { showProbe?.runs?.toTypedArray() ?: emptyArray() }
+    // Today's card states (D96). Set before sign-in: the meetings from then on are Loading (never answer), Unavailable
+    // (the read fails) or Live (the server's). Returns false for an unknown name.
+    hooks.setMeetingsState = { name: String ->
+        val state = TestMeetingsState.entries.firstOrNull { it.name == name }
+        if (state != null || name == "Live") flags.meetingsState = state
+        state != null || name == "Live"
+    }
+    // The SYNTHETIC Review requested search never answers while on.
+    hooks.holdReviewRequests = { on: Boolean -> flags.holdReviewRequests = on }
+    // The SYNTHETIC Review requested search answers [count] rows: the fixture's 4, then long ones. Below 0, the fixture.
+    hooks.setReviewRequestCount = { count: Int -> flags.reviewRequestCount = count.takeIf { it >= 0 } }
     // Moves the SYNTHETIC fixtures to [revision]: from 1, SYN-103 is In Progress and #12's CI and reviews passed.
     hooks.setFixtureRevision = { revision: Int -> flags.fixtureRevision = revision }
     // The SYNTHETIC requests of this page load, as `provider endpoint status`. No URL, header or body is kept.

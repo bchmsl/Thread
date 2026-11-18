@@ -270,8 +270,10 @@
 .scard--tl .scard__acts { gap: 8px; min-width: 0; }
 .mjoin--named { flex: 0 1 auto; gap: 5px; min-width: 0; max-width: 260px; height: 34px; padding: 0 14px; font-size: var(--fs-13); }
 .mjoin__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* A phone: Join for now and next get their own row under the title, from the left. */
+/* A phone: Join for now and next get their own row under the title, from the left. The same in a narrow place on Today
+   (the timeline under 480 px wide, D96), where the hours scroll as on a phone. */
 @media (max-width: 759px) { .scard--tl .scard__acts { flex-basis: 100%; justify-content: flex-start; } }
+@container tcard (max-width: 479px) { .scard--tl .scard__acts { flex-basis: 100%; justify-content: flex-start; } }
 .mtl__allday { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; list-style: none; }
 .mtl__allday > li { min-width: 0; max-width: 100%; }
 .icard.mday {
@@ -483,10 +485,53 @@
 .today__rail { gap: 20px; }
 .today__rail > .scard { margin-bottom: 0; }
 @media (max-width: 1099px) {
-  /* Meetings lead the rail across its width; a card left alone beside it takes the width too. */
-  .today__rail > .scard--meet, .today__rail > .scard--meet + .scard:last-child { grid-column: 1 / -1; }
+  /* The side column under the main one (D96): its cards run across it, except Reminders and Review requested next to
+     each other, which share a row. For the default rail it is the rule before: Meetings across, then the other two
+     side by side, or one alone across (D77 hides one while empty). */
+  .today__rail > * { grid-column: 1 / -1; }
+  .today__rail > :is(.scard--rem:has(+ .scard--rvw), .scard--rvw:has(+ .scard--rem), .scard--rem + .scard--rvw, .scard--rvw + .scard--rem) {
+    grid-column: auto;
+  }
 }
 .scard.atopics { margin-top: 32px; padding-top: 0; }
+/* D96 (owner change #29): Today's places. Each card in a place is a size container (tcard), so its forms follow its own
+   width, not the window's: under 480 px it takes its phone form (S), and in Top or Bottom a list card spreads into
+   columns (L). The default layout keeps its look: there Top holds only the timeline and Bottom only Topics, which have
+   no spread form, and no card in Left or Right spreads. */
+.tzone > * { container: tcard / inline-size; }
+/* Top and Bottom space their cards evenly and keep the room their default card had: 28 px under Top, 32 px above
+   Bottom and 20 px under it. */
+.tzone--wide { display: flex; flex-direction: column; gap: 20px; }
+.tzone.tzone--wide > * { margin-top: 0; margin-bottom: 0; }
+.tzone--top { margin-bottom: 28px; }
+.tzone--bottom { margin: 32px 0 20px; }
+/* A card keeps its place's spacing: the space above Topics is Bottom's, and the side column has its own gap. */
+:is(.today__main, .today__rail) > .scard.atopics { margin-top: 0; }
+:is(.tzone--wide, .today__rail) > .today__tasks > .scard:last-child { margin-bottom: 0; }
+@media (min-width: 760px) {
+  /* L: Meetings (Vertical) and Reminders in 2 to 4 columns, Review requested in 2 to 3, each Task group in 2. */
+  @container tcard (min-width: 480px) {
+    .tzone--wide > .scard--meet .mtg-list, .tzone--wide > .scard--rvw .tlist {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(max(300px, calc((100% - 36px) / 4)), 1fr)); gap: 6px 12px;
+    }
+    .tzone--wide > .scard--rvw .tlist { grid-template-columns: repeat(auto-fill, minmax(max(320px, calc((100% - 24px) / 3)), 1fr)); }
+    /* Side by side, the pull requests no longer share one rail. */
+    .tzone--wide > .scard--rvw .tlist > .icard[data-k="pr"]::before { display: none; }
+    .tzone--wide > .scard--rem .tlist {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(max(300px, calc((100% - 72px) / 4)), 1fr)); column-gap: 24px;
+    }
+  }
+  @container tcard (min-width: 1150px) {
+    .tzone--wide > .today__tasks .tlist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+  }
+}
+/* S: the Topics head in a narrow place wraps as on a phone, its List and Board switch on a row of its own. Only Topics:
+   its switch is the one wide control in a Today card's head, and the side column's default cards keep their heads. */
+@container tcard (max-width: 479px) {
+  .atopics > .scard__head { flex-wrap: wrap; row-gap: 0; }
+  .atopics > .scard__head > .scard__h { flex: 1 1 auto; }
+  .atopics > .scard__head > .scard__acts { margin-left: auto; }
+}
 .atopics .lane { background: var(--bg-app); --under: var(--bg-app); }
 .csub + .csub { margin-top: 14px; }
 .csub__toggle {
@@ -710,7 +755,7 @@ main:has(.md--wide) { max-width: 1520px; }
 @media (max-width: 1099px) {
   /* One column: the rail's cards follow the main ones at the rail's card gap. */
   .today { row-gap: 20px; }
-  .today__tasks > .scard:last-child { margin-bottom: 0; }
+  .today__main > :last-child, .today__main > .today__tasks:last-child > .scard:last-child { margin-bottom: 0; }
 }
 @media (max-width: 999px) {
   .md--wide { grid-template-columns: minmax(0, 1fr); }

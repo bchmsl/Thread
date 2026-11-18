@@ -330,9 +330,10 @@ img.ProseMirror-separator {
    only as far as the lanes need (--lanes is the lane count, 256 / 264 px a lane at its normal smallest, gaps included),
    up to the window less a 50 px gutter or the safe area. The rest of the page, its heading row included, keeps its
    width. The gutter is 50, not the page's 40: 100vw counts a classic scrollbar (up to 17 px), and the extra 10 px a
-   side keeps the board from creeping into the page's gutter when it has nothing to gain. */
+   side keeps the board from creeping into the page's gutter when it has nothing to gain. On Today it grows only in Top
+   and Bottom, the places across the page (D96); in Left or Right its lanes shrink, then scroll inside the card. */
 @media (min-width: 760px) {
-  .board, .aboard {
+  .board, .tzone--wide .aboard {
     --gut: max(50px, calc(env(safe-area-inset-left, 0px) + 16px), calc(env(safe-area-inset-right, 0px) + 16px));
     --bw: max(100%, min(var(--need), calc(100vw - 2 * var(--gut))));
     width: var(--bw);
@@ -348,4 +349,10 @@ img.ProseMirror-separator {
   .board > .lane { flex-shrink: 1; min-width: var(--floor); }
   .aboard { grid-auto-columns: minmax(var(--floor), 1fr); }
   .alane .lane__list { grid-template-columns: repeat(auto-fill, minmax(min(232px, 100%), 1fr)); }
+}
+/* D96: a Board in a narrow place on Today (its Topics card under 480 px wide, at any window width) stacks its lanes
+   and hides the empty ones, as on a phone. */
+@container tcard (max-width: 479px) {
+  .aboard { grid-auto-flow: row; grid-auto-columns: auto; overflow: visible; padding: 0; }
+  .alane.is-empty { display: none; }
 }

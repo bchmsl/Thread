@@ -193,8 +193,9 @@ internal fun TodayScreen(
         }
     }
     if (sections.nothing) NothingForToday()
-    // Top and Bottom run across the page, above and below the two columns.
-    places.top.forEach { key(it) { drawCard(it) } }
+    // Top and Bottom run across the page, above and below the two columns. Each place is a zone (`tzone`), and each card
+    // in it sizes its forms by its own width (D96, css/cards.css).
+    WideZone(TodayZone.Top, places.top, drawCard)
     if (places.left.isNotEmpty() || places.right.isNotEmpty()) {
         Div({
             classes("today")
@@ -203,20 +204,34 @@ internal fun TodayScreen(
         }) {
             if (places.left.isNotEmpty()) {
                 Div({
-                    classes("today__main")
+                    classes("today__main", "tzone")
                     attr("data-zone", TodayZone.Left.id)
                 }) { places.left.forEach { key(it) { drawCard(it) } } }
             }
             if (places.right.isNotEmpty()) {
                 Aside({
-                    classes("today__rail")
+                    classes("today__rail", "tzone")
                     attr("data-zone", TodayZone.Right.id)
                     attr("aria-label", sideColumnLabel(places.right))
                 }) { places.right.forEach { key(it) { drawCard(it) } } }
             }
         }
     }
-    places.bottom.forEach { key(it) { drawCard(it) } }
+    WideZone(TodayZone.Bottom, places.bottom, drawCard)
+}
+
+/** Top or Bottom with its [cards], across the page; nothing when it has none (D96). */
+@Composable
+private fun WideZone(
+    zone: TodayZone,
+    cards: List<TodayCard>,
+    drawCard: @Composable (TodayCard) -> Unit,
+) {
+    if (cards.isEmpty()) return
+    Div({
+        classes("tzone", "tzone--wide", "tzone--${zone.id}")
+        attr("data-zone", zone.id)
+    }) { cards.forEach { key(it) { drawCard(it) } } }
 }
 
 /** Where the empty state sends the person: Settings, at Today (D84). */
@@ -535,6 +550,7 @@ private fun RemindersRail(
         bodyId = "rem-b",
         title = "Reminders",
         count = list.size.toString(),
+        attrs = { classes("scard--rem") },
     ) {
         if (list.isEmpty()) {
             P({ classes("scard__empty") }) { Text("No reminders today. Add one from a Task or Note.") }

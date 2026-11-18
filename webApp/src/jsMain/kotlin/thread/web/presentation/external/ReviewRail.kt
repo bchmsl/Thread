@@ -39,6 +39,7 @@ internal fun ReviewRequestedRail(
         title = "Review requested",
         count = items?.size?.toString(),
         mark = Icon.Eye,
+        attrs = { classes("scard--rvw") },
         actions = {
             A(
                 View.Prs.place
