@@ -353,6 +353,17 @@ Owner change #29, phase L1. Plan: `today-layout/analysis.md` revision 4 in the s
 - **Rules:** `validPrefs` allows both keys. `todayLayout` is null or a map with only the four place keys, each a list of known card ids without repeats (`validChoices`). `todayPhoneLayout` is null or such a list. A card in two places is allowed: the rules cannot cheaply check it, and the reader handles it.
 - **Deploy the rules before the build ships.** Once a layout is saved, every preferences save on that document carries it, and rules without these keys refuse the save. It stays in the sync panel with Retry; nothing is lost.
 
+## Narrow meeting titles (D97, 2026-11-18)
+
+Owner change #30. Settings > Today "Narrow meeting titles" picks how the Horizontal timeline shows a block too narrow for its title's threshold (8 characters and the ellipsis, or the whole title if shorter).
+
+- **Setting:** `users/{uid}/prefs/main` gets `meetingTitleFit`: `diagonal`, `vertical`, `flags` or `wrap`. Absent, or a value this build does not know, reads as `diagonal`, which is the drawing from before D97 (D88).
+- It saves like the other preferences: only a changed value is written, through the outbox, and a refused save stays in the sync panel with Retry. A new document writes `diagonal`, as it writes every other set field.
+- **Drawing:** the timeline reads the value in the domain (`titleFit` and `titleLines` in `MeetingTimeline.kt`). The timeline itself still stores nothing (D78).
+- **Older builds:** a build before D97 ignores the field and draws diagonal titles. Changing its own preferences in a document that has the field keeps it (merge). A change saved in the outbox before D97 has no field; it reads as `diagonal` on both sides, so it leaves the stored choice alone.
+- **Rules:** `validPrefs` allows the key; when present it must be one of the four strings.
+- **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores the field (changing it, or the first preferences save of a new account, or a save on a device before the account's preferences document has reached it). It stays in the sync panel with Retry; nothing is lost.
+
 ## Calendar meetings (D78, 2026-11-17)
 
 Details: ADR-020 (Accepted). Plan: `calendar-plan.md` v2.2 in the session notes.

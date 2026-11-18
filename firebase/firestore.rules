@@ -176,12 +176,13 @@ service cloud.firestore {
     // lack them. hideEmptySections stays valid after todayHideEmpty replaces it in Settings. A null todayTopicsView,
     // todayHideEmpty or jiraCurrentSprintOnly is not set yet; a null todayPastMeetings shows every past meeting.
     // Today's layouts (todayLayout, todayPhoneLayout) came with D95; null is not set, Today's layout before them.
+    // meetingTitleFit came with D97; without it, narrow meeting titles run along the diagonal, as before.
     function validPrefs(prefs) {
       return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'focusMin', 'breakMin',
           'hideEmptySections', 'meetingsLayout', 'todayTopicsView', 'todayHideEmpty', 'todayGroupBy',
           'todayPastMeetings', 'todayTopicCategories', 'inboxShowCompleted', 'inboxShowNotes', 'inboxGroupBy',
           'topicShowCompleted', 'topicHideEmpty', 'topicGroupByDue', 'jiraCurrentSprintOnly', 'prsMineGroupBy',
-          'prsReviewGroupBy', 'todayLayout', 'todayPhoneLayout', 'updatedAt', 'schemaVersion'])
+          'prsReviewGroupBy', 'todayLayout', 'todayPhoneLayout', 'meetingTitleFit', 'updatedAt', 'schemaVersion'])
         && prefs.keys().hasAll(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
         && prefs.schemaVersion == 1
         && prefs.updatedAt == request.time
@@ -193,6 +194,7 @@ service cloud.firestore {
         && (!('breakMin' in prefs) || (prefs.breakMin is int && prefs.breakMin >= 1 && prefs.breakMin <= 30))
         && (!('hideEmptySections' in prefs) || prefs.hideEmptySections is bool)
         && (!('meetingsLayout' in prefs) || prefs.meetingsLayout in ['vertical', 'horizontal'])
+        && (!('meetingTitleFit' in prefs) || prefs.meetingTitleFit in ['diagonal', 'vertical', 'flags', 'wrap'])
         && (!('todayTopicsView' in prefs) || prefs.todayTopicsView == null || prefs.todayTopicsView in ['list', 'board'])
         && (!('todayHideEmpty' in prefs) || prefs.todayHideEmpty == null
             || validChoices(prefs.todayHideEmpty, ['meetings', 'reminders', 'review']))

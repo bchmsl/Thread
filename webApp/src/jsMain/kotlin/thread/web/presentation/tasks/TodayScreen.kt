@@ -181,7 +181,7 @@ internal fun TodayScreen(
             // D79 in every place: Horizontal draws the meetings as a timeline, Vertical as the Meetings card.
             TodayCard.Meetings ->
                 if (layout == MeetingsLayout.Horizontal) {
-                    MeetingsTimeline(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
+                    MeetingsTimeline(meetingsView, workspace.prefs.meetingTitleFit, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
                 } else {
                     MeetingsRail(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
                 }

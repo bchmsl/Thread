@@ -14,6 +14,7 @@ import thread.data.external.long
 import thread.data.external.obj
 import thread.data.external.str
 import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.SeriesKey
 import thread.domain.calendar.isMeetingHash
 import thread.domain.focus.FocusOutcome
@@ -195,6 +196,7 @@ internal object WorkspaceWriteJson {
             put("breakMin", prefs.focusBreakMinutes)
             put("hideEmptySections", prefs.hideEmptySections)
             put("meetingsLayout", prefs.meetingsLayout.id)
+            put("meetingTitleFit", prefs.meetingTitleFit.id)
             put("todayTopicsView", prefs.todayTopicsView?.id)
             put("todayHideEmpty", prefs.todayHideEmpty?.let { ids(it) { section -> section.id } } ?: JsonNull)
             put("todayGroupBy", prefs.todayGroupBy.id)
@@ -243,6 +245,8 @@ internal object WorkspaceWriteJson {
             hideEmptySections = json.bool("hideEmptySections") ?: false,
             // Absent in changes saved by builds before D79: vertical.
             meetingsLayout = MeetingsLayout.fromId(json.str("meetingsLayout")) ?: MeetingsLayout.Vertical,
+            // Absent in changes saved by builds before D97, or a value this build does not know: diagonal.
+            meetingTitleFit = MeetingTitleFit.fromId(json.str("meetingTitleFit")) ?: MeetingTitleFit.Diagonal,
             // Absent in changes saved by builds before D83, so those leave these preferences alone: the defaults, and
             // not set where a value can be not set. A value this build does not know reads the same way.
             todayTopicsView = TopicsView.fromId(json.str("todayTopicsView")),

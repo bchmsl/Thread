@@ -17,6 +17,7 @@ import thread.data.local.newJsObject
 import thread.data.workspace.WorkspaceOutbox
 import thread.domain.account.AccountId
 import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.SeriesKey
 import thread.domain.calendar.isMeetingHash
 import thread.domain.focus.FOCUS_HISTORY_LIMIT
@@ -102,6 +103,8 @@ class WorkspaceReadException(
  *   `todayHideEmpty`, `todayPastMeetings` and `jiraCurrentSprintOnly` may be null: not set, or all past meetings.
  *   Today's layouts (D95) are optional and may be null, not set: `todayLayout?`, a map of the places `top`, `left`,
  *   `right` and `bottom`, each a list of card ids in order, and `todayPhoneLayout?`, one list of card ids.
+ *   `meetingTitleFit?` (D97), `diagonal`, `vertical`, `flags` or `wrap`, is optional; without it, or with a value this
+ *   build does not know, narrow meeting titles run along the diagonal.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -441,6 +444,8 @@ class FirestoreWorkspaceStore internal constructor(
         // D95. A merge would keep a place a layout leaves out, so every place is written.
         if (writes { it.todayLayout }) data.todayLayout = prefs.todayLayout?.stored()
         if (writes { it.todayPhoneLayout }) data.todayPhoneLayout = prefs.todayPhoneLayout?.ids()
+        // D97.
+        if (writes { it.meetingTitleFit }) data.meetingTitleFit = prefs.meetingTitleFit.id
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -878,6 +883,7 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         focusBreakMinutes = minutesOrNull(data.breakMin, FocusSettings.BREAK_MINUTES) ?: FocusSettings.DEFAULT_BREAK_MINUTES,
         hideEmptySections = booleanOrNull(data.hideEmptySections) ?: false,
         meetingsLayout = MeetingsLayout.fromId(stringOrNull(data.meetingsLayout)) ?: MeetingsLayout.Vertical,
+        meetingTitleFit = MeetingTitleFit.fromId(stringOrNull(data.meetingTitleFit)) ?: MeetingTitleFit.Diagonal,
         todayTopicsView = TopicsView.fromId(stringOrNull(data.todayTopicsView)),
         todayHideEmpty = stringsOrNull(data.todayHideEmpty)?.mapNotNull(TodayHideableSection::fromId)?.toSet(),
         todayGroupBy = TodayGroupBy.fromId(stringOrNull(data.todayGroupBy)) ?: TodayGroupBy.DueDate,

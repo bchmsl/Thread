@@ -171,7 +171,7 @@ private fun screenPrefsLines(prefs: WorkspacePrefs): List<String> {
     fun listed(ids: List<String>?): String = ids?.joinToString(", ")?.ifEmpty { "none" } ?: NOT_SET
     return listOf(
         "Today: Topics open as ${prefs.todayTopicsView?.id ?: NOT_SET}, tasks grouped by ${prefs.todayGroupBy.id}, " +
-            "past meetings ${prefs.todayPastMeetings ?: "all"}, " +
+            "past meetings ${prefs.todayPastMeetings ?: "all"}, narrow meeting titles ${prefs.meetingTitleFit.id}, " +
             "Topics shown ${listed(prefs.todayTopicCategories.sortedBy { it.ordinal }.map { it.id })}, " +
             "hidden when empty ${listed(prefs.todayHideEmpty?.sortedBy { it.ordinal }?.map { it.id })}",
         "Inbox: completed tasks ${onOff(prefs.inboxShowCompleted)}, notes ${onOff(prefs.inboxShowNotes)}, " +

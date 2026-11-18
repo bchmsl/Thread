@@ -1,5 +1,6 @@
 package thread.domain.workspace
 
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.focus.FOCUS_HISTORY_LIMIT
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
@@ -271,6 +272,17 @@ class RefusedChangesTest {
 
         assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
         assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
+    }
+
+    @Test
+    fun theNarrowMeetingTitlesAreComparedLikeOtherPreferences() {
+        val stored = WorkspacePrefs(meetingTitleFit = MeetingTitleFit.Wrap)
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutPrefs(stored, before = WorkspacePrefs())))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
+        val otherChoice = stored.copy(meetingTitleFit = MeetingTitleFit.Vertical)
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = otherChoice)).size)
     }
 
     @Test

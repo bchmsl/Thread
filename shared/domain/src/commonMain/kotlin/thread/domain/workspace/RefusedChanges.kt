@@ -175,6 +175,7 @@ private fun WorkspacePrefs.fields(): Map<String, Any?> =
         "breakMin" to focusBreakMinutes,
         "hideEmptySections" to hideEmptySections,
         "meetingsLayout" to meetingsLayout,
+        "meetingTitleFit" to meetingTitleFit,
         "todayTopicsView" to todayTopicsView,
         "todayHideEmpty" to todayHideEmpty,
         "todayGroupBy" to todayGroupBy,

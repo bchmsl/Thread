@@ -20,6 +20,7 @@ import thread.domain.calendar.Meeting
 import thread.domain.calendar.MeetingPhase
 import thread.domain.calendar.MeetingResponse
 import thread.domain.calendar.MeetingTimeline
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.MeetingsState
 import thread.domain.calendar.SeriesKey
 import thread.domain.calendar.TIMELINE_BLOCK_PX
@@ -48,8 +49,10 @@ import kotlin.math.round
  * the card only (D86). Its body runs the day's hours from left to right
  * ([meetingTimeline]): all-day meetings in a strip above the hours, timed ones as blocks placed by start and end, in
  * lanes while they overlap, and a line at now. The hours share the box's width, so the layout waits for it. A block too
- * narrow for the start of its title runs it along its diagonal (D88), taller when it needs to, and a meeting too narrow
- * even for one line is a flag in a band above the lanes ([thread.domain.calendar.titleFit], D85). A block or a flag's
+ * narrow for the start of its title shows it as Settings "Narrow meeting titles" picks ([titles], D97): along its
+ * diagonal (D88) or up its height, taller when it needs to; as a flag; or flat on more lines in a taller block. A meeting
+ * too narrow even for one line is a flag in a band above the lanes in every choice ([thread.domain.calendar.titleFit],
+ * D85). A block or a flag's
  * title is one button named by the row's sentence ([meetingRowLabel]); it opens the Meeting card.
  * Flags and blocks come in one list in time order, so Tab follows the day. Join for the meeting now and the next one
  * sits in the card's head, since a block is too narrow for it. A narrow screen scrolls the hours sideways inside the
@@ -58,6 +61,7 @@ import kotlin.math.round
 @Composable
 internal fun MeetingsTimeline(
     view: TodayMeetingsView,
+    titles: MeetingTitleFit,
     topicsOf: (SeriesKey) -> List<Topic>,
     onOpen: (Meeting) -> Unit,
 ) {
@@ -87,7 +91,7 @@ internal fun MeetingsTimeline(
         when {
             view.loading -> LoadingTrack()
             view.state is MeetingsState.Ready -> {
-                val line = meetingTimeline(view.rows, now, widthPx ?: 0.0)
+                val line = meetingTimeline(view.rows, now, widthPx ?: 0.0, titles)
                 if (line.allDay.isNotEmpty()) AllDayStrip(line.allDay, now, topicsOf, onOpen)
                 Track(line, now, sized = widthPx != null, onWidth = { widthPx = it }, topicsOf, onOpen)
             }
@@ -218,7 +222,9 @@ private fun TrackBox(
  * yesterday or tomorrow has a square edge on that side. Now is tinted and Next outlined, so a block too narrow for its
  * badge still shows it. Tentative and not answered have a dashed edge. A block too narrow for the start of its title
  * runs it along its diagonal, from the bottom-left corner to the top-right, at the angle and length the domain gives
- * ([TitleTurn.Diagonal], D88), and is as tall as the domain says ([TimelineBlock.heightPx]); its lane grows with it.
+ * ([TitleTurn.Diagonal], D88; straight up with Vertical, D97), or lies flat on as many lines as the domain gives
+ * ([TitleTurn.Wrapped], Increase height, D97). It is as tall as the domain says ([TimelineBlock.heightPx]); its lane
+ * grows with it.
  */
 @Composable
 private fun Block(
@@ -233,6 +239,7 @@ private fun Block(
     val from = line.offsetOf(block.fromMinute)
     val label = meetingRowLabel(row, now, topics.map { it.name })
     val diagonal = block.turn as? TitleTurn.Diagonal
+    val wrapped = block.turn as? TitleTurn.Wrapped
     Li({
         classes("mtl__slot")
         style {
@@ -245,6 +252,7 @@ private fun Block(
                 property("--a", "${round(diagonal.angleDeg * 100) / 100}deg")
                 property("--l", "${floor(diagonal.lengthPx * 100) / 100}px")
             }
+            if (wrapped != null) property("--lines", wrapped.lines.toString())
         }
     }) {
         Button({
@@ -256,6 +264,7 @@ private fun Block(
             if (row.startsBeforeToday) classes("is-from-yesterday")
             if (row.endsAfterToday) classes("is-to-tomorrow")
             if (diagonal != null) classes("is-turned")
+            if (wrapped != null) classes("is-wrapped")
             attr("aria-label", label)
             onClick { onOpen(meeting) }
         }) {

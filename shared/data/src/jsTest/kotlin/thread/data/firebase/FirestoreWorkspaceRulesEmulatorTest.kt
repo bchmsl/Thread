@@ -244,6 +244,31 @@ class FirestoreWorkspaceRulesEmulatorTest {
             assertFails(setDoc(prefsRef(stranger, owner), prefs("meetingsLayout" to "horizontal"))).await()
         }
 
+    @Test
+    fun theNarrowMeetingTitlesAreAnOptionalPreferenceOfFourChoices() =
+        rulesTest { env, owner, other ->
+            val db = env.authenticatedContext(owner).firestore()
+
+            // A document from before D97, then each choice by a change of that field only.
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs("meetingsLayout" to "horizontal"))).await()
+            for (value in listOf("vertical", "flags", "wrap", "diagonal")) {
+                mergeSet(prefsRef(db, owner), jsObject("meetingTitleFit" to value, "updatedAt" to serverTimestamp()), db)
+            }
+            // A build that does not know the field still changes the others in a document that has it.
+            mergeSet(prefsRef(db, owner), jsObject("meetingsLayout" to "vertical", "updatedAt" to serverTimestamp()), db)
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs("meetingTitleFit" to "flags", "meetingsLayout" to "horizontal"))).await()
+
+            for (value in listOf<Any?>("height", "Diagonal", "upright", "", true, 1, null, arrayOf("wrap"))) {
+                assertFails(setDoc(prefsRef(db, owner), prefs("meetingTitleFit" to value))).await()
+                assertFails(
+                    updateDoc(prefsRef(db, owner), jsObject("meetingTitleFit" to value, "updatedAt" to serverTimestamp())),
+                ).await()
+            }
+            val stranger = env.authenticatedContext(other).firestore()
+            assertFails(setDoc(prefsRef(stranger, owner), prefs("meetingTitleFit" to "wrap"))).await()
+            assertFails(getDoc(prefsRef(stranger, owner))).await()
+        }
+
     /** Every per-screen preference (D83) away from its default. Lists are JavaScript arrays, as the app stores them. */
     private val screenPrefs =
         arrayOf<Pair<String, Any?>>(

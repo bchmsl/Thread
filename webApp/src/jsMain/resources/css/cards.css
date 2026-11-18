@@ -261,9 +261,11 @@
    width at 88 px each or more; a card narrower than that scrolls them inside .mtl, never the page. Blocks sit by start
    and end, in lanes while they overlap; the grid's hour lines echo the band's calendar pattern. The domain's titleFit
    (D85) picks each meeting's look from its width and its title's length, with the px below: a block's title lies flat,
-   or runs along the block's diagonal (D88), which then may be taller than 60 px (--h); its lane grows with it (--top,
-   --lanes-h). A meeting too narrow for a turned line is a flag in a band above the lanes. A block is at least 21 px
-   wide, one turned line, the room the lanes keep for it, so it never covers the next one. */
+   or, when the block is too narrow for it, shows as Settings "Narrow meeting titles" picks (D97): along the block's
+   diagonal (D88, the default) or straight up it, on more flat lines, or as a flag. The block then may be taller than
+   60 px (--h); its lane grows with it (--top, --lanes-h). A meeting too narrow for a turned line is a flag in a band
+   above the lanes in every choice. A block is at least 21 px wide, one turned line, the room the lanes keep for it, so
+   it never covers the next one. */
 .scard--tl { margin-bottom: 28px; }
 .scard--tl > .scard__head { flex-wrap: wrap; row-gap: 6px; }
 .scard--tl > .scard__head > .scard__h { flex: 1 1 auto; }
@@ -336,14 +338,23 @@
    corner to the top-right: one 12 px line, --a up from flat and --l long, both from the domain's titleDiagonal. Centred,
    it touches the colour edge and the bottom at its start and the right border and the top at its end, 4 px inside the
    border above and below (TIMELINE_TURNED_ENDS_PX), and it is cut with an ellipsis, so it never reaches a neighbour or
-   the ruler. Upright only in a block one line wide. The block is --h tall: taller than 60 px when the line needs it.
-   Now's tint and Next's outline say the phase. */
+   the ruler. Upright in a block one line wide, and in every turned block with Vertical (D97), where the domain gives
+   --a 90deg. The block is --h tall: taller than 60 px when the line needs it. Now's tint and Next's outline say the
+   phase. */
 .mblock.is-turned .mblock__in { position: relative; padding: 0; }
 .mblock.is-turned .mblock__meta { display: none; }
 .mblock.is-turned .mblock__name {
   position: absolute; left: 50%; top: 50%; display: block; width: var(--l); max-width: none;
   line-height: 15px; white-space: nowrap; transform: translate(-50%, -50%) rotate(calc(-1 * var(--a)));
 }
+/* Increase height (D97, .is-wrapped): the title stays flat on --lines lines, the domain's titleLines, which is as many as
+   the start of the title needs and no more; the rest is cut with an ellipsis. Lines break where words end, and a word
+   wider than the block breaks where the line ends. The block is --h tall, 15 px a line more than 60 px. */
+.mblock.is-wrapped .mblock__name { -webkit-line-clamp: var(--lines); overflow-wrap: anywhere; }
+/* A wrapped block is often narrower than its time. A zero-width part, as tall as the line, holds the meta line's first
+   line ahead of its first part, so that part too shows only while it fits whole, and otherwise wraps to the second line,
+   which is cut off. Its negative margin takes back the gap after it. */
+.mblock.is-wrapped .mblock__meta::before { content: ''; height: 100%; margin-right: -5px; }
 /* A meeting too narrow for a turned title is a flag (D85): a pole up from a time line at its start, its title on a small
    flag at the top. Neighbours whose titles would overlap step up a row, so a busy hour reads as a staircase, earliest
    highest. Each row is --flag-p high; the flag's cloth is --flag-c high inside a target of --flag-h, 24 px on every

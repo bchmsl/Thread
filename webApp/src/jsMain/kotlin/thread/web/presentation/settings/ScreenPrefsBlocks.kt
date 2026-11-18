@@ -11,6 +11,7 @@ import org.jetbrains.compose.web.dom.Label
 import org.jetbrains.compose.web.dom.P
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.topic.StatusCategory
 import thread.domain.workspace.CaptureKind
 import thread.domain.workspace.InboxGroupBy
@@ -38,8 +39,8 @@ import thread.web.presentation.topics.categoryLabel
  */
 
 /**
- * Settings > Today, in the owner's order (D84, D86, D89, D90): Topics open as, Show completed tasks, Hide empty
- * sections, Meetings layout, Group tasks by, Show past meetings, Topics shown.
+ * Settings > Today, in the owner's order (D84, D86, D89, D90, D97): Topics open as, Show completed tasks, Hide empty
+ * sections, Meetings layout, Narrow meeting titles, Group tasks by, Show past meetings, Topics shown.
  */
 @Composable
 internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
@@ -65,6 +66,14 @@ internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
             options = MeetingsLayout.entries.map { it to if (it == MeetingsLayout.Vertical) "Vertical" else "Horizontal" },
             picked = prefs.meetingsLayout,
         ) { workspace.setPrefs(workspace.prefs.copy(meetingsLayout = it)) }
+        // D97. Always shown, as Show past meetings is: the hint says which layout it is for.
+        ChoicePref(
+            labelId = "mtf-l",
+            label = "Narrow meeting titles",
+            hint = NARROW_TITLES_HINT,
+            options = MeetingTitleFit.entries.map { it to titleFitLabel(it) },
+            picked = prefs.meetingTitleFit,
+        ) { workspace.setPrefs(workspace.prefs.copy(meetingTitleFit = it)) }
         ChoicePref(
             labelId = "tg-l",
             label = "Group tasks by",
@@ -178,6 +187,17 @@ private fun groupByLabel(groupBy: TodayGroupBy): String =
         TodayGroupBy.None -> "None"
         TodayGroupBy.Topic -> "Topic"
         TodayGroupBy.DueDate -> "Due date"
+    }
+
+private const val NARROW_TITLES_HINT =
+    "On the Horizontal timeline, how a meeting too short for its title shows it. The shortest meetings are always flags."
+
+private fun titleFitLabel(titles: MeetingTitleFit): String =
+    when (titles) {
+        MeetingTitleFit.Diagonal -> "Diagonal"
+        MeetingTitleFit.Vertical -> "Vertical"
+        MeetingTitleFit.Flags -> "Dots with flags"
+        MeetingTitleFit.Wrap -> "Increase height"
     }
 
 private const val PAST_MEETINGS_HINT = "How many ended meetings the Vertical layout keeps, the latest ones. Horizontal shows the whole day."
@@ -427,7 +447,10 @@ private fun SwitchPref(
     }
 }
 
-/** One preference with a few named choices, as a row of radio buttons. */
+/**
+ * One preference with a few named choices, as a row of radio buttons. More than three (D97) mark the row, so the choices
+ * stand in two columns where the row is too narrow for them (app.css, .pref--many).
+ */
 @Composable
 private fun <T> ChoicePref(
     labelId: String,
@@ -437,7 +460,10 @@ private fun <T> ChoicePref(
     picked: T,
     onPick: (T) -> Unit,
 ) {
-    Div({ classes("pref", "pref--choice") }) {
+    Div({
+        classes("pref", "pref--choice")
+        if (options.size > 3) classes("pref--many")
+    }) {
         Div {
             P({
                 classes("pref__label")

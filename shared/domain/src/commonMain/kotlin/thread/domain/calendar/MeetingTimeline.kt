@@ -6,6 +6,7 @@ import thread.domain.time.WallTime
 import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.sin
 
 /** The first hour the meetings timeline always shows (D79, D85): 10:00 in the workspace zone. */
@@ -75,12 +76,33 @@ const val TIMELINE_FLAG_MIN_ROOM_MINUTES: Int = 60
 private const val TURNED_SLOT_PX: Double = TIMELINE_TURNED_SIDES_PX + TIMELINE_LINE_PX
 
 /**
+ * How the Horizontal timeline shows a block too narrow for its title's run flat (D97, Settings "Narrow meeting titles"):
+ * [Diagonal] along the block's diagonal (D88), [Vertical] up the block (D85), [Flags] as a flag above the lanes (D85),
+ * or [Wrap] flat on more lines, the block taller. A title that fits flat, and a meeting too narrow for one turned line,
+ * look the same in each ([titleFit]).
+ */
+enum class MeetingTitleFit(
+    val id: String,
+) {
+    Diagonal("diagonal"),
+    Vertical("vertical"),
+    Flags("flags"),
+    Wrap("wrap"),
+    ;
+
+    companion object {
+        fun fromId(id: String?): MeetingTitleFit? = entries.firstOrNull { it.id == id }
+    }
+}
+
+/**
  * Today's meetings on a timeline (D79, Settings "Meetings layout: Horizontal"). It shows the hours from [startMinute]
  * to [endMinute], minutes of the day on whole hours: [TIMELINE_FIRST_HOUR] to [TIMELINE_LAST_HOUR], widened to hold
  * every timed meeting of the day, each [hourPx] wide. [allDay] sit above the hours. [items] are the timed meetings in
- * time order: one too narrow for a turned title is a [TimelineFlag] in one of [flagRows] rows above the lanes (D85),
- * any other a [TimelineBlock] in a lane. [laneHeightsPx] holds each lane's height, its tallest block. [nowMinute] is
- * now, or null while now is outside the hours shown.
+ * time order: one too narrow for a turned title is a [TimelineFlag] in one of [flagRows] rows above the lanes (D85), as
+ * is one too narrow for its title flat with Dots with flags (D97), any other a [TimelineBlock] in a lane.
+ * [laneHeightsPx] holds each lane's height, its tallest block. [nowMinute] is now, or null while now is outside the
+ * hours shown.
  */
 data class MeetingTimeline(
     val startMinute: Int,
@@ -136,7 +158,8 @@ data class TimelineBlock(
 ) : TimelineItem
 
 /**
- * A meeting too narrow for a turned title as a flag (D85): a pole up from its start to its title in [row], counted from
+ * A meeting too narrow for a turned title as a flag (D85), or for its title flat when Settings picks Dots with flags
+ * (D97): a pole up from its start to its title in [row], counted from
  * 0 just above the hours. The title has [roomMinutes] of the row from the start: [TIMELINE_FLAG_ROOM_MINUTES], or less
  * where the next title, the pole of a higher flag or the end of the hours comes sooner.
  */
@@ -148,18 +171,31 @@ data class TimelineFlag(
     val roomMinutes: Int,
 ) : TimelineItem
 
-/** How a block's title runs (D85, D88): [Flat], on one or two lines, or one line along the block's [Diagonal]. */
+/**
+ * How a block's title runs (D85, D88, D97): [Flat], on one or two lines, one line along the block's [Diagonal], or flat
+ * on as many lines as its start needs, [Wrapped].
+ */
 sealed interface TitleTurn {
     /** Flat, on one or two lines. */
     data object Flat : TitleTurn
 
     /**
-     * One line from the block's bottom-left corner to its top-right (D88), read from the bottom: [angleDeg] up from flat,
-     * 90 only in a block one line wide, and [lengthPx] long, as [titleDiagonal] finds it.
+     * One line from the block's bottom-left corner to its top-right (D88), read from the bottom: [angleDeg] up from flat
+     * and [lengthPx] long, as [titleDiagonal] finds it. It is 90, up the block, in a block one line wide, and in every
+     * turned block when Settings picks Vertical (D97).
      */
     data class Diagonal(
         val angleDeg: Double,
         val lengthPx: Double,
+    ) : TitleTurn
+
+    /**
+     * Flat on [lines] lines, two or more (D97, Settings "Increase height"): as many as [titleLines] counts for the title's
+     * start. Words break where they end, a word wider than the block where the line does, and the rest of the title is
+     * cut with an ellipsis.
+     */
+    data class Wrapped(
+        val lines: Int,
     ) : TitleTurn
 }
 
@@ -190,7 +226,7 @@ fun titleFit(
     slotPx: Double,
     titleChars: Int,
 ): TitleFit {
-    val run = minOf(titleChars, MIN_TITLE_CHARS) * TIMELINE_CHAR_PX + if (titleChars > MIN_TITLE_CHARS) TIMELINE_ELLIPSIS_PX else 0.0
+    val run = titleRun(titleChars)
     return when {
         slotPx < TURNED_SLOT_PX -> TitleFit.Flag
         slotPx >= TIMELINE_FLAT_SIDES_PX + run -> TitleFit.Block(TitleTurn.Flat, TIMELINE_BLOCK_PX)
@@ -200,6 +236,95 @@ fun titleFit(
         }
     }
 }
+
+/**
+ * Where [title] fits with [titles], the choice in Settings "Narrow meeting titles" (D97). A flag, and a block whose title
+ * lies flat, are what [titleFit] gives for the title's length in every choice. Only a block too narrow for the run flat
+ * changes:
+ * - [MeetingTitleFit.Diagonal]: along its diagonal, as [titleFit] gives it (D88).
+ * - [MeetingTitleFit.Vertical]: one line up the block, read from the bottom, as before D88 (D85). The block is
+ *   [TIMELINE_BLOCK_PX] tall, or the fewest whole px taller that hold the run and [TIMELINE_TURNED_ENDS_PX].
+ * - [MeetingTitleFit.Flags]: a flag.
+ * - [MeetingTitleFit.Wrap]: flat, on the lines [titleLines] counts in the slot less [TIMELINE_FLAT_SIDES_PX]. A block
+ *   [TIMELINE_BLOCK_PX] tall holds two; each more makes it [TIMELINE_LINE_PX] taller.
+ */
+fun titleFit(
+    slotPx: Double,
+    title: String,
+    titles: MeetingTitleFit,
+): TitleFit {
+    val fit = titleFit(slotPx, title.length)
+    if (fit !is TitleFit.Block || fit.turn == TitleTurn.Flat) return fit
+    return when (titles) {
+        MeetingTitleFit.Diagonal -> fit
+        MeetingTitleFit.Vertical -> {
+            val heightPx = maxOf(TIMELINE_BLOCK_PX, ceil(TIMELINE_TURNED_ENDS_PX + titleRun(title.length)).toInt())
+            TitleFit.Block(TitleTurn.Diagonal(UPRIGHT_DEG, heightPx - TIMELINE_TURNED_ENDS_PX), heightPx)
+        }
+        MeetingTitleFit.Flags -> TitleFit.Flag
+        MeetingTitleFit.Wrap -> {
+            val lines = maxOf(2, titleLines(title, slotPx - TIMELINE_FLAT_SIDES_PX))
+            TitleFit.Block(TitleTurn.Wrapped(lines), TIMELINE_BLOCK_PX + (lines - 2) * TIMELINE_LINE_PX.toInt())
+        }
+    }
+}
+
+/**
+ * The lines a flat title needs on lines [widthPx] wide to show its run (D97, Settings "Increase height"): its first
+ * [MIN_TITLE_CHARS] characters, or all of a shorter title, and an ellipsis when more of it follows. It lays the title out
+ * as the block draws it, at [TIMELINE_CHAR_PX] a character: a word goes on the line while it fits, else on the next; a
+ * word longer than a whole line breaks where each line ends; a space where a line breaks takes no room, and spaces
+ * together count as one. The run ends on the line of its last character, or the next one when the title goes on past
+ * that line and an ellipsis ([TIMELINE_ELLIPSIS_PX]) does not fit after that character, since the block cuts the title
+ * at the end of its last line. Every line holds at least one character.
+ */
+fun titleLines(
+    title: String,
+    widthPx: Double,
+): Int {
+    val perLine = maxOf(1, floor(widthPx / TIMELINE_CHAR_PX).toInt())
+    val words = title.split(' ').filter { it.isNotEmpty() }
+    if (words.isEmpty()) return 1
+    // Each character's line, and how many characters its line holds up to and with it.
+    val lineOf = mutableListOf<Int>()
+    val columnOf = mutableListOf<Int>()
+    var line = 1
+    var column = 0
+    words.forEachIndexed { index, word ->
+        if (index > 0) {
+            // The space between two words stays on the line when the next word fits after it. Else it ends the line,
+            // taking no room, and the word starts the next one.
+            val fits = column + 1 + word.length <= perLine
+            if (fits) column++
+            lineOf += line
+            columnOf += column
+            if (!fits) {
+                line++
+                column = 0
+            }
+        }
+        word.forEach { _ ->
+            if (column == perLine) {
+                line++
+                column = 0
+            }
+            column++
+            lineOf += line
+            columnOf += column
+        }
+    }
+    val last = minOf(MIN_TITLE_CHARS, lineOf.size) - 1
+    val runLine = lineOf[last]
+    val cutAfter = lineOf.last() > runLine && columnOf[last] * TIMELINE_CHAR_PX + TIMELINE_ELLIPSIS_PX > widthPx
+    return if (cutAfter) runLine + 1 else runLine
+}
+
+/** The px a title's run takes flat (D85): [MIN_TITLE_CHARS] characters and an ellipsis, or a shorter title whole. */
+private fun titleRun(titleChars: Int): Double =
+    minOf(titleChars, MIN_TITLE_CHARS) * TIMELINE_CHAR_PX + if (titleChars > MIN_TITLE_CHARS) TIMELINE_ELLIPSIS_PX else 0.0
+
+/** A title turned up the block (D85, D97). */
+private const val UPRIGHT_DEG = 90.0
 
 /**
  * The title line along the diagonal of a block in a slot [slotPx] wide and [heightPx] tall (D88, owner: "the text
@@ -237,12 +362,14 @@ private const val DIAGONAL_HALVINGS = 60
 
 /**
  * Lays out [today], the rows [todayMeetings] gives for [now]'s day, on a timeline [widthPx] wide: the hours share it,
- * each at least [TIMELINE_MIN_HOUR_PX]. Before the width is known, pass 0 for the narrowest hours.
+ * each at least [TIMELINE_MIN_HOUR_PX]. Before the width is known, pass 0 for the narrowest hours. [titles] is how a
+ * block too narrow for its title's run flat shows it (D97).
  */
 fun meetingTimeline(
     today: List<TodayMeeting>,
     now: WallTime,
     widthPx: Double,
+    titles: MeetingTitleFit = MeetingTitleFit.Diagonal,
 ): MeetingTimeline {
     val day = now.day
     val timed =
@@ -255,7 +382,7 @@ fun meetingTimeline(
     var end = endFor(timed.map { it.to })
     while (true) {
         val hourPx = maxOf(TIMELINE_MIN_HOUR_PX, widthPx / ((end - start) / 60))
-        val placed = timed.map { it.place(hourPx) }
+        val placed = timed.map { it.place(hourPx, titles) }
         val next = endFor(placed.map { it.reach })
         if (next == end) return lay(today, now, placed, start, end, hourPx)
         end = next
@@ -359,12 +486,22 @@ private class Timed(
     val to: Int,
 ) {
     /**
-     * Its fit with hours [hourPx] wide. A meeting that started yesterday is a block even when shorter: it keeps one turned
-     * line's width, so it can be clicked, and the next block in its lane starts after that.
+     * Its fit with hours [hourPx] wide and narrow titles shown as [titles]. A meeting that started yesterday is a block
+     * even when shorter: it keeps one turned line's width, so it can be clicked, and the next block in its lane starts
+     * after that. With [MeetingTitleFit.Flags] its title runs along the diagonal, the default (D97).
      */
-    fun place(hourPx: Double): Placed {
+    fun place(
+        hourPx: Double,
+        titles: MeetingTitleFit,
+    ): Placed {
         val slotPx = (to - from) * hourPx / 60
-        val fit = titleFit(if (row.startsBeforeToday) maxOf(slotPx, TURNED_SLOT_PX) else slotPx, row.meeting.displayTitle.length)
+        val title = row.meeting.displayTitle
+        val fit =
+            if (row.startsBeforeToday) {
+                titleFit(maxOf(slotPx, TURNED_SLOT_PX), title, if (titles == MeetingTitleFit.Flags) MeetingTitleFit.Diagonal else titles)
+            } else {
+                titleFit(slotPx, title, titles)
+            }
         // A flag's title is sure of an hour; a block reaches its end, or one turned line's width.
         val reach =
             if (fit == TitleFit.Flag) {

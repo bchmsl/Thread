@@ -1025,6 +1025,14 @@ main:has(.board) { max-width: 1520px; }
 /* A row of choices (D90): it wraps under the label when the label would get too narrow beside it. */
 .pref--choice { flex-wrap: wrap; }
 .pref--choice > :first-child { flex: 1 1 200px; }
+/* More than three choices (D97, .pref--many) are wider than a phone's row. Where the row is under 440 px (the four of
+   Narrow meeting titles need 423 px in Chrome; the rest is room for other fonts), they stand in two equal columns across
+   it, in a box whose corners follow the pills inside. */
+.pref--many { container: pchoice / inline-size; }
+@container pchoice (max-width: 439px) {
+  .pref--many .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; border-radius: 19px; }
+  .pref--many .seg button { justify-content: center; }
+}
 /* A preference with a few checkboxes (D86): they wrap under the label on a narrow screen. */
 .pref--checks { flex-wrap: wrap; }
 .pref--checks > :first-child { flex: 1 1 260px; }

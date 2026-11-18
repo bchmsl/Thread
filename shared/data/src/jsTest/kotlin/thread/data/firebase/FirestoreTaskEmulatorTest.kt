@@ -2,6 +2,7 @@ package thread.data.firebase
 
 import kotlinx.coroutines.await
 import kotlinx.coroutines.flow.first
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.reminder.ReminderId
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
@@ -243,6 +244,35 @@ class FirestoreTaskEmulatorTest {
 
                 storeA.write(listOfNotNull(savePrefs(saved, saved.prefs.copy(meetingsLayout = MeetingsLayout.Vertical))))
                 storeB.observe().first { it.prefs.meetingsLayout == MeetingsLayout.Vertical }
+                assertTrue(storeA.refused.value.isEmpty())
+            } finally {
+                deviceA.backend.close()
+                deviceB.backend.close()
+            }
+        }
+
+    @Test
+    fun theNarrowMeetingTitlesSyncAndStartDiagonal() =
+        emulatorTest {
+            val subject = syntheticSubject()
+            val deviceA = EmulatedDevice.signIn(subject)
+            val deviceB = EmulatedDevice.signIn(subject)
+            val storeA = FirestoreWorkspaceStore(deviceA.backend, deviceA.accountId)
+            val storeB = FirestoreWorkspaceStore(deviceB.backend, deviceB.accountId)
+            try {
+                storeA.write(seedWrites())
+                val seeded = storeA.observe().first { it.statuses.size == 4 && !it.pendingWrites }
+                assertEquals(MeetingTitleFit.Diagonal, seeded.prefs.meetingTitleFit, "Diagonal by default")
+
+                var before = seeded
+                for (titles in listOf(MeetingTitleFit.Vertical, MeetingTitleFit.Flags, MeetingTitleFit.Wrap, MeetingTitleFit.Diagonal)) {
+                    val picked = before.prefs.copy(meetingTitleFit = titles)
+                    storeA.write(listOfNotNull(savePrefs(before, picked)))
+                    before = storeA.observe().first { !it.pendingWrites && it.prefs.meetingTitleFit == titles }
+                    assertEquals(picked, before.prefs, "Only the narrow meeting titles changed")
+                    // The other device follows, with no reload.
+                    assertEquals(picked, storeB.observe().first { it.prefs.meetingTitleFit == titles }.prefs)
+                }
                 assertTrue(storeA.refused.value.isEmpty())
             } finally {
                 deviceA.backend.close()

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.SeriesKey
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
@@ -136,6 +137,7 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutPrefs(WorkspacePrefs(focusWorkMinutes = 50, focusBreakMinutes = 10)),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(hideEmptySections = true), before = WorkspacePrefs()),
             WorkspaceWrite.PutPrefs(WorkspacePrefs(meetingsLayout = MeetingsLayout.Horizontal), before = WorkspacePrefs()),
+            WorkspaceWrite.PutPrefs(WorkspacePrefs(meetingTitleFit = MeetingTitleFit.Wrap), before = WorkspacePrefs()),
             WorkspaceWrite.PutPrefs(screenPrefs, before = WorkspacePrefs()),
             // Back to not set, and an empty pick, which is not the same as not set.
             WorkspaceWrite.PutPrefs(WorkspacePrefs(todayHideEmpty = emptySet(), todayTopicCategories = emptySet()), before = screenPrefs),
@@ -207,6 +209,24 @@ class WorkspaceWriteJsonTest {
         assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
         val unknown = WorkspaceWriteJson.decode(JsonArray(listOf(later)))
         assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), unknown, "A layout this build does not know reads as vertical")
+    }
+
+    @Test
+    fun preferencesSavedBeforeTheNarrowMeetingTitlesReadAsDiagonal() {
+        val prefs = WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")
+        val stored =
+            WorkspaceWriteJson
+                .encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(meetingTitleFit = MeetingTitleFit.Flags))))
+                .single()
+                .jsonObject
+        val value = stored.getValue("value").jsonObject
+        assertEquals(JsonPrimitive("flags"), value["meetingTitleFit"], "Stored by its id")
+        val older = JsonObject(stored + ("value" to JsonObject(value - "meetingTitleFit")))
+        val later = JsonObject(stored + ("value" to JsonObject(value + ("meetingTitleFit" to JsonPrimitive("upright")))))
+
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+        val unknown = WorkspaceWriteJson.decode(JsonArray(listOf(later)))
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), unknown, "A choice this build does not know reads as diagonal")
     }
 
     @Test

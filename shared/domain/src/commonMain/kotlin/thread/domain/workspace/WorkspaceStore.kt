@@ -3,6 +3,7 @@ package thread.domain.workspace
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import thread.domain.calendar.MeetingLink
+import thread.domain.calendar.MeetingTitleFit
 import thread.domain.focus.FocusSession
 import thread.domain.focus.FocusSettings
 import thread.domain.note.NoteId
@@ -82,6 +83,8 @@ data class WorkspacePrefs(
     val hideEmptySections: Boolean = false,
     /** Settings, "Meetings layout" (D79). Vertical by default, as before D79. */
     val meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
+    /** Today, "Narrow meeting titles" (D97). Diagonal by default, as before D97. */
+    val meetingTitleFit: MeetingTitleFit = MeetingTitleFit.Diagonal,
     /** Today, "Topics open as". Not set: see [todayTopicsLayout]. */
     val todayTopicsView: TopicsView? = null,
     /** Today, "Hide when empty". Not set: see [todayHiddenWhenEmpty]. */
