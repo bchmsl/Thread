@@ -1,6 +1,7 @@
 package thread.web.presentation.tasks
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -30,7 +31,10 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.dom.TextInput
 import org.jetbrains.compose.web.dom.Ul
+import org.w3c.dom.Element
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.events.Event
+import org.w3c.dom.events.KeyboardEvent
 import thread.domain.reminder.ReminderTarget
 import thread.domain.reminder.TargetKind
 import thread.domain.reminder.TodayReminder
@@ -56,10 +60,13 @@ import thread.domain.topic.todayTopicGroups
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
+import thread.domain.workspace.TodayLayoutEdit
+import thread.domain.workspace.TodayLayoutKind
 import thread.domain.workspace.TodayZone
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.todayDesktopLayout
 import thread.domain.workspace.todayHiddenWhenEmpty
+import thread.domain.workspace.todayPhoneOrder
 import thread.domain.workspace.todayTopicsLayout
 import thread.web.platform.readDeviceText
 import thread.web.platform.writeDeviceText
@@ -75,6 +82,7 @@ import thread.web.presentation.Place
 import thread.web.presentation.SectionCard
 import thread.web.presentation.SelectBox
 import thread.web.presentation.TaskCreation
+import thread.web.presentation.ToastState
 import thread.web.presentation.View
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.calendar.MeetingsModel
@@ -105,7 +113,11 @@ import thread.web.presentation.topics.topicPlace
  * "Group tasks by" says (D90); see [TodayTaskGroups]. Every group opens and closes, and this device remembers it (D53).
  * An empty task group is left out; so are the Meetings, Reminders and Review requested sections Settings hides when
  * empty (D77, D86); see [TodaySections]. Since D95 the cards are placed by the desktop layout
- * ([thread.domain.workspace.todayDesktopLayout]); with none saved it is the layout described here.
+ * ([thread.domain.workspace.todayDesktopLayout]); with none saved it is the layout described here. A window 759 px wide
+ * or narrower shows them in one column, in the phone order ([thread.domain.workspace.todayPhoneOrder], D98).
+ *
+ * "Edit layout" opens edit mode (D98, [TodayEditView]): [startEditing] opens it at once (Settings > Today links here
+ * with it), and [onEditingStarted] then drops that from the address.
  */
 @Composable
 internal fun TodayScreen(
@@ -114,6 +126,8 @@ internal fun TodayScreen(
     meetings: MeetingsModel,
     zone: String,
     startAdding: Boolean,
+    startEditing: Boolean,
+    onEditingStarted: () -> Unit,
     onOpenTask: (Task) -> Unit,
     onOpenTarget: (ReminderTarget) -> Unit,
 ) {
@@ -134,12 +148,63 @@ internal fun TodayScreen(
         if (focusAddRequest > 0) focusById(if (adding) "today-new" else "today-add")
     }
 
+    // Edit mode (D98): the draft, or null while Today is shown. It edits the layout this window used when it opened (D-9,
+    // A25), also if the window then crosses 759/760 px.
+    val toasts = LocalToasts.current
+    val phone = rememberPhoneLayout()
+    var edit by remember { mutableStateOf<TodayLayoutEdit?>(null) }
+    var focusTarget by remember { mutableStateOf<FocusTarget?>(null) }
+    LaunchedEffect(focusTarget) { focusTarget?.let { focusById(it.id) } }
+    val openEdit = {
+        if (edit == null) {
+            edit = TodayLayoutEdit.start(workspace.prefs, if (phone) TodayLayoutKind.Phone else TodayLayoutKind.Desktop)
+            focusTarget = FocusTarget(EDIT_TITLE_ID)
+        }
+    }
+    val closeEdit = { save: Boolean ->
+        edit?.let { draft ->
+            edit = null
+            when {
+                save -> saveLayout(workspace, toasts, draft)
+                draft.done(workspace.prefs) != workspace.prefs -> toasts.show("Changes undone")
+            }
+            focusTarget = FocusTarget(EDIT_BUTTON_ID)
+        }
+    }
+    LaunchedEffect(startEditing) {
+        if (startEditing) {
+            openEdit()
+            onEditingStarted()
+        }
+    }
+    // Leaving Today while editing saves, like Done (section 4), quietly when nothing changed. A reload or a closed tab
+    // drops the draft. It reads the state itself, not a copy from the last composition: Cancel and then a page change
+    // before the next frame must not save the draft Cancel dropped.
+    DisposableEffect(Unit) {
+        onDispose { edit?.let { if (workspace.loaded) saveLayout(workspace, toasts, it, leaving = true) } }
+    }
+    if (edit != null) {
+        DisposableEffect(Unit) {
+            val stop = onEscape { closeEdit(false) }
+            onDispose { stop() }
+        }
+    }
+
     PageHeader(
         title = longDate(now.day),
         sub =
             (if (open > 0) "$open ${if (open == 1) "open task" else "open tasks"}" else "No open tasks") +
                 if (done > 0) ", $done done today" else "",
     ) {
+        // While editing, the bar takes this button's part.
+        if (edit == null) {
+            Button({
+                type(ButtonType.Button)
+                id(EDIT_BUTTON_ID)
+                classes("btn", "btn--line")
+                onClick { openEdit() }
+            }) { Text("Edit layout") }
+        }
         Button({
             type(ButtonType.Button)
             id("today-add")
@@ -162,17 +227,39 @@ internal fun TodayScreen(
     // D86: "Show past meetings" is for the Vertical card only; the timeline keeps the whole day.
     val pastMeetings = if (layout == MeetingsLayout.Vertical) workspace.prefs.todayPastMeetings else null
     val meetingsView = todayMeetingsView(meetings.state, now, zone, pastMeetings)
+    val draft = edit
+    // In edit mode the draft's hide choices say which cards Today would draw, for the "not shown" tags.
     val sections =
         TodaySections(
-            hidden = workspace.prefs.todayHiddenWhenEmpty,
+            hidden = draft?.hidden ?: workspace.prefs.todayHiddenWhenEmpty,
             hasTasks = tasks.isNotEmpty(),
             reminderRows = reminders.count { targetInfo(workspace, it.reminder.target) != null },
             reviewContent = reviewContent(gitHub.checked && gitHub.connected, reviews),
             meetingsShown = meetings.cardShown,
             meetingsContent = meetingsView.hasContent,
             meetingsLayout = layout,
-            topicsShown = workspace.prefs.todayTopicCategories.isNotEmpty(),
+            topicsShown = (draft?.categories ?: workspace.prefs.todayTopicCategories).isNotEmpty(),
         )
+    if (draft != null) {
+        TodayEditBar(
+            draft,
+            onReset = {
+                edit = draft.resetLayout()
+                val what = if (draft.kind == TodayLayoutKind.Phone) "Order matches the desktop" else "Layout back to default"
+                toasts.show("$what. Press Done to save.")
+                // Reset is disabled now: focus goes on to Done.
+                focusTarget = FocusTarget(EDIT_DONE_ID)
+            },
+            onCancel = { closeEdit(false) },
+            onDone = { closeEdit(true) },
+        )
+        TodayEditView(draft, sections) { change ->
+            edit = change.edit
+            toasts.show(change.announcement)
+            focusTarget = FocusTarget(change.focusId)
+        }
+        return
+    }
     val cards = LocalCards.current
     // D95: each card Today draws, where the desktop layout puts it. A place left with no card takes no space.
     val places = workspace.prefs.todayDesktopLayout.only(sections.drawn)
@@ -193,6 +280,10 @@ internal fun TodayScreen(
         }
     }
     if (sections.nothing) NothingForToday()
+    if (phone) {
+        PhoneColumn(workspace.prefs.todayPhoneOrder.filter { it in sections.drawn }, drawCard)
+        return
+    }
     // Top and Bottom run across the page, above and below the two columns. Each place is a zone (`tzone`), and each card
     // in it sizes its forms by its own width (D96, css/cards.css).
     WideZone(TodayZone.Top, places.top, drawCard)
@@ -218,6 +309,56 @@ internal fun TodayScreen(
         }
     }
     WideZone(TodayZone.Bottom, places.bottom, drawCard)
+}
+
+/** A control edit mode focuses; a new one each time, so the same id is focused again. */
+private class FocusTarget(
+    val id: String,
+)
+
+private const val EDIT_BUTTON_ID = "today-edit"
+
+/**
+ * Done, or [leaving] Today while editing: saves what changed in edit mode (D98), and says so. Leaving with nothing
+ * changed says nothing.
+ */
+private fun saveLayout(
+    workspace: WorkspaceModel,
+    toasts: ToastState,
+    draft: TodayLayoutEdit,
+    leaving: Boolean = false,
+) {
+    val next = draft.done(workspace.prefs)
+    when {
+        next != workspace.prefs -> {
+            workspace.setPrefs(next)
+            toasts.show("Layout saved")
+        }
+        !leaving -> toasts.show("No changes")
+    }
+}
+
+/**
+ * Calls [onCancel] on Esc while edit mode is open. Esc in a dialog (an open card), in the add form or during an IME
+ * composition belongs there. Returns a function that removes the listener.
+ */
+private fun onEscape(onCancel: () -> Unit): () -> Unit {
+    val listener: (Event) -> Unit = { event ->
+        val target = event.target as? Element
+        val ours =
+            event is KeyboardEvent &&
+                event.key == "Escape" &&
+                !event.isComposing &&
+                !event.defaultPrevented &&
+                document.querySelector("dialog[open]") == null &&
+                target?.closest("form") == null
+        if (ours) {
+            event.preventDefault()
+            onCancel()
+        }
+    }
+    document.addEventListener("keydown", listener)
+    return { document.removeEventListener("keydown", listener) }
 }
 
 /** Top or Bottom with its [cards], across the page; nothing when it has none (D96). */

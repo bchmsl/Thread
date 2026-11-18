@@ -98,6 +98,7 @@ import thread.web.presentation.shell.ViewsSheet
 import thread.web.presentation.shell.focusStatusLine
 import thread.web.presentation.tasks.InboxScreen
 import thread.web.presentation.tasks.ReminderBanners
+import thread.web.presentation.tasks.TODAY_EDIT_PARAM
 import thread.web.presentation.tasks.TodayScreen
 import thread.web.presentation.topics.HexSize
 import thread.web.presentation.topics.TopicHex
@@ -323,7 +324,18 @@ private fun Workspace(
                     place.head == "topic" -> TopicScreen(workspace, jira, gitHub, meetings, placeTopicId, cards)
                     view == View.Jira -> JiraScreen(jira, workspace, router, place)
                     view == View.Prs -> PrScreen(gitHub, workspace, router, place)
-                    view == View.Today -> TodayScreen(workspace, gitHub, meetings, zone, place.param("add") == "1", openTask, openTarget)
+                    view == View.Today ->
+                        TodayScreen(
+                            workspace,
+                            gitHub,
+                            meetings,
+                            zone,
+                            startAdding = place.param("add") == "1",
+                            startEditing = place.param(TODAY_EDIT_PARAM) == "1",
+                            onEditingStarted = { router.replace(router.place.with(TODAY_EDIT_PARAM, null)) },
+                            onOpenTask = openTask,
+                            onOpenTarget = openTarget,
+                        )
                     view == View.Inbox -> InboxScreen(workspace, router, capture, openTask, openNote)
                     view == View.Notes ->
                         NotesScreen(workspace, router, services.notes, signedIn.accountId, place.param(NOTE_PARAM), syncCenter)

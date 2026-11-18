@@ -57,6 +57,7 @@ internal class TodaySections(
     meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
     topicsShown: Boolean = true,
 ) {
+    private val meetingsSetUp = meetingsShown
     private val meetingsAny = meetingsShown && (TodayHideableSection.Meetings !in hidden || meetingsContent)
 
     /** The Meetings card leads the side column (Vertical). */
@@ -86,6 +87,33 @@ internal class TodaySections(
             if (review) add(TodayCard.ReviewRequested)
             if (topicsShown) add(TodayCard.Topics)
         }
+
+    /** Why Today does not draw [card] now, or null when it does (D98). Edit mode tags such a card. */
+    fun notShown(card: TodayCard): NotShown? =
+        when {
+            card in drawn -> null
+            card == TodayCard.Meetings && !meetingsSetUp -> NotShown.NotSetUp
+            card == TodayCard.Tasks -> NotShown.NoTasks
+            card == TodayCard.Topics -> NotShown.NoTopicsPicked
+            else -> NotShown.Empty
+        }
+}
+
+/** Why a card is not on Today now (D98), as edit mode's tag says it. */
+internal enum class NotShown(
+    val text: String,
+) {
+    /** "Hide when empty" is on and the card has nothing. */
+    Empty("Not shown now: empty"),
+
+    /** No meeting source yet (D77, D78). */
+    NotSetUp("Not shown: meetings not set up"),
+
+    /** No task to show in any group (D86, Q2). */
+    NoTasks("Shows when there are tasks"),
+
+    /** "Topics shown" picks no category (D89). */
+    NoTopicsPicked("Not shown: no Topics picked"),
 }
 
 /**

@@ -24,6 +24,7 @@ import thread.domain.workspace.todayHiddenWhenEmpty
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -232,6 +233,28 @@ class TodaySectionsTest {
         assertEquals(
             "Reviews, tasks, reminders and Topics",
             sideColumnLabel(listOf(TodayCard.ReviewRequested, TodayCard.Tasks, TodayCard.Reminders, TodayCard.Topics)),
+        )
+    }
+
+    @Test
+    fun editModeSaysWhyACardIsNotShown() {
+        val all = TodayHideableSection.entries.toSet()
+        val empty = TodaySections(all, false, 0, ReviewContent.Nothing, meetingsShown = true, meetingsContent = false, topicsShown = false)
+        assertEquals(NotShown.Empty, empty.notShown(TodayCard.Meetings))
+        assertEquals(NotShown.Empty, empty.notShown(TodayCard.Reminders))
+        assertEquals(NotShown.Empty, empty.notShown(TodayCard.ReviewRequested))
+        assertEquals(NotShown.NoTasks, empty.notShown(TodayCard.Tasks))
+        assertEquals(NotShown.NoTopicsPicked, empty.notShown(TodayCard.Topics))
+
+        val notSetUp = TodaySections(emptySet(), true, 0, ReviewContent.Nothing, meetingsShown = false, meetingsContent = false)
+        assertEquals(NotShown.NotSetUp, notSetUp.notShown(TodayCard.Meetings), "Not set up hides it whatever Hide when empty says")
+        (TodayCard.entries - TodayCard.Meetings).forEach { assertNull(notSetUp.notShown(it), "$it is drawn") }
+
+        val horizontal = sections(all, meetingsContent = true, layout = MeetingsLayout.Horizontal)
+        assertNull(horizontal.notShown(TodayCard.Meetings), "The timeline is the Meetings card")
+        assertEquals(
+            listOf("Not shown now: empty", "Not shown: meetings not set up", "Shows when there are tasks", "Not shown: no Topics picked"),
+            NotShown.entries.map { it.text },
         )
     }
 }

@@ -4,7 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import org.jetbrains.compose.web.attributes.ButtonType
+import org.jetbrains.compose.web.attributes.disabled
 import org.jetbrains.compose.web.attributes.type
+import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.Button
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Label
@@ -26,12 +28,17 @@ import thread.domain.workspace.TopicsView
 import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.todayTopicsLayout
 import thread.web.presentation.CheckBox
+import thread.web.presentation.LocalToasts
+import thread.web.presentation.Place
 import thread.web.presentation.SelectBox
 import thread.web.presentation.WorkspaceModel
 import thread.web.presentation.external.JiraModel
 import thread.web.presentation.shell.CaptureState
 import thread.web.presentation.shell.CaptureType
+import thread.web.presentation.tasks.TODAY_EDIT_PARAM
 import thread.web.presentation.tasks.deviceTodayTopicsView
+import thread.web.presentation.tasks.focusNow
+import thread.web.presentation.tasks.rememberPhoneLayout
 import thread.web.presentation.topics.categoryLabel
 
 /*
@@ -40,7 +47,8 @@ import thread.web.presentation.topics.categoryLabel
 
 /**
  * Settings > Today, in the owner's order (D84, D86, D89, D90, D97): Topics open as, Show completed tasks, Hide empty
- * sections, Meetings layout, Narrow meeting titles, Group tasks by, Show past meetings, Topics shown.
+ * sections, Meetings layout, Narrow meeting titles, Group tasks by, Show past meetings, Topics shown; then Today layout
+ * (D98).
  */
 @Composable
 internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
@@ -94,8 +102,76 @@ internal fun TodayPrefsBlock(workspace: WorkspaceModel) {
             ) { picked -> workspace.setPrefs(workspace.prefs.copy(todayPastMeetings = picked.toIntOrNull())) }
         }
         TopicsShownPref(workspace)
+        TodayLayoutPref(workspace)
     }
 }
+
+/**
+ * Today layout (D98): "Edit layout" opens Today in edit mode, and the reset button resets the layout this window uses, as
+ * edit mode's does: "Reset to default" at 760 px and wider, "Match desktop" at 759 px and narrower (D-9). Like every row
+ * here it saves at once, with Undo. It is disabled while that layout is not saved.
+ */
+@Composable
+private fun TodayLayoutPref(workspace: WorkspaceModel) {
+    val toasts = LocalToasts.current
+    val phone = rememberPhoneLayout()
+    val prefs = workspace.prefs
+    val saved = if (phone) prefs.todayPhoneLayout != null else prefs.todayLayout != null
+    Div({ classes("pref", "pref--choice") }) {
+        Div {
+            P({
+                classes("pref__label")
+                id("tl-l")
+            }) { Text("Today layout") }
+            P({
+                classes("pref__hint")
+                id("tl-hint")
+            }) {
+                Text(
+                    when {
+                        !phone -> "Where each card sits on Today in a wide window. Phones and narrow windows have their own order."
+                        saved -> "The order of Today's cards on a phone or narrow window, apart from the wide layout."
+                        else -> "The order of Today's cards on a phone or narrow window. It follows the wide layout until you change it."
+                    },
+                )
+            }
+        }
+        Div({
+            classes("pref__acts")
+            attr("role", "group")
+            attr("aria-labelledby", "tl-l")
+            attr("aria-describedby", "tl-hint")
+        }) {
+            A(Place.of("today", params = mapOf(TODAY_EDIT_PARAM to "1")).hash, {
+                classes("btn", "btn--line")
+                id(LAYOUT_EDIT_ID)
+            }) { Text("Edit layout") }
+            Button({
+                type(ButtonType.Button)
+                classes("btn", "btn--text")
+                id("tl-reset")
+                if (!saved) disabled()
+                onClick {
+                    if (phone) {
+                        val before = workspace.prefs.todayPhoneLayout
+                        workspace.setPrefs(workspace.prefs.copy(todayPhoneLayout = null))
+                        toasts.show("Order matches the desktop", undo = {
+                            workspace.setPrefs(workspace.prefs.copy(todayPhoneLayout = before))
+                        })
+                    } else {
+                        val before = workspace.prefs.todayLayout
+                        workspace.setPrefs(workspace.prefs.copy(todayLayout = null))
+                        toasts.show("Layout back to default", undo = { workspace.setPrefs(workspace.prefs.copy(todayLayout = before)) })
+                    }
+                    // The button is disabled now.
+                    focusNow(LAYOUT_EDIT_ID)
+                }
+            }) { Text(if (phone) "Match desktop" else "Reset to default") }
+        }
+    }
+}
+
+private const val LAYOUT_EDIT_ID = "tl-edit"
 
 /**
  * Topics shown (owner change #7, D89): a checkbox per status category. Today's Topics card shows the Topics whose status

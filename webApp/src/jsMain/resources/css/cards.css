@@ -544,6 +544,68 @@
   .atopics > .scard__head > .scard__acts { margin-left: auto; }
 }
 .atopics .lane { background: var(--bg-app); --under: var(--bg-app); }
+/* D98: at 759 px and narrower Today is one column in the phone order (D-9). A plain block, so the cards' margins meet as
+   the stacked places' did in the default layout: 20 px between cards, 28 under the timeline, 32 above Topics and 20
+   under it. */
+.tzone.tzone--phone > * { margin-top: 0; margin-bottom: 20px; }
+.tzone.tzone--phone > :last-child { margin-bottom: 0; }
+.tzone.tzone--phone > .scard--tl { margin-bottom: 28px; }
+.tzone.tzone--phone > .scard.atopics { margin-top: 32px; }
+.tzone.tzone--phone > .scard.atopics:last-child { margin-bottom: 20px; }
+.tzone--phone > .today__tasks > .scard:last-child { margin-bottom: 0; }
+
+/* ---------- Today edit mode (D98) ---------- */
+/* The bar stays in view while the places scroll under it. */
+.ledit-bar {
+  position: sticky; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin-bottom: 24px; padding: 12px 12px 12px 16px;
+  background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: 14px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+.ledit-bar__text { flex: 1 1 320px; min-width: 0; }
+.ledit-bar__title { margin: 0; font: 600 var(--fs-15)/1.3 var(--font-text); }
+.ledit-bar__title:focus { outline: none; }
+.ledit-bar__hint { margin: 2px 0 0; font-size: var(--fs-13); line-height: 1.35; color: var(--text-3); }
+.ledit-bar__acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+/* The places at their real widths: Top and Bottom across, Left and Right as Today's columns. */
+.ledit { display: flex; flex-direction: column; gap: 20px; }
+.ledit__cols { row-gap: 20px; }
+.ledit-zone { min-width: 0; padding: 10px 12px 12px; border: 1.5px dashed var(--border-strong); border-radius: 14px; }
+.ledit-zone__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0 2px 10px; }
+.ledit-zone__name { margin: 0; font: 600 var(--fs-14)/1.3 var(--font-text); color: var(--text); }
+.ledit-zone__where { font-size: var(--fs-12); color: var(--text-3); }
+.ledit-zone__empty { margin: 0; padding: 18px 0; text-align: center; font-size: var(--fs-13); color: var(--text-3); }
+.ledit-zone__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+/* A compact card: its kind's edge and mark, its name, why it is not shown now, and its controls. */
+.ledit-card {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 8px 8px 6px;
+  background: var(--bg-surface); border: 1px solid var(--border); border-left: 3px solid var(--k); border-radius: 12px;
+}
+.ledit-card__main { display: flex; flex: 1 1 200px; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.ledit-card__grip { display: inline-flex; color: var(--text-3); opacity: 0.7; }
+.ledit-card__name { font: 600 var(--fs-15)/1.3 var(--font-text); }
+.ledit-card__tag {
+  padding: 1px 8px; border-radius: 999px; font-size: var(--fs-12); line-height: 1.5; color: var(--text-2);
+  background: var(--ink-850); border: 1px solid var(--border);
+}
+.ledit-card.is-off { border-style: dashed; border-left-style: solid; }
+.ledit-card.is-off .ledit-card__name { color: var(--text-2); }
+.ledit-card__ctrls { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.ledit-card__move { width: auto; min-width: 104px; margin-right: 4px; }
+/* The card's hide choice from Settings > Today, on a row of its own under the name. */
+.ledit-card__hide {
+  display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 2px 0 30px;
+  border-top: 1px solid var(--border); font-size: var(--fs-13); color: var(--text-2);
+}
+.ledit-card__hide > label { cursor: pointer; }
+.ledit-card__hide > .switch { margin-right: -8px; }
+.ledit-card__cats-label { color: var(--text-3); }
+@media (max-width: 759px) {
+  .ledit-bar { top: 4px; padding: 10px 10px 10px 12px; }
+  .ledit-bar__acts { width: 100%; }
+  .ledit-bar__acts > .btn--primary { margin-left: auto; }
+  .ledit-card__hide { padding-left: 8px; }
+}
 .csub + .csub { margin-top: 14px; }
 .csub__toggle {
   display: flex; align-items: center; gap: 4px 10px; width: 100%; min-height: 40px; padding: 4px 4px 4px 0;

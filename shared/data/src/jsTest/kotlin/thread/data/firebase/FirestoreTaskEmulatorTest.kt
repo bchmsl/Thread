@@ -24,11 +24,15 @@ import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TodayLayout
+import thread.domain.workspace.TodayLayoutEdit
+import thread.domain.workspace.TodayLayoutKind
+import thread.domain.workspace.TodayZone
 import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.createReminderWrite
 import thread.domain.workspace.createTaskWrite
+import thread.domain.workspace.defaultTodayLayout
 import thread.domain.workspace.discardTask
 import thread.domain.workspace.dismissReminder
 import thread.domain.workspace.editTask
@@ -392,6 +396,48 @@ class FirestoreTaskEmulatorTest {
                 val beforeReset = storeA.observe().first { !it.pendingWrites && !it.prefs.inboxShowNotes }
                 storeA.write(listOfNotNull(savePrefs(beforeReset, reset)))
                 assertEquals(reset, storeB.observe().first { it.prefs.todayLayout == null }.prefs)
+                assertTrue(storeA.refused.value.isEmpty())
+                assertTrue(storeB.refused.value.isEmpty())
+            } finally {
+                deviceA.backend.close()
+                deviceB.backend.close()
+            }
+        }
+
+    @Test
+    fun editModeDoneKeepsAHideChoiceSwitchedOnAnotherDeviceMeanwhile() =
+        emulatorTest {
+            val subject = syntheticSubject()
+            val deviceA = EmulatedDevice.signIn(subject)
+            val deviceB = EmulatedDevice.signIn(subject)
+            val storeA = FirestoreWorkspaceStore(deviceA.backend, deviceA.accountId)
+            val storeB = FirestoreWorkspaceStore(deviceB.backend, deviceB.accountId)
+            try {
+                storeA.write(listOfNotNull(savePrefs(null, WorkspacePrefs(todayHideEmpty = setOf(TodayHideableSection.Reminders)))))
+                val startA = storeA.observe().first { it.prefsStored && !it.pendingWrites }
+
+                // Device A opens Today's edit mode, moves Meetings to Top and hides Meetings when empty.
+                val edit =
+                    TodayLayoutEdit
+                        .start(startA.prefs, TodayLayoutKind.Desktop)
+                        .movedTo(TodayCard.Meetings, TodayZone.Top)
+                        .withHidden(TodayHideableSection.Meetings, hide = true)
+
+                // Meanwhile Settings on device B hides Review requested when empty.
+                val startB = storeB.observe().first { it.prefsStored }
+                val fromB = startB.prefs.copy(todayHideEmpty = setOf(TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested))
+                storeB.write(listOfNotNull(savePrefs(startB, fromB)))
+                val latestA = storeA.observe().first { TodayHideableSection.ReviewRequested in it.prefs.todayHiddenWhenEmpty }
+
+                // Done on device A: the layout and the one switch it changed, applied to the latest set.
+                val done = edit.done(latestA.prefs)
+                storeA.write(listOfNotNull(savePrefs(latestA, done)))
+
+                val onB = storeB.observe().first { it.prefs.todayLayout != null && !it.pendingWrites }.prefs
+                assertEquals(TodayHideableSection.entries.toSet(), onB.todayHideEmpty, "Both switches stay")
+                assertEquals(defaultTodayLayout(MeetingsLayout.Horizontal), onB.todayLayout)
+                assertEquals(null, onB.todayPhoneLayout, "The phone order is not touched")
+                assertEquals(fromB.copy(todayLayout = onB.todayLayout, todayHideEmpty = onB.todayHideEmpty), onB, "Nothing else changes")
                 assertTrue(storeA.refused.value.isEmpty())
                 assertTrue(storeB.refused.value.isEmpty())
             } finally {

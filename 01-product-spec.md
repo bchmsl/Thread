@@ -114,6 +114,12 @@ Below the Tasks, Today shows the Topics whose status is in a category checked un
 
 A Task added from Today without a Topic is planned for today and also waits in Inbox until it is filed (D38).
 
+Layout and edit mode (owner change #29: D95, D96, D98; drag comes with D99). Today's cards are Meetings, Tasks (every task group as one card), Reminders, Review requested and Topics. Each sits in one of four places: Top and Bottom run across the page, Left is the main column and Right the side column. Not saved, the layout is the one described above. Each card takes a form that fits its place (D96).
+- "Edit layout" in Today's header, or in Settings > Today "Today layout", opens edit mode. Each card shows as a compact card in its place, with "Move to" (a place), Move up and Move down inside the place, and the hide choice Settings > Today has for it: "Hide when empty" for Meetings, Reminders and Review requested, "Topics shown" for Topics, none for Tasks. It is another place for the same choices, not new ones.
+- A card Today does not draw now still shows in edit mode, with why: "Not shown now: empty", "Not shown: no Topics picked", "Shows when there are tasks" or "Not shown: meetings not set up".
+- Nothing is saved until Done, which saves only what changed in edit mode. Cancel or Esc drops the changes. Leaving Today while editing saves, like Done; a reload drops the changes. "Reset to default" puts the layout back to the one above (saved on Done).
+- Phones and windows 759 px wide or narrower have their own order, one column (D-9). It follows the wide layout until it is changed there. Edit mode opened in such a window edits that order (First, Last, up and down), and its reset is "Match desktop". The window's width when edit mode opens decides which one it edits.
+
 ## Inbox
 
 Quick-captured Tasks and Notes without a selected Topic arrive here.
