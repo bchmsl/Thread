@@ -32,6 +32,31 @@ fun TodayLayout.movedTo(
     return without.with(zone, without[zone] + card)
 }
 
+/**
+ * [card] dropped in [zone] at [index] (D99, drag). [index] counts the place's cards without [card], and is clamped to
+ * them, so a drop past the last card goes to the end. A card not in this layout stays out.
+ */
+fun TodayLayout.movedTo(
+    card: TodayCard,
+    zone: TodayZone,
+    index: Int,
+): TodayLayout {
+    val from = zoneOf(card) ?: return this
+    val without = with(from, this[from] - card)
+    return without.with(zone, without[zone].insertedAt(card, index))
+}
+
+/** [card] dropped at [index] in this order (D99, drag), counted without [card] and clamped to the others. */
+fun List<TodayCard>.movedTo(
+    card: TodayCard,
+    index: Int,
+): List<TodayCard> = if (card in this) (this - card).insertedAt(card, index) else this
+
+private fun List<TodayCard>.insertedAt(
+    card: TodayCard,
+    index: Int,
+): List<TodayCard> = toMutableList().apply { add(index.coerceIn(0, size), card) }
+
 /** [card] one up inside its place. At the place's first position it stays (Move up is disabled there). */
 fun TodayLayout.movedUp(card: TodayCard): TodayLayout {
     val zone = zoneOf(card) ?: return this
@@ -120,6 +145,19 @@ data class TodayLayoutEdit(
 
     fun movedDown(card: TodayCard): TodayLayoutEdit =
         if (kind == TodayLayoutKind.Desktop) withLayout(layout.movedDown(card)) else withOrder(order.movedDown(card))
+
+    /** [card] dragged to [zone] at [index] on the desktop layout (D99). A drop where it already is changes nothing. */
+    fun droppedAt(
+        card: TodayCard,
+        zone: TodayZone,
+        index: Int,
+    ): TodayLayoutEdit = withLayout(layout.movedTo(card, zone, index))
+
+    /** [card] dragged to [index] in the phone order (D99). A drop where it already is changes nothing. */
+    fun droppedAt(
+        card: TodayCard,
+        index: Int,
+    ): TodayLayoutEdit = withOrder(order.movedTo(card, index))
 
     fun movedFirst(card: TodayCard): TodayLayoutEdit = withOrder(order.movedFirst(card))
 

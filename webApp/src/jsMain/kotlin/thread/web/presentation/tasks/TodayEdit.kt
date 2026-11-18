@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import org.jetbrains.compose.web.attributes.ButtonType
 import org.jetbrains.compose.web.attributes.disabled
@@ -40,19 +41,27 @@ import thread.web.presentation.topics.categoryLabel
 
 // Today's edit mode (#29 L3, D98): the bar, the places with their compact cards, and the phone order's column. The
 // draft and what Done saves are the domain's [TodayLayoutEdit]; this file draws it and says what each change did.
+// Drag (L4, D99) is in TodayDrag.kt.
 
 /** Windows this wide or narrower show Today in one column, in the phone order (D-9). */
 internal const val PHONE_LAYOUT_QUERY = "(max-width: 759px)"
 
+/** The window's main pointer is a finger: the hint says press and hold (D99). */
+private const val TOUCH_POINTER_QUERY = "(hover: none) and (pointer: coarse)"
+
 /** Whether this window uses the phone order now (D-9). It follows the window as it is resized. */
 @Composable
-internal fun rememberPhoneLayout(): Boolean {
-    var phone by remember { mutableStateOf(mediaMatches(PHONE_LAYOUT_QUERY)) }
-    DisposableEffect(Unit) {
-        val stop = observeMedia(PHONE_LAYOUT_QUERY) { phone = it }
+internal fun rememberPhoneLayout(): Boolean = rememberMedia(PHONE_LAYOUT_QUERY)
+
+/** Whether the CSS media [query] matches, kept up to date. */
+@Composable
+private fun rememberMedia(query: String): Boolean {
+    var matches by remember(query) { mutableStateOf(mediaMatches(query)) }
+    DisposableEffect(query) {
+        val stop = observeMedia(query) { matches = it }
         onDispose { stop() }
     }
-    return phone
+    return matches
 }
 
 /** A change made in edit mode: the new draft, the control to keep focus on, and what to announce. */
@@ -74,6 +83,7 @@ internal fun TodayEditBar(
     onDone: () -> Unit,
 ) {
     val phone = edit.kind == TodayLayoutKind.Phone
+    val touch = rememberMedia(TOUCH_POINTER_QUERY)
     Div({
         classes("ledit-bar")
         attr("role", "region")
@@ -85,7 +95,7 @@ internal fun TodayEditBar(
                 id(EDIT_TITLE_ID)
                 attr("tabindex", "-1")
             }) { Text(if (phone) "Editing the narrow-window order" else "Editing the layout") }
-            P({ classes("ledit-bar__hint") }) { Text(editHint(edit)) }
+            P({ classes("ledit-bar__hint") }) { Text(editHint(edit, touch)) }
         }
         Div({ classes("ledit-bar__acts") }) {
             Button({
@@ -112,19 +122,33 @@ internal fun TodayEditBar(
     }
 }
 
-private fun editHint(edit: TodayLayoutEdit): String =
-    when {
-        edit.kind == TodayLayoutKind.Desktop ->
-            "Move each card to a place, and up or down in it. Wide windows use this layout; narrow windows and phones keep their " +
-                "own order. Done saves."
-        edit.start.saved -> "Phones and narrow windows have their own order, apart from the wide layout. Done saves."
-        else -> "Phones and narrow windows follow the wide layout until you change the order here. Done saves."
-    }
+/** What the bar says: how to move a card ([touch]: press and hold), and which windows use the layout being edited. */
+private fun editHint(
+    edit: TodayLayoutEdit,
+    touch: Boolean,
+): String {
+    val desktop = edit.kind == TodayLayoutKind.Desktop
+    val move =
+        when {
+            touch && desktop -> "Press and hold a card's name, then drag it to any place, or use its Move menu and arrows."
+            touch -> "Press and hold a card's name, then drag it, or use its Move menu and arrows."
+            desktop -> "Drag a card by its name to any place, or use its Move menu and arrows."
+            else -> "Drag a card by its name, or use its Move menu and arrows."
+        }
+    val which =
+        when {
+            desktop -> "Wide windows use this layout; narrow windows and phones keep their own order. Done saves."
+            edit.start.saved -> "Phones and narrow windows have their own order, apart from the wide layout. Done saves."
+            else -> "Phones and narrow windows follow the wide layout until you change the order here. Done saves."
+        }
+    return "$move $which"
+}
 
 /**
  * The layout being edited: the four places at their real widths, each named and outlined even when empty (desktop), or
  * the one column in the phone order. Every card shows, also one Today does not draw now, tagged with why ([sections]
- * follows the draft's hide choices).
+ * follows the draft's hide choices). Cards can be dragged to any place (D99, [installTodayDrag]); a drop is one draft
+ * change, announced like the Move select's.
  */
 @Composable
 internal fun TodayEditView(
@@ -132,41 +156,57 @@ internal fun TodayEditView(
     sections: TodaySections,
     onChange: (TodayEditChange) -> Unit,
 ) {
+    var drag by remember { mutableStateOf<TodayDrag?>(null) }
+    val latestEdit by rememberUpdatedState(edit)
+    val latestOnChange by rememberUpdatedState(onChange)
+    DisposableEffect(Unit) {
+        val stop =
+            installTodayDrag(onDrag = { drag = it }) { card, target ->
+                val next = latestEdit.dropped(card, target)
+                if (next != latestEdit) latestOnChange(TodayEditChange(next, moveId(card), dropAnnouncement(next, card)))
+            }
+        onDispose { stop() }
+    }
+    val place = EditPlaceScope(edit, sections, drag, onChange)
     if (edit.kind == TodayLayoutKind.Phone) {
-        EditPlace("phone", "Order", "One column, top to bottom", edit.order, edit, sections, onChange)
+        place.EditPlace(PHONE_PLACE, "Order", "One column, top to bottom", edit.order)
         return
     }
     Div({ classes("ledit") }) {
-        EditZone(TodayZone.Top, edit, sections, onChange)
+        place.EditZone(TodayZone.Top)
         // The columns sit as Today's do: Right 340 px wide from 1100 px, under Left below that.
         Div({ classes("today", "ledit__cols") }) {
-            EditZone(TodayZone.Left, edit, sections, onChange)
-            EditZone(TodayZone.Right, edit, sections, onChange)
+            place.EditZone(TodayZone.Left)
+            place.EditZone(TodayZone.Right)
         }
-        EditZone(TodayZone.Bottom, edit, sections, onChange)
+        place.EditZone(TodayZone.Bottom)
     }
 }
 
-@Composable
-private fun EditZone(
-    zone: TodayZone,
-    edit: TodayLayoutEdit,
-    sections: TodaySections,
-    onChange: (TodayEditChange) -> Unit,
-) = EditPlace(zone.id, zoneName(zone), zoneWhere(zone), edit.layout[zone], edit, sections, onChange)
+/** What every place in edit mode draws from: the draft, why cards are not shown, the drag in progress. */
+private class EditPlaceScope(
+    val edit: TodayLayoutEdit,
+    val sections: TodaySections,
+    val drag: TodayDrag?,
+    val onChange: (TodayEditChange) -> Unit,
+)
 
 @Composable
-private fun EditPlace(
+private fun EditPlaceScope.EditZone(zone: TodayZone) = EditPlace(zone.id, zoneName(zone), zoneWhere(zone), edit.layout[zone])
+
+/** One place: named and outlined, lit while a dragged card is over it, with the insert line where the card would land. */
+@Composable
+private fun EditPlaceScope.EditPlace(
     id: String,
     name: String,
     where: String,
     cards: List<TodayCard>,
-    edit: TodayLayoutEdit,
-    sections: TodaySections,
-    onChange: (TodayEditChange) -> Unit,
 ) {
+    val target = drag?.target?.takeIf { it.place == id }
+    val line = if (drag != null && target != null) insertLine(cards, drag.card, target.index) else null
     Section({
         classes("ledit-zone", "ledit-zone--$id")
+        if (target != null) classes("is-over")
         attr("data-zone", id)
         attr("aria-labelledby", "tez-$id")
     }) {
@@ -178,10 +218,16 @@ private fun EditPlace(
             Span({ classes("ledit-zone__where") }) { Text(where) }
         }
         if (cards.isEmpty()) {
-            P({ classes("ledit-zone__empty") }) { Text("No cards here") }
+            P({ classes("ledit-zone__empty") }) { Text("Drop a card here") }
         } else {
             Ul({ classes("ledit-zone__list") }) {
-                cards.forEach { card -> key(card) { Li { CompactCard(card, edit, sections, onChange) } } }
+                cards.forEach { card ->
+                    key(card) {
+                        Li({
+                            if (line?.card == card) classes(if (line.after) "is-drop-after" else "is-drop-before")
+                        }) { CompactCard(card, edit, sections, dragging = drag?.card == card, onChange) }
+                    }
+                }
             }
         }
     }
@@ -189,13 +235,15 @@ private fun EditPlace(
 
 /**
  * One card in edit mode (D-5): grip, mark and name, why it is not shown now, where it goes, and its hide choice from
- * Settings > Today, if it has one (D-6). The grip is for L4's drag; the select and the buttons carry the moves.
+ * Settings > Today, if it has one (D-6). The head (grip, mark and name) is the drag handle (D99), dimmed while
+ * [dragging]; the select and the buttons carry the same moves for the keyboard.
  */
 @Composable
 private fun CompactCard(
     card: TodayCard,
     edit: TodayLayoutEdit,
     sections: TodaySections,
+    dragging: Boolean,
     onChange: (TodayEditChange) -> Unit,
 ) {
     val name = todayCardName(card)
@@ -205,6 +253,7 @@ private fun CompactCard(
     Div({
         classes("ledit-card")
         if (reason != null) classes("is-off")
+        if (dragging) classes("is-dragging")
         cardKind(todayCardKind(card))
         attr("data-card", card.id)
     }) {

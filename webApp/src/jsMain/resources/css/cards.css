@@ -600,6 +600,28 @@
 .ledit-card__hide > label { cursor: pointer; }
 .ledit-card__hide > .switch { margin-right: -8px; }
 .ledit-card__cats-label { color: var(--text-3); }
+/* Drag (D99): the card's head is the handle. The dragged card dims as on the Topics board, a copy of its head follows
+   the pointer, the place under it lights up as a board lane does, and a line shows where the card will land. */
+.ledit-card__main { cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ledit-card.is-dragging { opacity: 0.45; }
+.ledit-zone.is-over { border-color: var(--fog-300); background: var(--ink-800); }
+.ledit-zone__list > li { position: relative; }
+.ledit-zone__list > li.is-drop-before::before,
+.ledit-zone__list > li.is-drop-after::after {
+  content: ""; position: absolute; left: 4px; right: 4px; height: 3px; border-radius: 2px;
+  background: var(--action); pointer-events: none;
+}
+/* In the middle of the 8 px gap between cards. */
+.ledit-zone__list > li.is-drop-before::before { top: -5.5px; }
+.ledit-zone__list > li.is-drop-after::after { bottom: -5.5px; }
+.ledit-ghost { position: fixed; left: 0; top: 0; z-index: 65; pointer-events: none; }
+.ledit-ghost__card {
+  width: max-content; max-width: min(420px, calc(100vw - 32px));
+  background: var(--bg-raised); box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+}
+.ledit-ghost__card > .ledit-card__main { flex: 0 1 auto; }
+:root.ledit-dragging, :root.ledit-dragging * { cursor: grabbing; }
+:root.ledit-dragging { -webkit-user-select: none; user-select: none; }
 @media (max-width: 759px) {
   .ledit-bar { top: 4px; padding: 10px 10px 10px 12px; }
   .ledit-bar__acts { width: 100%; }

@@ -13,7 +13,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** #29 L3 (D98): Today's edit mode moves and what Done saves. */
+/** #29 L3 (D98) and L4 (D99): Today's edit mode moves, drops and what Done saves. */
 class TodayLayoutEditTest {
     private val vertical = defaultTodayLayout(MeetingsLayout.Vertical)
 
@@ -194,5 +194,77 @@ class TodayLayoutEditTest {
         assertNull(saved.todayLayout)
         assertEquals(setOf(TodayHideableSection.Meetings), saved.todayHideEmpty)
         assertEquals(setOf(StatusCategory.Planned, StatusCategory.Active, StatusCategory.Paused), saved.todayTopicCategories)
+    }
+
+    @Test
+    fun aCardDroppedInAnotherPlaceGoesWhereItIsDropped() {
+        assertEquals(listOf(Meetings, Topics, Reminders, ReviewRequested), vertical.movedTo(Topics, TodayZone.Right, 1).right)
+        assertEquals(listOf(Topics, Meetings, Reminders, ReviewRequested), vertical.movedTo(Topics, TodayZone.Right, 0).right)
+        assertEquals(emptyList(), vertical.movedTo(Topics, TodayZone.Right, 1).bottom, "It leaves its place")
+        val atEnd = vertical.movedTo(Topics, TodayZone.Right)
+        assertEquals(atEnd, vertical.movedTo(Topics, TodayZone.Right, 3), "After the last card: the end")
+        assertEquals(atEnd, vertical.movedTo(Topics, TodayZone.Right, 9), "Past the end is clamped")
+        assertEquals(listOf(Topics, Meetings, Reminders, ReviewRequested), vertical.movedTo(Topics, TodayZone.Right, -1).right)
+        assertEquals(TodayLayout(), TodayLayout().movedTo(Meetings, TodayZone.Top, 0), "A card not in the layout is not added")
+    }
+
+    @Test
+    fun aDropInsideItsPlaceReordersIt() {
+        // The index counts the place's cards without the dragged one: Right without Meetings is Reminders, Review requested.
+        assertEquals(listOf(Reminders, ReviewRequested, Meetings), vertical.movedTo(Meetings, TodayZone.Right, 2).right)
+        assertEquals(listOf(Reminders, Meetings, ReviewRequested), vertical.movedTo(Meetings, TodayZone.Right, 1).right)
+        assertEquals(listOf(ReviewRequested, Meetings, Reminders), vertical.movedTo(ReviewRequested, TodayZone.Right, 0).right)
+        assertEquals(vertical, vertical.movedTo(Reminders, TodayZone.Right, 1), "Dropped where it is")
+    }
+
+    @Test
+    fun aCardDroppedInAnEmptyPlaceIsItsOnlyCard() {
+        val moved = vertical.movedTo(Tasks, TodayZone.Top, 0)
+
+        assertEquals(listOf(Tasks), moved.top)
+        assertEquals(emptyList(), moved.left, "Left is empty now")
+        assertEquals(listOf(Tasks), vertical.movedTo(Tasks, TodayZone.Top, 4).top)
+    }
+
+    @Test
+    fun aDropWhereTheCardIsChangesNothing() {
+        val edit = TodayLayoutEdit.start(WorkspacePrefs(), TodayLayoutKind.Desktop)
+        assertSame(edit, edit.droppedAt(Reminders, TodayZone.Right, 1))
+        assertSame(edit, edit.droppedAt(Tasks, TodayZone.Left, 0))
+        assertFalse(edit.droppedAt(Tasks, TodayZone.Left, 0).canReset)
+
+        val phone = TodayLayoutEdit.start(WorkspacePrefs(), TodayLayoutKind.Phone)
+        assertSame(phone, phone.droppedAt(Meetings, 1))
+    }
+
+    @Test
+    fun thePhoneOrderTakesADropAtAnIndex() {
+        val order = listOf(Tasks, Meetings, Reminders, ReviewRequested, Topics)
+
+        assertEquals(listOf(Tasks, Reminders, ReviewRequested, Meetings, Topics), order.movedTo(Meetings, 3))
+        assertEquals(listOf(Topics, Tasks, Meetings, Reminders, ReviewRequested), order.movedTo(Topics, 0))
+        assertEquals(order.movedLast(Tasks), order.movedTo(Tasks, 4))
+        assertEquals(order.movedLast(Tasks), order.movedTo(Tasks, 9))
+        assertEquals(order, order.movedTo(Reminders, 2))
+        assertEquals(listOf(Tasks), listOf(Tasks).movedTo(Topics, 0), "A card not in the order is not added")
+    }
+
+    @Test
+    fun doneAfterADragSavesLikeAMove() {
+        val prefs = WorkspacePrefs()
+        val desktop = TodayLayoutEdit.start(prefs, TodayLayoutKind.Desktop)
+
+        assertEquals(desktop.movedTo(Meetings, TodayZone.Top).done(prefs), desktop.droppedAt(Meetings, TodayZone.Top, 0).done(prefs))
+        assertEquals(
+            vertical.movedTo(Topics, TodayZone.Right, 0),
+            desktop.droppedAt(Topics, TodayZone.Right, 0).done(prefs).todayLayout,
+        )
+        val saved = prefs.copy(todayLayout = TodayLayout(top = TodayCard.entries))
+        val reset = TodayLayoutEdit.start(saved, TodayLayoutKind.Desktop).resetLayout()
+        assertTrue(reset.droppedAt(Tasks, TodayZone.Bottom, 1).canReset, "A drop after Reset is a move again")
+
+        val phone = TodayLayoutEdit.start(prefs, TodayLayoutKind.Phone).droppedAt(Topics, 1).done(prefs)
+        assertEquals(listOf(Tasks, Topics, Meetings, Reminders, ReviewRequested), phone.todayPhoneLayout)
+        assertNull(phone.todayLayout, "A phone drop leaves the desktop")
     }
 }
