@@ -36,6 +36,20 @@ body {
 /* The page always keeps room for its scrollbar (D76), so neither a page growing past the window nor the page lock
    under a dialog (Dialogs, below) shifts it sideways. Overlay scrollbars, as on touch screens, take no room. */
 html { scrollbar-gutter: stable; }
+/* Safari computes that gutter but keeps no room on a page shorter than the window or under the page lock, so the page
+   moved by half a scrollbar there, and the bars fixed to the window's right edge grew by a scrollbar (D94). Where the
+   probe finds this (ScrollbarGutter.kt marks html.no-gutter), the page's scrollbar always shows, and under the lock the
+   page and those bars keep the scrollbar's width free instead. */
+@media (hover: hover) and (pointer: fine) {
+  html.no-gutter { overflow-y: scroll; }
+  html.no-gutter:has(dialog:modal) { padding-right: var(--scroll-size); }
+  html.no-gutter:has(dialog:modal) :is(.line, .selbar) { right: var(--scroll-size); }
+}
+.gutter-probe {
+  position: absolute; top: 0; left: -200px; width: 100px; height: 40px; overflow-y: auto; scrollbar-gutter: stable;
+  visibility: hidden;
+}
+.gutter-probe.is-scroll { overflow-y: scroll; scrollbar-gutter: auto; }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3, h4, p { margin: 0; }

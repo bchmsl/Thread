@@ -42,6 +42,7 @@ import thread.domain.workspace.ConversionBackup
 import thread.web.platform.WallClock
 import thread.web.platform.installZoomGuard
 import thread.web.platform.isOnline
+import thread.web.platform.markMissingScrollbarGutter
 import thread.web.platform.nowMillis
 import thread.web.platform.readSessionFlag
 import thread.web.platform.registerOfflineShell
@@ -59,6 +60,7 @@ import thread.web.presentation.notes.NoteServices
 fun main() {
     registerOfflineShell()
     installZoomGuard()
+    markMissingScrollbarGutter()
     val backend = FirebaseBackend(project = firebaseProject())
     val account = FirebaseAccountSession(backend)
     val testFlags = TestFlags()

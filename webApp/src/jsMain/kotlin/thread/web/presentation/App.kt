@@ -14,6 +14,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.browser.document
+import kotlinx.browser.window
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.web.dom.A
 import org.jetbrains.compose.web.dom.B
@@ -261,7 +262,7 @@ private fun Workspace(
         if (firstPlace) {
             firstPlace = false
         } else if (!searchOpen && !viewsOpen) {
-            (document.querySelector("main h1") as? HTMLElement)?.focus()
+            (document.querySelector("main h1") as? HTMLElement)?.let(::focusViewTitle)
         }
     }
     LaunchedEffect(workspace) { workspace.run() }
@@ -654,6 +655,17 @@ private fun NoSearchResults(
 private fun NotBuiltYet(view: View) {
     PageHeader(view.label)
     EmptyState(Icon.Sparkle, "Not built yet", "This view comes in a later phase of the build.")
+}
+
+/**
+ * Focuses a new view's [title] and shows it. Chrome and Firefox scroll an element they focus into view; Safari does
+ * not, so a view opened from a scrolled page kept that scroll, and its focused title was off screen (D94). Only a
+ * title still off screen after the focus is brought to the middle of the window, as Chrome does.
+ */
+internal fun focusViewTitle(title: HTMLElement) {
+    title.focus()
+    val box = title.getBoundingClientRect()
+    if (box.top < 0 || box.bottom > window.innerHeight) title.asDynamic().scrollIntoView(js("({ block: 'center' })"))
 }
 
 /** The toast after Topic reminders moved onto Tasks (D54). */
