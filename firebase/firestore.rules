@@ -175,12 +175,13 @@ service cloud.firestore {
     // and the per-screen preferences (today*, inbox*, topic*, jira*, prs*) with D83, so a document saved before may
     // lack them. hideEmptySections stays valid after todayHideEmpty replaces it in Settings. A null todayTopicsView,
     // todayHideEmpty or jiraCurrentSprintOnly is not set yet; a null todayPastMeetings shows every past meeting.
+    // Today's layouts (todayLayout, todayPhoneLayout) came with D95; null is not set, Today's layout before them.
     function validPrefs(prefs) {
       return prefs.keys().hasOnly(['topicsView', 'captureType', 'keepCompleted', 'timeZone', 'focusMin', 'breakMin',
           'hideEmptySections', 'meetingsLayout', 'todayTopicsView', 'todayHideEmpty', 'todayGroupBy',
           'todayPastMeetings', 'todayTopicCategories', 'inboxShowCompleted', 'inboxShowNotes', 'inboxGroupBy',
           'topicShowCompleted', 'topicHideEmpty', 'topicGroupByDue', 'jiraCurrentSprintOnly', 'prsMineGroupBy',
-          'prsReviewGroupBy', 'updatedAt', 'schemaVersion'])
+          'prsReviewGroupBy', 'todayLayout', 'todayPhoneLayout', 'updatedAt', 'schemaVersion'])
         && prefs.keys().hasAll(['topicsView', 'captureType', 'updatedAt', 'schemaVersion'])
         && prefs.schemaVersion == 1
         && prefs.updatedAt == request.time
@@ -208,7 +209,26 @@ service cloud.firestore {
         && (!('topicGroupByDue' in prefs) || prefs.topicGroupByDue is bool)
         && (!('jiraCurrentSprintOnly' in prefs) || prefs.jiraCurrentSprintOnly == null || prefs.jiraCurrentSprintOnly is bool)
         && (!('prsMineGroupBy' in prefs) || prefs.prsMineGroupBy in ['repo', 'topic', 'review'])
-        && (!('prsReviewGroupBy' in prefs) || prefs.prsReviewGroupBy in ['repo', 'author', 'review']);
+        && (!('prsReviewGroupBy' in prefs) || prefs.prsReviewGroupBy in ['repo', 'author', 'review'])
+        && (!('todayLayout' in prefs) || prefs.todayLayout == null || validTodayLayout(prefs.todayLayout))
+        && (!('todayPhoneLayout' in prefs) || prefs.todayPhoneLayout == null
+            || validChoices(prefs.todayPhoneLayout, todayCards()));
+    }
+
+    // Today's desktop layout: its places, each a list of card ids in order. The app reads a card in two places from
+    // its first place, which the rules cannot cheaply check.
+    function validTodayLayout(layout) {
+      return layout is map
+        && layout.keys().hasOnly(['top', 'left', 'right', 'bottom'])
+        && (!('top' in layout) || validChoices(layout.top, todayCards()))
+        && (!('left' in layout) || validChoices(layout.left, todayCards()))
+        && (!('right' in layout) || validChoices(layout.right, todayCards()))
+        && (!('bottom' in layout) || validChoices(layout.bottom, todayCards()));
+    }
+
+    // The cards Today places (D95).
+    function todayCards() {
+      return ['meetings', 'tasks', 'reminders', 'review', 'topics'];
     }
 
     // A list of distinct ids, each one of known. Known ids without repeats also keep it no longer than known.

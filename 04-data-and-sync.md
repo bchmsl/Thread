@@ -335,6 +335,24 @@ Details: ADR-019 (Proposed). Checked with unit tests, the emulator tests and hea
 - **Rules:** `validPrefs` allows the 14 keys. Strings must be one of their values; bools are bools; `todayPastMeetings` is an int 0 to 20 or null; a list holds known ids only, without repeats (which also bounds its size). Only `todayTopicsView`, `todayHideEmpty`, `todayPastMeetings` and `jiraCurrentSprintOnly` may be null.
 - **Deploy the rules before the build ships.** Until then the server refuses a preferences save that stores any of these: changing one (from P2), the first preferences save of a new account, or a save on a device before the account's preferences document has reached it; the last two write every set field. It stays in the sync panel with Retry; nothing is lost.
 
+## Today layout (D95, 2026-11-18)
+
+Owner change #29, phase L1. Plan: `today-layout/analysis.md` revision 4 in the session notes.
+
+- **Fields:** `users/{uid}/prefs/main` gets two optional fields. The card ids are `meetings`, `tasks`, `reminders`, `review` and `topics`.
+
+| Field | Values | Not set (absent or null) |
+| --- | --- | --- |
+| `todayLayout` | map of `top`, `left`, `right`, `bottom`, each a list of card ids in order | Today's layout before #29: `tasks` left, `reminders` and `review` right, `topics` bottom; `meetings` top when Meetings layout is Horizontal, else first on the right |
+| `todayPhoneLayout` | list of card ids in order | the desktop layout read top, left, right, bottom |
+
+- **Reading** (pure domain readers `todayDesktopLayout` and `todayPhoneOrder` in `TodayLayout.kt`): a card in two places keeps its first place, read top, left, right, bottom; a card not saved goes back to its place and position in the layout it falls back to; an id this build does not know is left out; a place left out reads as empty.
+- **Drawing (L1):** Today draws each card it shows in the place `todayDesktopLayout` gives it. Whether a card is shown is unchanged (`TodaySections`, Topics shown). A column with no card is left out and the other takes the width. Top and Bottom run across the page. The Tasks groups move as one card. At 759 px and narrower Today stacks the same places in one column, which is what the phone order is while it is not set; drawing a saved phone order comes with edit mode (L3).
+- **Writing:** nothing writes either field before edit mode (L3). The mapper always writes all four places, because a merge would keep a place the new layout leaves out. Reset will write null.
+- **Older builds:** a build before D95 ignores both fields and draws its own layout. Changing its own preferences in a document that has them keeps them (merge).
+- **Rules:** `validPrefs` allows both keys. `todayLayout` is null or a map with only the four place keys, each a list of known card ids without repeats (`validChoices`). `todayPhoneLayout` is null or such a list. A card in two places is allowed: the rules cannot cheaply check it, and the reader handles it.
+- **Deploy the rules before the build ships.** Once a layout is saved, every preferences save on that document carries it, and rules without these keys refuse the save. It stays in the sync panel with Retry; nothing is lost.
+
 ## Calendar meetings (D78, 2026-11-17)
 
 Details: ADR-020 (Accepted). Plan: `calendar-plan.md` v2.2 in the session notes.

@@ -19,8 +19,10 @@ import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.MyPrsGroupBy
 import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TodayLayout
 import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.WorkspacePrefs
@@ -306,6 +308,62 @@ class FirestoreTaskEmulatorTest {
                 storeA.write(listOfNotNull(savePrefs(saved, cleared)))
                 assertEquals(cleared, storeB.observe().first { it.prefs.todayPastMeetings == null }.prefs)
                 assertTrue(storeA.refused.value.isEmpty())
+            } finally {
+                deviceA.backend.close()
+                deviceB.backend.close()
+            }
+        }
+
+    @Test
+    fun todaysLayoutsSyncInOrderAndAChangeOrResetLeavesNoOldPlace() =
+        emulatorTest {
+            val subject = syntheticSubject()
+            val deviceA = EmulatedDevice.signIn(subject)
+            val deviceB = EmulatedDevice.signIn(subject)
+            val storeA = FirestoreWorkspaceStore(deviceA.backend, deviceA.accountId)
+            val storeB = FirestoreWorkspaceStore(deviceB.backend, deviceB.accountId)
+            try {
+                storeA.write(listOfNotNull(savePrefs(null, WorkspacePrefs(TopicsView.Board))))
+                val start = storeA.observe().first { it.prefsStored && !it.pendingWrites }
+                assertEquals(null, start.prefs.todayLayout, "A document from before D95 has no layout")
+                assertEquals(null, start.prefs.todayPhoneLayout)
+
+                val first =
+                    start.prefs.copy(
+                        todayLayout =
+                            TodayLayout(
+                                top = listOf(TodayCard.Topics, TodayCard.Meetings),
+                                left = listOf(TodayCard.Tasks),
+                                right = listOf(TodayCard.ReviewRequested, TodayCard.Reminders),
+                            ),
+                        todayPhoneLayout = listOf(TodayCard.Reminders, TodayCard.Tasks),
+                    )
+                storeA.write(listOfNotNull(savePrefs(start, first)))
+                val saved = storeA.observe().first { !it.pendingWrites && it.prefs.todayLayout != null }
+                assertEquals(first, saved.prefs)
+                assertEquals(first, storeB.observe().first { it.prefs.todayLayout != null }.prefs, "The other device follows, in order")
+
+                // Places that empty out are stored empty, not kept from before by the merge.
+                val moved =
+                    saved.prefs.copy(
+                        todayLayout = TodayLayout(left = listOf(TodayCard.Topics, TodayCard.Tasks, TodayCard.Meetings)),
+                    )
+                storeA.write(listOfNotNull(savePrefs(saved, moved)))
+                val afterMove = storeB.observe().first { it.prefs.todayLayout == moved.todayLayout }
+                assertEquals(moved, afterMove.prefs)
+
+                // Another preference changed on device B leaves the layouts alone.
+                val other = afterMove.prefs.copy(inboxShowNotes = false)
+                storeB.write(listOfNotNull(savePrefs(afterMove, other)))
+                assertEquals(other, storeA.observe().first { !it.prefs.inboxShowNotes }.prefs)
+
+                // Reset: back to not set, stored as null.
+                val reset = other.copy(todayLayout = null, todayPhoneLayout = null)
+                val beforeReset = storeA.observe().first { !it.pendingWrites && !it.prefs.inboxShowNotes }
+                storeA.write(listOfNotNull(savePrefs(beforeReset, reset)))
+                assertEquals(reset, storeB.observe().first { it.prefs.todayLayout == null }.prefs)
+                assertTrue(storeA.refused.value.isEmpty())
+                assertTrue(storeB.refused.value.isEmpty())
             } finally {
                 deviceA.backend.close()
                 deviceB.backend.close()

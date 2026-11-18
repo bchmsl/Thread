@@ -7,6 +7,8 @@ import thread.domain.note.NoteSaveState
 import thread.domain.note.UNTITLED_NOTE
 import thread.domain.topic.topicInfo
 import thread.domain.workspace.RefusedChange
+import thread.domain.workspace.TodayCard
+import thread.domain.workspace.TodayZone
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceWrite
 import thread.web.platform.WallClock
@@ -104,7 +106,7 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
                     "focus ${write.prefs.focusWorkMinutes} min, break ${write.prefs.focusBreakMinutes} min, " +
                     "hide empty sections in Today ${if (write.prefs.hideEmptySections) "on" else "off"}, " +
                     "meetings layout ${write.prefs.meetingsLayout.id}",
-            ) + screenPrefsLines(write.prefs)
+            ) + screenPrefsLines(write.prefs) + todayLayoutLines(write.prefs)
         is WorkspaceWrite.PutTask ->
             listOfNotNull(
                 "Task: ${write.task.title}",
@@ -179,6 +181,19 @@ private fun screenPrefsLines(prefs: WorkspacePrefs): List<String> {
             "hidden when empty ${listed(prefs.topicHideEmpty.sortedBy { it.ordinal }.map { it.id })}",
         "Jira: current sprint only ${onOff(prefs.jiraCurrentSprintOnly)}",
         "Pull requests: mine grouped by ${prefs.prsMineGroupBy.id}, review requested grouped by ${prefs.prsReviewGroupBy.id}",
+    )
+}
+
+/**
+ * Today's layouts as saved (D95), one line each: "Today layout: top none; left tasks; right meetings, reminders, review;
+ * bottom topics" and "Today one-column order: reminders, tasks". Not saved reads "not set".
+ */
+internal fun todayLayoutLines(prefs: WorkspacePrefs): List<String> {
+    fun cards(cards: List<TodayCard>): String = cards.joinToString(", ") { it.id }.ifEmpty { "none" }
+    val layout = prefs.todayLayout
+    return listOf(
+        "Today layout: " + (layout?.let { TodayZone.entries.joinToString("; ") { zone -> "${zone.id} ${cards(it[zone])}" } } ?: NOT_SET),
+        "Today one-column order: ${prefs.todayPhoneLayout?.let(::cards) ?: NOT_SET}",
     )
 }
 

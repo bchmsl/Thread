@@ -189,6 +189,8 @@ private fun WorkspacePrefs.fields(): Map<String, Any?> =
         "jiraCurrentSprintOnly" to jiraCurrentSprintOnly,
         "prsMineGroupBy" to prsMineGroupBy,
         "prsReviewGroupBy" to prsReviewGroupBy,
+        "todayLayout" to todayLayout,
+        "todayPhoneLayout" to todayPhoneLayout,
     )
 
 private fun Task.fields(): Map<String, Any?> =

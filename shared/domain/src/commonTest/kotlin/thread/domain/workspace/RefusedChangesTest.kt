@@ -272,4 +272,26 @@ class RefusedChangesTest {
         assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
         assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
     }
+
+    @Test
+    fun todaysLayoutsAreComparedLikeOtherPreferences() {
+        val stored =
+            WorkspacePrefs(
+                todayLayout = TodayLayout(top = listOf(TodayCard.Topics), left = listOf(TodayCard.Tasks, TodayCard.Meetings)),
+                todayPhoneLayout = listOf(TodayCard.Reminders, TodayCard.Tasks),
+            )
+        val leftovers = listOf(change("c1", WorkspaceWrite.PutPrefs(stored, before = WorkspacePrefs())))
+
+        assertEquals(emptyList(), unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = stored)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true)).size)
+        // The order inside a place is part of the layout.
+        val reordered = stored.copy(todayLayout = stored.todayLayout?.copy(left = listOf(TodayCard.Meetings, TodayCard.Tasks)))
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = reordered)).size)
+        val phoneKept = stored.copy(todayPhoneLayout = null)
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = phoneKept)).size)
+        // Reset writes not set, and is compared too.
+        val reset = listOf(change("c2", WorkspaceWrite.PutPrefs(WorkspacePrefs(), before = stored)))
+        assertEquals(emptyList(), unconfirmedChanges(reset, emptyList(), data(prefsStored = true)))
+        assertEquals(1, unconfirmedChanges(reset, emptyList(), data(prefsStored = true).copy(prefs = stored)).size)
+    }
 }

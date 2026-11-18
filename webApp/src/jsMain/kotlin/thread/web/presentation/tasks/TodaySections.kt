@@ -4,6 +4,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalView
 import thread.domain.external.PullRequestListPage
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayHideableSection
 import thread.web.presentation.external.savedOrNull
 
@@ -44,7 +45,7 @@ internal fun reviewContent(
  * [reminderRows]: today's reminders that have a row to show. [meetingsShown]: the meetings are set up
  * ([thread.web.presentation.calendar.MeetingsModel.cardShown]). [meetingsContent]: they have something to show
  * ([thread.web.presentation.calendar.TodayMeetingsView.hasContent]): a meeting left today, or a problem that never
- * hides. [meetingsLayout]: where (D79).
+ * hides. [meetingsLayout]: where (D79). [topicsShown]: "Topics shown" picks a category (D89).
  */
 internal class TodaySections(
     hidden: Set<TodayHideableSection>,
@@ -54,6 +55,7 @@ internal class TodaySections(
     meetingsShown: Boolean,
     meetingsContent: Boolean,
     meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
+    topicsShown: Boolean = true,
 ) {
     private val meetingsAny = meetingsShown && (TodayHideableSection.Meetings !in hidden || meetingsContent)
 
@@ -74,4 +76,38 @@ internal class TodaySections(
 
     /** Every section the rule names is empty and hidden, so Today says so in their place. */
     val nothing: Boolean = !main && !rail && !timeline
+
+    /** The cards Today draws now (D95). The layout places them; a place left with none takes no space. */
+    val drawn: Set<TodayCard> =
+        buildSet {
+            if (meetings || timeline) add(TodayCard.Meetings)
+            if (main) add(TodayCard.Tasks)
+            if (reminders) add(TodayCard.Reminders)
+            if (review) add(TodayCard.ReviewRequested)
+            if (topicsShown) add(TodayCard.Topics)
+        }
 }
+
+/**
+ * The side column's name for screen readers. With only the cards it held before #29 it keeps its D77 name; another card
+ * the layout puts there is named too (D95), in the column's order.
+ */
+internal fun sideColumnLabel(cards: List<TodayCard>): String {
+    if (cards.all { it in RAIL_CARDS }) {
+        return if (TodayCard.Meetings in cards) "Meetings, reminders and reviews" else "Reminders and reviews"
+    }
+    val names = cards.map { CARD_NAMES.getValue(it) }
+    val text = if (names.size == 1) names.single() else names.dropLast(1).joinToString(", ") + " and " + names.last()
+    return text.replaceFirstChar { it.uppercaseChar() }
+}
+
+private val RAIL_CARDS = setOf(TodayCard.Meetings, TodayCard.Reminders, TodayCard.ReviewRequested)
+
+private val CARD_NAMES =
+    mapOf(
+        TodayCard.Meetings to "meetings",
+        TodayCard.Tasks to "tasks",
+        TodayCard.Reminders to "reminders",
+        TodayCard.ReviewRequested to "reviews",
+        TodayCard.Topics to "Topics",
+    )

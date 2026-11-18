@@ -358,6 +358,102 @@ class FirestoreWorkspaceRulesEmulatorTest {
             assertFails(mergeSetPromise(prefsRef(stranger, owner), strangerChange, stranger)).await()
         }
 
+    /** Today's desktop layout as the app stores it (D95): every place, each with its card ids in order. */
+    private fun layout(
+        top: Array<String> = arrayOf(),
+        left: Array<String> = arrayOf("tasks"),
+        right: Array<String> = arrayOf("meetings", "reminders", "review"),
+        bottom: Array<String> = arrayOf("topics"),
+    ): dynamic = jsObject("top" to top, "left" to left, "right" to right, "bottom" to bottom)
+
+    private val everyCard = arrayOf("meetings", "tasks", "reminders", "review", "topics")
+
+    @Test
+    fun todaysLayoutsAreOptionalAndTakeEveryCardInAnyPlace() =
+        rulesTest { env, owner, _ ->
+            val db = env.authenticatedContext(owner).firestore()
+
+            // A document from before D95, then both layouts in one change.
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs(*screenPrefs))).await()
+            val both = jsObject("todayLayout" to layout(), "todayPhoneLayout" to everyCard, "updatedAt" to serverTimestamp())
+            mergeSet(prefsRef(db, owner), both, db)
+            // A build from before D95 still changes its own fields in a document that has the layouts.
+            mergeSet(prefsRef(db, owner), jsObject("inboxShowNotes" to true, "updatedAt" to serverTimestamp()), db)
+
+            val accepted =
+                listOf<Pair<String, List<Any?>>>(
+                    "todayLayout" to
+                        listOf(
+                            null,
+                            layout(top = everyCard, left = arrayOf(), right = arrayOf(), bottom = arrayOf()),
+                            layout(left = arrayOf("topics", "review", "tasks"), right = arrayOf("reminders"), bottom = arrayOf("meetings")),
+                            layout(left = arrayOf(), right = arrayOf(), bottom = arrayOf()),
+                            // The app reads a card in two places from its first place, and a missing place as empty.
+                            layout(top = arrayOf("tasks")),
+                            jsObject("left" to arrayOf("tasks")),
+                            jsObject(),
+                        ),
+                    "todayPhoneLayout" to
+                        listOf(null, arrayOf<String>(), arrayOf("topics", "review", "reminders", "tasks", "meetings"), arrayOf("review")),
+                )
+            for ((field, values) in accepted) {
+                for (value in values) {
+                    assertSucceeds(setDoc(prefsRef(db, owner), prefs(field to value))).await()
+                    // As the app changes it: this field alone, on a document that has the other one.
+                    mergeSet(prefsRef(db, owner), jsObject(field to value, "updatedAt" to serverTimestamp()), db)
+                }
+            }
+        }
+
+    @Test
+    fun todaysLayoutsRefuseOtherShapesCardsAndAccounts() =
+        rulesTest { env, owner, other ->
+            val db = env.authenticatedContext(owner).firestore()
+            assertSucceeds(setDoc(prefsRef(db, owner), prefs())).await()
+
+            val refused =
+                listOf<Pair<String, List<Any?>>>(
+                    "todayLayout" to
+                        listOf(
+                            "top",
+                            true,
+                            arrayOf("tasks"),
+                            jsObject("middle" to arrayOf("tasks")),
+                            jsObject("Top" to arrayOf("tasks")),
+                            layout(left = arrayOf("inbox")),
+                            layout(left = arrayOf("Tasks")),
+                            layout(right = arrayOf("meetings", "meetings")),
+                            layout(top = everyCard + "topics"),
+                            jsObject("top" to "tasks"),
+                            jsObject("top" to null),
+                            jsObject("top" to arrayOf(1)),
+                            jsObject("top" to jsObject("tasks" to 0)),
+                        ),
+                    "todayPhoneLayout" to
+                        listOf(
+                            "tasks",
+                            true,
+                            layout(),
+                            arrayOf("tasks", "tasks"),
+                            arrayOf("inbox"),
+                            arrayOf("Topics"),
+                            arrayOf(1),
+                            everyCard + "meetings",
+                        ),
+                )
+            for ((field, values) in refused) {
+                for (value in values) {
+                    assertFails(setDoc(prefsRef(db, owner), prefs(field to value))).await()
+                    val change = jsObject(field to value, "updatedAt" to serverTimestamp())
+                    assertFails(mergeSetPromise(prefsRef(db, owner), change, db)).await()
+                }
+            }
+            val stranger = env.authenticatedContext(other).firestore()
+            assertFails(setDoc(prefsRef(stranger, owner), prefs("todayLayout" to layout(), "todayPhoneLayout" to everyCard))).await()
+            val strangerChange = jsObject("todayLayout" to layout(), "updatedAt" to serverTimestamp())
+            assertFails(mergeSetPromise(prefsRef(stranger, owner), strangerChange, stranger)).await()
+        }
+
     private fun mergeSetPromise(
         reference: DocumentReference,
         data: dynamic,

@@ -54,8 +54,11 @@ import thread.domain.topic.statusOf
 import thread.domain.topic.todayStatuses
 import thread.domain.topic.todayTopicGroups
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
+import thread.domain.workspace.TodayZone
 import thread.domain.workspace.TopicsView
+import thread.domain.workspace.todayDesktopLayout
 import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.todayTopicsLayout
 import thread.web.platform.readDeviceText
@@ -101,7 +104,8 @@ import thread.web.presentation.topics.topicPlace
  * timeline across the page, under the heading and above both columns. The Tasks are grouped as Settings > Today
  * "Group tasks by" says (D90); see [TodayTaskGroups]. Every group opens and closes, and this device remembers it (D53).
  * An empty task group is left out; so are the Meetings, Reminders and Review requested sections Settings hides when
- * empty (D77, D86); see [TodaySections].
+ * empty (D77, D86); see [TodaySections]. Since D95 the cards are placed by the desktop layout
+ * ([thread.domain.workspace.todayDesktopLayout]); with none saved it is the layout described here.
  */
 @Composable
 internal fun TodayScreen(
@@ -167,34 +171,52 @@ internal fun TodayScreen(
             meetingsShown = meetings.cardShown,
             meetingsContent = meetingsView.hasContent,
             meetingsLayout = layout,
+            topicsShown = workspace.prefs.todayTopicCategories.isNotEmpty(),
         )
     val cards = LocalCards.current
-    // D79: Horizontal draws the meetings as a timeline across the page, above both columns.
-    if (sections.timeline) MeetingsTimeline(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
-    if (sections.nothing) {
-        NothingForToday()
-    } else if (sections.main || sections.rail) {
+    // D95: each card Today draws, where the desktop layout puts it. A place left with no card takes no space.
+    val places = workspace.prefs.todayDesktopLayout.only(sections.drawn)
+    val drawCard: @Composable (TodayCard) -> Unit = { card ->
+        when (card) {
+            // D79 in every place: Horizontal draws the meetings as a timeline, Vertical as the Meetings card.
+            TodayCard.Meetings ->
+                if (layout == MeetingsLayout.Horizontal) {
+                    MeetingsTimeline(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
+                } else {
+                    MeetingsRail(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
+                }
+            // Every task group in one card, which moves as one (D-1).
+            TodayCard.Tasks -> Div({ classes("today__tasks") }) { TodayTaskGroups(tasks, workspace, onOpenTask) }
+            TodayCard.Reminders -> RemindersRail(workspace, reminders, onOpenTarget)
+            TodayCard.ReviewRequested -> ReviewRequestedRail(gitHub, reviews)
+            TodayCard.Topics -> ActiveTopics(workspace)
+        }
+    }
+    if (sections.nothing) NothingForToday()
+    // Top and Bottom run across the page, above and below the two columns.
+    places.top.forEach { key(it) { drawCard(it) } }
+    if (places.left.isNotEmpty() || places.right.isNotEmpty()) {
         Div({
             classes("today")
             // A column with nothing to show is left out, and the other takes the width (D77).
-            if (!sections.main || !sections.rail) classes("today--one")
+            if (places.oneSide) classes("today--one")
         }) {
-            if (sections.main) {
-                Div({ classes("today__main") }) { TodayTaskGroups(tasks, workspace, onOpenTask) }
+            if (places.left.isNotEmpty()) {
+                Div({
+                    classes("today__main")
+                    attr("data-zone", TodayZone.Left.id)
+                }) { places.left.forEach { key(it) { drawCard(it) } } }
             }
-            if (sections.rail) {
+            if (places.right.isNotEmpty()) {
                 Aside({
                     classes("today__rail")
-                    attr("aria-label", if (sections.meetings) "Meetings, reminders and reviews" else "Reminders and reviews")
-                }) {
-                    if (sections.meetings) MeetingsRail(meetingsView, workspace::topicsOfSeries) { cards?.openMeeting(it.id) }
-                    if (sections.reminders) RemindersRail(workspace, reminders, onOpenTarget)
-                    if (sections.review) ReviewRequestedRail(gitHub, reviews)
-                }
+                    attr("data-zone", TodayZone.Right.id)
+                    attr("aria-label", sideColumnLabel(places.right))
+                }) { places.right.forEach { key(it) { drawCard(it) } } }
             }
         }
     }
-    ActiveTopics(workspace)
+    places.bottom.forEach { key(it) { drawCard(it) } }
 }
 
 /** Where the empty state sends the person: Settings, at Today (D84). */

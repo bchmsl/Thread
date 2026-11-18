@@ -55,8 +55,11 @@ import thread.domain.workspace.MyPrsGroupBy
 import thread.domain.workspace.PAST_MEETINGS_MAX
 import thread.domain.workspace.RefusedChange
 import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TodayLayout
+import thread.domain.workspace.TodayZone
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
@@ -97,6 +100,8 @@ class WorkspaceReadException(
  *   `topicGroupByDue?`, `jiraCurrentSprintOnly?`, `prsMineGroupBy?`, `prsReviewGroupBy?`. Each reads as its default
  *   without it or with a value this build does not know; a list drops the ids it does not know. `todayTopicsView`,
  *   `todayHideEmpty`, `todayPastMeetings` and `jiraCurrentSprintOnly` may be null: not set, or all past meetings.
+ *   Today's layouts (D95) are optional and may be null, not set: `todayLayout?`, a map of the places `top`, `left`,
+ *   `right` and `bottom`, each a list of card ids in order, and `todayPhoneLayout?`, one list of card ids.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -433,6 +438,9 @@ class FirestoreWorkspaceStore internal constructor(
         if (writes { it.jiraCurrentSprintOnly }) data.jiraCurrentSprintOnly = prefs.jiraCurrentSprintOnly
         if (writes { it.prsMineGroupBy }) data.prsMineGroupBy = prefs.prsMineGroupBy.id
         if (writes { it.prsReviewGroupBy }) data.prsReviewGroupBy = prefs.prsReviewGroupBy.id
+        // D95. A merge would keep a place a layout leaves out, so every place is written.
+        if (writes { it.todayLayout }) data.todayLayout = prefs.todayLayout?.stored()
+        if (writes { it.todayPhoneLayout }) data.todayPhoneLayout = prefs.todayPhoneLayout?.ids()
         data.updatedAt = serverTimestamp()
         data.schemaVersion = SCHEMA_VERSION
         return data
@@ -886,7 +894,25 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         jiraCurrentSprintOnly = booleanOrNull(data.jiraCurrentSprintOnly),
         prsMineGroupBy = MyPrsGroupBy.fromId(stringOrNull(data.prsMineGroupBy)) ?: MyPrsGroupBy.Repository,
         prsReviewGroupBy = ReviewPrsGroupBy.fromId(stringOrNull(data.prsReviewGroupBy)) ?: ReviewPrsGroupBy.Repository,
+        todayLayout = layoutOrNull(data.todayLayout),
+        todayPhoneLayout = stringsOrNull(data.todayPhoneLayout)?.mapNotNull(TodayCard::fromId),
     )
+}
+
+/** Today's desktop layout as stored (D95): every place, each with its card ids in order. */
+private fun TodayLayout.stored(): dynamic {
+    val data = newJsObject()
+    TodayZone.entries.forEach { data[it.id] = this[it].ids() }
+    return data
+}
+
+/** The ids of [this] in order, as a stored list. */
+private fun List<TodayCard>.ids(): Array<String> = map { it.id }.toTypedArray()
+
+/** A stored layout, or null when the value is not a map. A card or place this build does not know is left out. */
+private fun layoutOrNull(value: dynamic): TodayLayout? {
+    if (value == null || jsTypeOf(value) != "object" || js("Array").isArray(value).unsafeCast<Boolean>()) return null
+    return TodayLayout.of(TodayZone.entries.associateWith { stringsOrNull(value[it.id])?.mapNotNull(TodayCard::fromId).orEmpty() })
 }
 
 /** The ids of [this] in declaration order, as a stored list. */

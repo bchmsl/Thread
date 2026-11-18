@@ -14,6 +14,7 @@ import thread.domain.task.todayTasks
 import thread.domain.time.LocalDay
 import thread.domain.time.WallTime
 import thread.domain.workspace.MeetingsLayout
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TodayHideableSection.Meetings
 import thread.domain.workspace.TodayHideableSection.Reminders
@@ -197,5 +198,40 @@ class TodaySectionsTest {
         assertFalse(empty.review)
         assertFalse(empty.nothing)
         assertTrue(sections(WorkspacePrefs().todayHiddenWhenEmpty).reminders, "Off by default")
+    }
+
+    @Test
+    fun theDrawnCardsAreTheSectionsThatShow() {
+        // D95: the layout places these; Meetings is one card for the side card and the timeline alike.
+        assertEquals(
+            setOf(TodayCard.Meetings, TodayCard.Reminders, TodayCard.ReviewRequested, TodayCard.Topics),
+            sections(emptySet()).drawn,
+        )
+        assertEquals(
+            setOf(TodayCard.Meetings, TodayCard.Tasks, TodayCard.Reminders, TodayCard.ReviewRequested, TodayCard.Topics),
+            sections(emptySet(), hasTasks = true, layout = MeetingsLayout.Horizontal).drawn,
+        )
+        val allHidden = setOf(Meetings, Reminders, ReviewRequested)
+        assertEquals(setOf(TodayCard.Topics), sections(allHidden).drawn, "Nothing for today, Topics aside")
+        assertEquals(setOf(TodayCard.Tasks), sections(allHidden, hasTasks = true, meetingsShown = false).drawn - TodayCard.Topics)
+        val noTopics =
+            TodaySections(allHidden, false, 0, ReviewContent.Nothing, meetingsShown = true, meetingsContent = false, topicsShown = false)
+        assertEquals(emptySet(), noTopics.drawn, "Topics shown picks no category (D89)")
+        assertTrue(noTopics.nothing)
+    }
+
+    @Test
+    fun theSideColumnKeepsItsNameAndNamesOtherCards() {
+        val before29 = listOf(TodayCard.Meetings, TodayCard.Reminders, TodayCard.ReviewRequested)
+        assertEquals("Meetings, reminders and reviews", sideColumnLabel(before29))
+        assertEquals("Meetings, reminders and reviews", sideColumnLabel(listOf(TodayCard.Meetings)))
+        assertEquals("Reminders and reviews", sideColumnLabel(listOf(TodayCard.Reminders, TodayCard.ReviewRequested)))
+        assertEquals("Reminders and reviews", sideColumnLabel(listOf(TodayCard.ReviewRequested)))
+        assertEquals("Tasks", sideColumnLabel(listOf(TodayCard.Tasks)))
+        assertEquals("Topics and meetings", sideColumnLabel(listOf(TodayCard.Topics, TodayCard.Meetings)))
+        assertEquals(
+            "Reviews, tasks, reminders and Topics",
+            sideColumnLabel(listOf(TodayCard.ReviewRequested, TodayCard.Tasks, TodayCard.Reminders, TodayCard.Topics)),
+        )
     }
 }

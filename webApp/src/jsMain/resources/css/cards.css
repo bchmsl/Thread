@@ -479,7 +479,7 @@
 .pal__group > .icard[data-k="pr"]:first-of-type:last-of-type::before { display: none; }
 
 /* ---------- Today ---------- */
-.today__main > .scard { margin-bottom: 16px; }
+.today__tasks > .scard { margin-bottom: 16px; }
 .today__rail { gap: 20px; }
 .today__rail > .scard { margin-bottom: 0; }
 @media (max-width: 1099px) {
@@ -710,7 +710,7 @@ main:has(.md--wide) { max-width: 1520px; }
 @media (max-width: 1099px) {
   /* One column: the rail's cards follow the main ones at the rail's card gap. */
   .today { row-gap: 20px; }
-  .today__main > .scard:last-child { margin-bottom: 0; }
+  .today__tasks > .scard:last-child { margin-bottom: 0; }
 }
 @media (max-width: 999px) {
   .md--wide { grid-template-columns: minmax(0, 1fr); }

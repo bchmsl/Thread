@@ -62,7 +62,7 @@ enum class CaptureKind(
 /**
  * The workspace preferences stored with the account (04-data-and-sync.md, "Preferences"). The per-screen ones, from
  * [todayTopicsView] on (D83), each start with the behaviour from before them. A null one is not set yet: its reader in
- * ScreenPrefs.kt says what that means.
+ * ScreenPrefs.kt, or TodayLayout.kt for Today's layout (D95), says what that means.
  */
 data class WorkspacePrefs(
     val topicsView: TopicsView = TopicsView.List,
@@ -110,6 +110,10 @@ data class WorkspacePrefs(
     val prsMineGroupBy: MyPrsGroupBy = MyPrsGroupBy.Repository,
     /** Pull requests, how "Review requested" is grouped. By repository by default (D62). */
     val prsReviewGroupBy: ReviewPrsGroupBy = ReviewPrsGroupBy.Repository,
+    /** Today's desktop layout as saved (#29, D95). Not set: see [todayDesktopLayout]. */
+    val todayLayout: TodayLayout? = null,
+    /** Today's one-column order as saved, for windows 759 px wide or narrower. Not set: see [todayPhoneOrder]. */
+    val todayPhoneLayout: List<TodayCard>? = null,
 ) {
     /** The Focus timer's durations. A value outside its limits reads as kept inside them. */
     val focusSettings: FocusSettings

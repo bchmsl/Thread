@@ -38,8 +38,10 @@ import thread.domain.workspace.InboxGroupBy
 import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.MyPrsGroupBy
 import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TodayLayout
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
@@ -258,6 +260,66 @@ class WorkspaceWriteJsonTest {
                 prsMineGroupBy = MyPrsGroupBy.Repository,
             )
         assertEquals(WorkspaceWrite.PutPrefs(expected), decoded)
+    }
+
+    @Test
+    fun todaysLayoutsComeBackInOrderAndNotSetStaysNotSet() {
+        val layouts =
+            WorkspacePrefs(
+                todayLayout =
+                    TodayLayout(
+                        top = listOf(TodayCard.Topics, TodayCard.Meetings),
+                        left = emptyList(),
+                        right = listOf(TodayCard.ReviewRequested, TodayCard.Tasks),
+                        bottom = listOf(TodayCard.Reminders),
+                    ),
+                todayPhoneLayout = listOf(TodayCard.Reminders, TodayCard.Topics, TodayCard.Tasks),
+            )
+        val writes =
+            listOf(
+                WorkspaceWrite.PutPrefs(layouts, before = WorkspacePrefs()),
+                // Reset: back to not set, which is not the same as an empty layout or order.
+                WorkspaceWrite.PutPrefs(WorkspacePrefs(), before = layouts),
+                WorkspaceWrite.PutPrefs(WorkspacePrefs(todayLayout = TodayLayout(), todayPhoneLayout = emptyList())),
+            )
+
+        assertEquals(writes, roundTrip(writes))
+        val value =
+            WorkspaceWriteJson
+                .encode(writes.take(1))
+                .single()
+                .jsonObject
+                .getValue("value")
+                .jsonObject
+        assertEquals(
+            Json.parseToJsonElement("""{"top":["topics","meetings"],"left":[],"right":["review","tasks"],"bottom":["reminders"]}"""),
+            value.getValue("todayLayout"),
+            "Every place is written, so a merge never keeps an old place",
+        )
+    }
+
+    @Test
+    fun todaysLayoutsSavedBeforeD95ReadAsNotSetAndUnknownCardsAreLeftOut() {
+        val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(WorkspacePrefs()))).single().jsonObject
+        val value = stored.getValue("value").jsonObject
+        val older = JsonObject(stored + ("value" to JsonObject(value - "todayLayout" - "todayPhoneLayout")))
+        val unknown =
+            mapOf(
+                "todayLayout" to
+                    Json.parseToJsonElement("""{"top":["inbox","tasks"],"middle":["topics"],"right":"meetings","bottom":[1,"review"]}"""),
+                "todayPhoneLayout" to Json.parseToJsonElement("""["notes","topics",2]"""),
+            )
+        val later = JsonObject(stored + ("value" to JsonObject(value + unknown)))
+        val notAMap = JsonObject(stored + ("value" to JsonObject(value + ("todayLayout" to JsonPrimitive("top")))))
+
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(WorkspacePrefs())), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+        val known =
+            WorkspacePrefs(
+                todayLayout = TodayLayout(top = listOf(TodayCard.Tasks), bottom = listOf(TodayCard.ReviewRequested)),
+                todayPhoneLayout = listOf(TodayCard.Topics),
+            )
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(known)), WorkspaceWriteJson.decode(JsonArray(listOf(later))))
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(WorkspacePrefs())), WorkspaceWriteJson.decode(JsonArray(listOf(notAMap))))
     }
 
     @Test

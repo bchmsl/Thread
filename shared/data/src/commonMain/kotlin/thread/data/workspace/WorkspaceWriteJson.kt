@@ -49,8 +49,11 @@ import thread.domain.workspace.MeetingsLayout
 import thread.domain.workspace.MyPrsGroupBy
 import thread.domain.workspace.PAST_MEETINGS_MAX
 import thread.domain.workspace.ReviewPrsGroupBy
+import thread.domain.workspace.TodayCard
 import thread.domain.workspace.TodayGroupBy
 import thread.domain.workspace.TodayHideableSection
+import thread.domain.workspace.TodayLayout
+import thread.domain.workspace.TodayZone
 import thread.domain.workspace.TopicExternalLink
 import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
@@ -206,7 +209,17 @@ internal object WorkspaceWriteJson {
             put("jiraCurrentSprintOnly", prefs.jiraCurrentSprintOnly)
             put("prsMineGroupBy", prefs.prsMineGroupBy.id)
             put("prsReviewGroupBy", prefs.prsReviewGroupBy.id)
+            put("todayLayout", prefs.todayLayout?.let(::layout) ?: JsonNull)
+            put("todayPhoneLayout", prefs.todayPhoneLayout?.let(::cards) ?: JsonNull)
         }
+
+    private fun layout(layout: TodayLayout): JsonObject = buildJsonObject { TodayZone.entries.forEach { put(it.id, cards(layout[it])) } }
+
+    private fun cards(cards: List<TodayCard>): JsonArray = buildJsonArray { cards.forEach { add(JsonPrimitive(it.id)) } }
+
+    /** A saved layout, its cards in order. A card or place this build does not know is left out. */
+    private fun layout(json: JsonObject): TodayLayout =
+        TodayLayout.of(TodayZone.entries.associateWith { zone -> json.strings(zone.id)?.mapNotNull(TodayCard::fromId).orEmpty() })
 
     private fun <E : Enum<E>> ids(
         choices: Set<E>,
@@ -248,6 +261,9 @@ internal object WorkspaceWriteJson {
             jiraCurrentSprintOnly = json.bool("jiraCurrentSprintOnly"),
             prsMineGroupBy = MyPrsGroupBy.fromId(json.str("prsMineGroupBy")) ?: MyPrsGroupBy.Repository,
             prsReviewGroupBy = ReviewPrsGroupBy.fromId(json.str("prsReviewGroupBy")) ?: ReviewPrsGroupBy.Repository,
+            // Absent in changes saved by builds before D95: not set, Today's layout before #29.
+            todayLayout = json.obj("todayLayout")?.let(::layout),
+            todayPhoneLayout = json.strings("todayPhoneLayout")?.mapNotNull(TodayCard::fromId),
         )
 
     private fun task(task: Task): JsonObject =
