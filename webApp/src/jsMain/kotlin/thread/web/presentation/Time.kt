@@ -59,6 +59,15 @@ internal fun longDate(day: LocalDay): String = "${DAY_NAMES[day.dayOfWeek - 1]},
 /** "Fri 13 Nov" (v3 D.shortDate). */
 internal fun shortDate(day: LocalDay): String = "${DAY_NAMES[day.dayOfWeek - 1].take(3)} ${day.day} ${MONTH_NAMES[day.month - 1].take(3)}"
 
+/** "Friday". */
+internal fun weekdayName(day: LocalDay): String = DAY_NAMES[day.dayOfWeek - 1]
+
+/** "Fri". */
+internal fun weekdayShort(day: LocalDay): String = DAY_NAMES[day.dayOfWeek - 1].take(3)
+
+/** "13 Nov". */
+internal fun dayMonth(day: LocalDay): String = "${day.day} ${MONTH_NAMES[day.month - 1].take(3)}"
+
 /** Today, Yesterday or Tomorrow, else the short date (v3 D.day). [mid] is for a word inside a sentence: "Planned today". */
 internal fun dayText(
     day: LocalDay,

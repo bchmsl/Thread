@@ -24,8 +24,9 @@ enum class MeetingPhase {
 }
 
 /**
- * One row of Today's Meetings card. [startsBeforeToday] and [endsAfterToday] mark a timed meeting that crosses
- * midnight, so the row can say so instead of showing a time from another day as today's.
+ * One row of a day's meetings: Today's Meetings card, or a day on the Calendar page (D102). [startsBeforeToday] and
+ * [endsAfterToday] mark a timed meeting that crosses midnight, so the row can say so instead of showing a time from
+ * another day as that day's. On the Calendar page they mean before and after the row's day, which is not always today.
  */
 data class TodayMeeting(
     val meeting: Meeting,
@@ -42,15 +43,26 @@ data class TodayMeeting(
 fun todayMeetings(
     meetings: List<Meeting>,
     now: WallTime,
+): List<TodayMeeting> = meetingsOn(meetings, now.day, now)
+
+/**
+ * The meetings that take place on [day], in [todayMeetings]' order, with phases as at [now]. Only [now]'s day has
+ * [MeetingPhase.Now] and [MeetingPhase.Next]; on any other day a timed meeting is [MeetingPhase.Ended] when over at
+ * [now], else [MeetingPhase.Later]. [TodayMeeting.startsBeforeToday] and [TodayMeeting.endsAfterToday] are relative to
+ * [day].
+ */
+fun meetingsOn(
+    meetings: List<Meeting>,
+    day: LocalDay,
+    now: WallTime,
 ): List<TodayMeeting> {
-    val today = now.day
-    val dayStart = WallTime(today, 0)
-    val dayEnd = WallTime(today.plusDays(1), 0)
+    val dayStart = WallTime(day, 0)
+    val dayEnd = WallTime(day.plusDays(1), 0)
     val allDay =
         meetings
             .filter { meeting ->
                 val time = meeting.time as? MeetingTime.AllDay ?: return@filter false
-                today >= time.firstDay && today < time.lastDayExclusive
+                day >= time.firstDay && day < time.lastDayExclusive
             }.sortedWith(compareBy<Meeting>({ it.time.startsAt }, { it.displayTitle }, { it.id.value }))
             .map { TodayMeeting(it, MeetingPhase.AllDay) }
     val timed =
@@ -59,12 +71,14 @@ fun todayMeetings(
                 val time = meeting.time as? MeetingTime.Timed ?: return@filter false
                 time.start < dayEnd && (time.end > dayStart || (time.start == time.end && time.start >= dayStart))
             }.sortedWith(compareBy<Meeting>({ it.time.startsAt }, { it.time.endsAt }, { it.displayTitle }, { it.id.value }))
+    val isToday = day == now.day
     val nextStart = timed.map { it.time.startsAt }.filter { it > now }.minOrNull()
     return allDay +
         timed.map { meeting ->
             val phase =
                 when {
                     hasEnded(meeting.time, now) -> MeetingPhase.Ended
+                    !isToday -> MeetingPhase.Later
                     meeting.time.startsAt <= now -> MeetingPhase.Now
                     meeting.time.startsAt == nextStart -> MeetingPhase.Next
                     else -> MeetingPhase.Later
@@ -76,6 +90,34 @@ fun todayMeetings(
                 endsAfterToday = meeting.time.endsAt > dayEnd,
             )
         }
+}
+
+/** One day of the Calendar page (D102) and its meetings, as [meetingsOn] gives them. */
+data class CalendarDay(
+    val day: LocalDay,
+    val rows: List<TodayMeeting>,
+)
+
+/**
+ * The Calendar page's days (D102): from yesterday, or the first day [source] covered when that is later, to the last
+ * day it covered, each with its meetings. Empty when no pass has succeeded yet, or when the covered days end before
+ * yesterday. Days the source did not cover are left out, so an empty day always means "no meetings".
+ */
+fun calendarDays(
+    meetings: List<Meeting>,
+    source: MeetingSource,
+    now: WallTime,
+): List<CalendarDay> {
+    if (source.lastSuccessAtMillis == null) return emptyList()
+    val from = source.fromDay ?: return emptyList()
+    val to = source.toDay ?: return emptyList()
+    val yesterday = now.day.plusDays(-1)
+    val first = if (from > yesterday) from else yesterday
+    if (first > to) return emptyList()
+    return (first.epochDay..to.epochDay).map { epochDay ->
+        val day = LocalDay.fromEpochDay(epochDay)
+        CalendarDay(day, meetingsOn(meetings, day, now))
+    }
 }
 
 /** Over at [now]. A meeting with no length is over the minute after it starts. */

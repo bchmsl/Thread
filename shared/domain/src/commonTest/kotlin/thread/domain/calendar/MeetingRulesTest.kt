@@ -112,6 +112,99 @@ class MeetingRulesTest {
         assertEquals(listOf(3), todayMeetings(listOf(twoDays, endedYesterday, startsTomorrow), at(0, day = tomorrow)).ids())
     }
 
+    // D102: the Calendar page's days.
+    @Test
+    fun onlyTodayHasNowAndNextAndOtherDaysAreEndedOrLater() {
+        val now = at(10, 30)
+        val meetings =
+            listOf(
+                timed(1, at(9, day = yesterday), at(10, day = yesterday)),
+                timed(2, at(15, day = yesterday), at(16, day = yesterday)),
+                timed(3, at(10), at(11)),
+                timed(4, at(12), at(13)),
+                timed(5, at(9, day = tomorrow), at(10, day = tomorrow)),
+                timed(6, at(11, day = tomorrow), at(12, day = tomorrow)),
+            )
+        assertEquals(listOf(MeetingPhase.Ended, MeetingPhase.Ended), meetingsOn(meetings, yesterday, now).map { it.phase })
+        assertEquals(listOf(MeetingPhase.Now, MeetingPhase.Next), meetingsOn(meetings, today, now).map { it.phase })
+        assertEquals(listOf(MeetingPhase.Later, MeetingPhase.Later), meetingsOn(meetings, tomorrow, now).map { it.phase })
+        assertEquals(listOf(5, 6), meetingsOn(meetings, tomorrow, now).ids())
+        assertEquals(todayMeetings(meetings, now), meetingsOn(meetings, today, now))
+    }
+
+    @Test
+    fun aMeetingThatCrossesMidnightShowsOnBothOfItsDaysWithFlagsForThatDay() {
+        val late = timed(1, at(23), at(0, 30, tomorrow))
+        val now = at(23, 10)
+        val tonight = meetingsOn(listOf(late), today, now).single()
+        assertEquals(MeetingPhase.Now, tonight.phase)
+        assertFalse(tonight.startsBeforeToday)
+        assertTrue(tonight.endsAfterToday)
+        val afterMidnight = meetingsOn(listOf(late), tomorrow, now).single()
+        assertEquals(MeetingPhase.Later, afterMidnight.phase)
+        assertTrue(afterMidnight.startsBeforeToday)
+        assertFalse(afterMidnight.endsAfterToday)
+        // The next day, once it is over: the first day's row is ended and the second day's row is today's.
+        val nextMorning = at(1, day = tomorrow)
+        assertEquals(MeetingPhase.Ended, meetingsOn(listOf(late), today, nextMorning).single().phase)
+        assertEquals(MeetingPhase.Ended, meetingsOn(listOf(late), tomorrow, nextMorning).single().phase)
+    }
+
+    @Test
+    fun aMeetingWithNoLengthAtMidnightShowsOnItsOwnDayOnly() {
+        val point = timed(1, at(0, day = tomorrow), at(0, day = tomorrow))
+        val now = at(12)
+        assertTrue(meetingsOn(listOf(point), today, now).isEmpty())
+        assertEquals(listOf(1), meetingsOn(listOf(point), tomorrow, now).ids())
+    }
+
+    @Test
+    fun anAllDayMeetingOverThreeDaysShowsOnEachOfThem() {
+        val threeDays = allDay(1, yesterday, tomorrow.plusDays(1))
+        val now = at(12)
+        listOf(yesterday, today, tomorrow).forEach { day ->
+            assertEquals(listOf(MeetingPhase.AllDay), meetingsOn(listOf(threeDays), day, now).map { it.phase }, "$day")
+        }
+        assertTrue(meetingsOn(listOf(threeDays), yesterday.plusDays(-1), now).isEmpty())
+        assertTrue(meetingsOn(listOf(threeDays), tomorrow.plusDays(1), now).isEmpty())
+    }
+
+    private fun source(
+        from: LocalDay?,
+        to: LocalDay?,
+        lastSuccess: Long? = 1L,
+    ) = MeetingSource(MeetingSourceState.Ok, lastSuccessAtMillis = lastSuccess, fromDay = from, toDay = to)
+
+    @Test
+    fun theCalendarRunsFromYesterdayOrTheFirstCoveredDayToTheLastCoveredDay() {
+        val meetings = listOf(timed(1, at(9), at(10)), timed(2, at(9, day = tomorrow), at(10, day = tomorrow)))
+        val now = at(12)
+        val wide = calendarDays(meetings, source(yesterday.plusDays(-3), today.plusDays(14)), now)
+        assertEquals(yesterday, wide.first().day)
+        assertEquals(today.plusDays(14), wide.last().day)
+        assertEquals(16, wide.size)
+        assertEquals(listOf(1), wide[1].rows.ids())
+        assertEquals(listOf(2), wide[2].rows.ids())
+        assertTrue(wide[0].rows.isEmpty())
+        val late = calendarDays(meetings, source(tomorrow, tomorrow.plusDays(2)), now)
+        assertEquals(listOf(tomorrow, tomorrow.plusDays(1), tomorrow.plusDays(2)), late.map { it.day })
+    }
+
+    @Test
+    fun theCalendarIsEmptyUntilAPassSucceeded() {
+        val now = at(12)
+        assertTrue(calendarDays(emptyList(), source(yesterday, tomorrow, lastSuccess = null), now).isEmpty())
+        assertTrue(calendarDays(emptyList(), source(null, tomorrow), now).isEmpty())
+        assertTrue(calendarDays(emptyList(), source(yesterday, null), now).isEmpty())
+    }
+
+    @Test
+    fun anOldPassGivesOnlyTheDaysItCovered() {
+        val now = at(12)
+        assertEquals(listOf(yesterday), calendarDays(emptyList(), source(yesterday.plusDays(-5), yesterday), now).map { it.day })
+        assertTrue(calendarDays(emptyList(), source(yesterday.plusDays(-5), yesterday.plusDays(-1)), now).isEmpty())
+    }
+
     // D86: Settings "Show past meetings" for the Vertical card.
     private val day =
         listOf(

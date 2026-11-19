@@ -78,6 +78,7 @@ internal enum class View(
     Notes("notes", "Notes", null, Icon.Notes, true),
     Jira("jira", "Jira", null, Icon.Jira, true),
     Prs("prs", "Pull requests", "PRs", Icon.Pr, true),
+    Calendar("calendar", "Calendar", null, Icon.Calendar, true),
     Settings("settings", "Settings", null, Icon.Settings, false),
     Trash("trash", "Trash", null, Icon.Trash, false),
     ;

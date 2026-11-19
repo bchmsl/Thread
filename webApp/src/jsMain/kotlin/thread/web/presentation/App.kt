@@ -50,6 +50,8 @@ import thread.domain.workspace.WorkspaceStore
 import thread.web.platform.copyText
 import thread.web.platform.installCaptureShortcut
 import thread.web.platform.installSearchShortcut
+import thread.web.platform.observeSize
+import thread.web.presentation.calendar.CalendarScreen
 import thread.web.presentation.calendar.MeetingTool
 import thread.web.presentation.calendar.MeetingsModel
 import thread.web.presentation.calendar.meetingSearchOptions
@@ -242,13 +244,15 @@ private fun Workspace(
     // so the page under them is the place without those parameters.
     val page = place.withoutCards().with(FOCUS_PARAM, null)
     val placeTopicId = if (place.head == "topic") place.segment(1) else null
-    // Opening another Note, Trash entry, Jira ticket or pull request keeps the view; those screens move focus themselves.
+    // Opening another Note, Trash entry, Jira ticket or pull request, or another day on the Calendar, keeps the view;
+    // those screens move focus themselves.
     val focusPlace =
         when {
             view == View.Notes -> page.with(NOTE_PARAM, null)
             view == View.Trash -> page.with(TRASH_PARAM, null)
             view == View.Jira -> View.Jira.place
             view == View.Prs -> View.Prs.place
+            view == View.Calendar -> View.Calendar.place
             else -> page
         }
     val title =
@@ -314,7 +318,20 @@ private fun Workspace(
             }
         }) { Text("Skip to workspace bar") }
         Div({ classes("app") }) {
-            Div({ id("banner") }) { ReminderBanners(workspace, openTarget) }
+            Div({
+                id("banner")
+                // The Calendar's sticky day strip and rail sit under the banner while it shows (D102).
+                ref { element ->
+                    val stopObserving =
+                        observeSize(element) {
+                            document.documentElement
+                                ?.asDynamic()
+                                ?.style
+                                ?.setProperty("--banner-h", "${element.offsetHeight}px")
+                        }
+                    onDispose { stopObserving() }
+                }
+            }) { ReminderBanners(workspace, openTarget) }
             Main({
                 id("main")
                 tabIndex(-1)
@@ -324,6 +341,7 @@ private fun Workspace(
                     place.head == "topic" -> TopicScreen(workspace, jira, gitHub, meetings, placeTopicId, cards)
                     view == View.Jira -> JiraScreen(jira, workspace, router, place)
                     view == View.Prs -> PrScreen(gitHub, workspace, router, place)
+                    view == View.Calendar -> CalendarScreen(meetings, workspace, zone, router, place)
                     view == View.Today ->
                         TodayScreen(
                             workspace,

@@ -370,8 +370,8 @@ a.ttag:hover > span { color: var(--text); text-decoration: underline; text-under
 .tone-warn { color: var(--cat-paused); }
 .tone-bad { color: var(--danger); }
 
-/* The capture field keeps a usable width: views collapse to icons first, then tools. */
-@media (max-width: 1499px) {
+/* The capture field keeps a usable width: views collapse to icons first, then tools. Seven views since D102. */
+@media (max-width: 1679px) {
   .line__views .lv:not([aria-current="page"]) { width: 38px; padding: 0; justify-content: center; }
   .line__views .lv:not([aria-current="page"]) .lv__label {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;

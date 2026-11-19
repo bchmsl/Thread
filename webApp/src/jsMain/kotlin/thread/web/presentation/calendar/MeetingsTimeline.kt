@@ -71,12 +71,11 @@ internal fun MeetingsTimeline(
         view.rows.filter { row ->
             (row.phase == MeetingPhase.Now || row.phase == MeetingPhase.Next) && row.meeting.join != null
         }
-    val joins: (@Composable () -> Unit)? =
-        if (joinable.isEmpty()) {
-            null
-        } else {
-            { joinable.forEach { row -> key(row.meeting.id.value) { JoinLink(row.meeting, now, small = false, named = true) } } }
-        }
+    // Join for now and next, then the Calendar page (D102).
+    val actions: @Composable () -> Unit = {
+        joinable.forEach { row -> key(row.meeting.id.value) { JoinLink(row.meeting, now, small = false, named = true) } }
+        CalendarLink()
+    }
     SectionCard(
         kind = CardKind.Meeting,
         headingId = "mtg-h",
@@ -84,7 +83,7 @@ internal fun MeetingsTimeline(
         title = "Meetings",
         count = view.count,
         attrs = { classes("scard--meet", "scard--tl") },
-        actions = joins,
+        actions = actions,
     ) {
         MeetingsNote(view)
         when {

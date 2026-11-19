@@ -220,6 +220,39 @@ class MeetingTextTest {
     }
 
     @Test
+    fun theCalendarPageSaysTheSameProblemsButNotNoMeetingsToday() {
+        // D102: the page's days say "No meetings" themselves, and its note is not about today only.
+        val lastSuccess = WallTime.of(today, 8, 10)
+        val fresh = LAST_SUCCESS + 10 * MINUTE
+
+        val yesterday = today.plusDays(-1)
+
+        fun ready(
+            state: MeetingSourceState = MeetingSourceState.Ok,
+            lastSuccessAt: Long? = LAST_SUCCESS,
+        ) = MeetingsState.Ready(MeetingSource(state, "Synthetic work calendar", lastSuccessAt, yesterday, today.plusDays(14)), emptyList())
+
+        fun page(
+            state: MeetingsState,
+            nowMillis: Long = fresh,
+            last: WallTime? = lastSuccess,
+        ) = meetingsNotice(state, false, today, nowMillis, last, page = true)
+
+        assertNull(page(ready()))
+        assertEquals(MeetingsNotice("Meetings are not loaded yet.", warning = false), page(ready(lastSuccessAt = null), last = null))
+        assertEquals("Syncing is paused in Thread Calendar on your Mac.", page(ready(MeetingSourceState.Paused))?.text)
+        assertEquals(
+            MeetingsNotice(staleText(lastSuccess, today), warning = true, saysTime = true),
+            page(ready(), nowMillis = LAST_SUCCESS + 2 * HOUR),
+        )
+        // Problems that leave no meetings read as on Today.
+        listOf(MeetingsState.NeedsUpdate, MeetingsState.Unavailable("unavailable")).forEach { state ->
+            assertEquals(meetingsNotice(state, false, today, fresh, null), page(state))
+        }
+        assertNull(page(MeetingsState.NotSetUp))
+    }
+
+    @Test
     fun theCardKeepsTheLatestPastMeetingsAndSaysWhenNoneIsLeft() {
         // D86. A fresh upload, so the card has no warning of its own.
         val uploaded = WallClock.nowMillis().toLong()

@@ -139,6 +139,8 @@ internal fun isPlainClick(event: Event): Boolean =
 /**
  * One item as a card (D70): lane 3's band for its [kind] with [label], then [content]. The band holds Back (when
  * [backTo] names a card under this one), Edit or Done, "Open full page" ([fullPage], the item in its own tab) and Close.
+ * [fullPageLabel] and [fullPageIcon] name a [fullPage] that is not the item's own, as the Meeting card's "Show in
+ * Calendar" (D102).
  *
  * [editing] is the item's mode (owner request #3): items open for viewing, Edit or E switches to editing, Done or Esc
  * switches back, and a second Esc closes the card. Edits save as they are made, so there is no Cancel. [onEditing] is
@@ -157,6 +159,8 @@ internal fun ItemCard(
     onBack: () -> Unit,
     fullPage: Place?,
     onClose: () -> Unit,
+    fullPageLabel: String = "Open full page",
+    fullPageIcon: Icon = Icon.External,
     content: @Composable () -> Unit,
 ) {
     var card by remember { mutableStateOf<HTMLElement?>(null) }
@@ -242,11 +246,11 @@ internal fun ItemCard(
             if (fullPage != null) {
                 A(fullPage.hash, {
                     classes("btn", "btn--text", "btn--sm", "dcard__open")
-                    attr("aria-label", "Open full page")
-                    attr("title", "Open full page")
+                    attr("aria-label", fullPageLabel)
+                    attr("title", fullPageLabel)
                 }) {
-                    IconView(Icon.External, 15)
-                    Span({ classes("dcard__lbl") }) { Text("Open full page") }
+                    IconView(fullPageIcon, 15)
+                    Span({ classes("dcard__lbl") }) { Text(fullPageLabel) }
                 }
             }
             Button({

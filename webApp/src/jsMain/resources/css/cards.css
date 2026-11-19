@@ -660,6 +660,101 @@ main:has(.md--wide) { max-width: 1520px; }
 .prgroup__name { min-width: 0; }
 .prgroup > .scard__body { padding: 8px; }
 
+/* ---------- Calendar page (D102): days in week cards, and a two-week overview to jump to one ---------- */
+/* The overview comes first in the page, so Tab reaches it before the days; the grid puts it on the right. */
+.cal { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px 56px; align-items: start; }
+.cal__main { grid-column: 1; grid-row: 1; min-width: 0; display: flex; flex-direction: column; }
+.cal__main > .scard { margin-bottom: 16px; }
+.cal__rail { grid-column: 2; grid-row: 1; position: sticky; top: calc(24px + var(--banner-h, 0px)); min-width: 0; }
+.cal__rail > .scard { margin-bottom: 0; }
+.cal__note { margin: 0 0 16px; }
+
+/* A week card: days inside, each with a quiet heading. */
+.calweek > .scard__body { display: flex; flex-direction: column; gap: 18px; padding-top: 14px; }
+.calday { min-width: 0; }
+.calday__h {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; margin: 0 2px 8px;
+  font-size: inherit; font-weight: inherit; scroll-margin-top: calc(24px + var(--banner-h, 0px));
+}
+.calday__name { font: 500 var(--fs-17)/1.2 var(--font-display); color: var(--text); }
+.calday__date { font-size: var(--fs-13); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.calday__n { margin-left: auto; font-size: var(--fs-13); color: var(--text-3); }
+/* Today: the name in the meeting teal, so "you are here" reads at a glance while scrolling. */
+.calday.is-today .calday__name { color: var(--k-meet); }
+
+/* Yesterday folds (remembered on each device, like Completed): its heading is one button. */
+.calday__h--fold { display: block; margin: 0; }
+.calday__h--fold + .mtg-list { margin-top: 8px; }
+.calfold {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; width: calc(100% + 16px); min-height: 44px;
+  padding: 10px 8px 10px 10px; margin: -6px -8px 0; border: 0; border-radius: 8px; background: none; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.calfold:hover { background: var(--ink-800); }
+.calfold .chev { align-self: center; display: inline-flex; margin-left: -2px; color: var(--text-3); transform: rotate(-90deg); transition: transform var(--t-fast); }
+.calfold[aria-expanded="true"] .chev { transform: none; }
+.calfold .calday__name { color: var(--text-2); }
+
+/* Covered days in a row with no meetings: one quiet line, not one empty day each. */
+.calgap {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; margin: 0; padding: 9px 12px;
+  border: 1px dashed var(--border-strong); border-radius: var(--r-row); font-size: var(--fs-14); color: var(--text-3);
+  scroll-margin-top: calc(24px + var(--banner-h, 0px));
+}
+.calgap:focus { outline: none; }
+.calgap b { font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+/* The end of what the Mac uploaded: says so, never "no meetings". */
+.calend { margin: 4px 2px 0; font-size: var(--fs-13); color: var(--text-3); }
+
+/* The overview in the rail: whole weeks; days the Mac did not upload are dashed. */
+.ov { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.ov__wd { padding: 0 0 4px; text-align: center; font-size: var(--fs-12); font-weight: 600; color: var(--text-3); }
+.ov__day {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  height: 48px; min-width: 0; padding: 0; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-raised); color: var(--text); text-decoration: none; cursor: pointer;
+  font: 500 var(--fs-15)/1 var(--font-display); font-variant-numeric: tabular-nums;
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+.ov__day:hover { border-color: var(--border-strong); background: var(--ink-750); }
+.ov__day.is-past { color: var(--text-3); }
+.ov__day.is-today { border-color: var(--k-meet); background: color-mix(in srgb, var(--k-meet) 16%, var(--bg-raised)); }
+.ov__day.is-out { border-style: dashed; background: none; color: var(--text-disabled); cursor: default; }
+.ov__dots { display: flex; gap: 3px; height: 4px; }
+.ov__dots > span { width: 4px; height: 4px; border-radius: 50%; background: var(--k-meet); }
+.is-past .ov__dots > span { background: var(--fog-500); }
+.ov__note { margin: 12px 2px 0; font-size: var(--fs-13); line-height: 1.4; color: var(--text-3); }
+.ov--skel .ov__day { border-color: transparent; background: var(--ink-800); cursor: default; }
+
+/* Under 1100 px: no rail; the overview is a strip of day chips that scrolls inside itself, under the banner. */
+.strip { display: none; }
+@media (max-width: 1099px) {
+  .cal { grid-template-columns: minmax(0, 1fr); }
+  .cal__rail { display: none; }
+  .strip {
+    position: sticky; top: var(--banner-h, 0px); z-index: 5; display: flex; gap: 4px;
+    margin: -6px -40px 14px; padding: 8px 40px 10px; overflow-x: auto; overscroll-behavior-x: contain;
+    background: var(--bg-app); scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding: 0 40px;
+  }
+  .strip::-webkit-scrollbar { display: none; }
+  .calday__h, .calgap { scroll-margin-top: calc(96px + var(--banner-h, 0px)); }
+}
+@media (max-width: 759px) {
+  .strip { margin: -4px -16px 12px; padding: 8px 16px 10px; scroll-padding: 0 16px; }
+  .calweek > .scard__body { padding: 12px 10px 14px; }
+}
+.strip__day {
+  flex: 1 0 46px; max-width: 64px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0 9px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg-raised); color: var(--text);
+  text-decoration: none; scroll-snap-align: start;
+}
+.strip__wd { font-size: 11px; font-weight: 650; color: var(--text-3); }
+.strip__n { font: 500 var(--fs-17)/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.strip__day.is-past .strip__n { color: var(--text-3); }
+.strip__day.is-today { border-color: var(--k-meet); background: color-mix(in srgb, var(--k-meet) 16%, var(--bg-raised)); }
+.strip__day.is-today .strip__wd { color: var(--text-2); }
+
 /* ---------- An opened Jira ticket or pull request: a head card, then its parts as cards ---------- */
 /* The columns follow the width the detail has (its page, the Topic side panel, a dialog card), not the window's. */
 .xd { container-type: inline-size; min-width: 0; }

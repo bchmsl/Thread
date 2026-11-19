@@ -59,6 +59,7 @@ internal fun MeetingsRail(
         title = "Meetings",
         count = view.count,
         attrs = { classes("scard--meet") },
+        actions = { CalendarLink() },
     ) {
         MeetingsNote(view)
         if (view.loading) {
@@ -142,6 +143,12 @@ internal fun MeetingsFoot(
     P({ classes("mtg__foot") }) { Text(updatedText(lastSuccess, today)) }
 }
 
+/** "Calendar" in the Meetings card's head: the Calendar page (D102), every day the Mac uploaded. */
+@Composable
+internal fun CalendarLink() {
+    A(calendarPlace().hash, { classes("btn", "btn--text", "btn--sm") }) { Text("Calendar") }
+}
+
 /** Two grey rows while the first answer loads (aria-busy), so the card keeps its height. */
 @Composable
 private fun LoadingRows() {
@@ -163,14 +170,16 @@ private fun LoadingRows() {
  * One meeting: the time leads, like a calendar's block, then the title, then Now or Next with how long until it starts
  * or ends and the answer, then the place on one line, then the Topics its series is linked to ([topics], D78 P5). The
  * title keeps the row's full width: the rail is narrow. The row is one button whose name is the whole sentence
- * ([meetingRowLabel]), so the Topic tags inside it are not links.
+ * ([meetingRowLabel]), so the Topic tags inside it are not links. [join]: the row may show Join while not over; the
+ * Calendar page (D102) shows it on today's rows only.
  */
 @Composable
-private fun MeetingRow(
+internal fun MeetingRow(
     row: TodayMeeting,
     now: WallTime,
     topics: List<Topic>,
     onOpen: (Meeting) -> Unit,
+    join: Boolean = true,
 ) {
     val meeting = row.meeting
     val time = meeting.time
@@ -224,7 +233,7 @@ private fun MeetingRow(
                     }
                 }
             }
-            if (row.phase != MeetingPhase.Ended) JoinLink(meeting, now, small = true)
+            if (join && row.phase != MeetingPhase.Ended) JoinLink(meeting, now, small = true)
         }
     }
 }

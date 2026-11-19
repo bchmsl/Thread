@@ -187,6 +187,7 @@ Topic Details preferences (D92, synced), in Settings > Topic Details. They apply
 - Read-only: opening originals is supported.
 - Posting comments, changing status, merging, and other external mutations are deferred.
 - Calendar (D78, ADR-020): the owner's work calendar (Outlook, synced into Apple Calendar on the Mac). The "Thread Calendar" menu bar app reads one calendar and uploads its meetings to Firebase, so every device shows them, also while the Mac sleeps, as of its last upload. Read-only: neither app changes a meeting. Window: yesterday to 14 days ahead. Attendees, organizer and meeting notes are not uploaded. Microsoft Graph is not used: it needs admin consent.
+- Calendar page (D102, owner change #31): a seventh view after Pull requests. It lists the uploaded meetings from yesterday to the last day the Mac uploaded, by day in week cards, with a two-week overview to jump to a day (a strip of day chips on narrow screens), and opens at a day with `?day=`. Read-only, from the same meetings as Today; rows open the Meeting card, and Join shows on today's rows only. Today's Meetings card and the Meeting card link to it. It adds no data, rules, Mac app change or setting; a longer range and a Day view are not planned.
 
 ## Search and quick capture
 

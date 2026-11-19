@@ -50,7 +50,9 @@ import thread.web.presentation.topics.TopicsPickerDialog
 
 /**
  * One meeting as a card (D78, calendar-plan.md section 6): its title, when it happens, where, your answer, Join and the
- * Topics its series is linked to (P5). Thread never changes the meeting in the calendar, so the card has no full page.
+ * Topics its series is linked to (P5). Thread never changes the meeting in the calendar, so the card has no full page;
+ * "Show in Calendar" opens the Calendar page at its day instead (D102), unless [showInCalendar] is false because the
+ * card is open over that page.
  *
  * Edit sets a title and a join link of Thread's own for the meeting's series (D100). Both are optional; when set they
  * show in place of the calendar's everywhere the meeting shows, and the card then lists the calendar's own title and link
@@ -64,6 +66,7 @@ internal fun MeetingCard(
     backTo: String?,
     onBack: () -> Unit,
     onClose: () -> Unit,
+    showInCalendar: Boolean = true,
 ) {
     val now = LocalNow.current
     val toasts = LocalToasts.current
@@ -118,8 +121,10 @@ internal fun MeetingCard(
         onEditing = ::setEditing,
         backTo = backTo,
         onBack = onBack,
-        fullPage = null,
+        fullPage = if (showInCalendar) calendarPlace(meeting.time.startsAt.day) else null,
         onClose = onClose,
+        fullPageLabel = "Show in Calendar",
+        fullPageIcon = Icon.Calendar,
     ) {
         Div({ classes("dcard__body", "dmeet") }) {
             H2({ classes("dmeet__t") }) { Text(meeting.displayTitle) }

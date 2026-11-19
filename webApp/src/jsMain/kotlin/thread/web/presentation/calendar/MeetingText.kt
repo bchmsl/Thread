@@ -267,7 +267,8 @@ internal data class MeetingsNotice(
 /**
  * What the Meetings card says above its rows, or null when the rows speak for themselves. A problem on the Mac wins
  * over a stale upload, which wins over an empty list. [lastSuccess] is the source's last success in the workspace zone.
- * [pastHidden]: Settings left out ended meetings (D86), so an empty list means none is left, not none at all.
+ * [pastHidden]: Settings left out ended meetings (D86), so an empty list means none is left, not none at all. [page]: the
+ * line above the Calendar page (D102), which is about every day, and whose days say themselves when they have none.
  */
 internal fun meetingsNotice(
     state: MeetingsState,
@@ -276,6 +277,7 @@ internal fun meetingsNotice(
     nowMillis: Long,
     lastSuccess: WallTime?,
     pastHidden: Boolean = false,
+    page: Boolean = false,
 ): MeetingsNotice? {
     val source =
         when (state) {
@@ -293,7 +295,9 @@ internal fun meetingsNotice(
         source.state == MeetingSourceState.Paused -> MeetingsNotice("Syncing is paused in Thread Calendar on your Mac.", true)
         lastSuccess != null && isMeetingSourceStale(source, nowMillis) ->
             MeetingsNotice(staleText(lastSuccess, today), true, saysTime = true)
-        !todayKnown(source, today) -> MeetingsNotice("Meetings for today are not loaded yet.", false)
+        !todayKnown(source, today) ->
+            MeetingsNotice(if (page) "Meetings are not loaded yet." else "Meetings for today are not loaded yet.", false)
+        page -> null
         !hasRows -> MeetingsNotice(if (pastHidden) "No more meetings today." else "No meetings today.", false)
         else -> null
     }
