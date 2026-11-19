@@ -40,6 +40,7 @@ import thread.domain.workspace.savePrefs
 import thread.domain.workspace.seedWrites
 import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.toggleTask
+import thread.domain.workspace.withHiddenWhenEmpty
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -306,7 +307,8 @@ class FirestoreTaskEmulatorTest {
                 setDoc(main, old).await()
                 val older = storeA.observe().first { it.prefsStored && !it.pendingWrites }
                 assertEquals(WorkspacePrefs(TopicsView.Board, hideEmptySections = true), older.prefs, "Each new field reads as its default")
-                assertEquals(setOf(TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested), older.prefs.todayHiddenWhenEmpty)
+                val olderHidden = setOf(TodayHideableSection.Tasks, TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested)
+                assertEquals(olderHidden, older.prefs.todayHiddenWhenEmpty, "An empty Tasks card hides, as before D101")
 
                 val picked =
                     older.prefs.copy(
@@ -434,10 +436,52 @@ class FirestoreTaskEmulatorTest {
                 storeA.write(listOfNotNull(savePrefs(latestA, done)))
 
                 val onB = storeB.observe().first { it.prefs.todayLayout != null && !it.pendingWrites }.prefs
-                assertEquals(TodayHideableSection.entries.toSet(), onB.todayHideEmpty, "Both switches stay")
+                val bothKept = setOf(TodayHideableSection.Meetings, TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested)
+                assertEquals(bothKept, onB.todayHideEmpty, "Both switches stay")
                 assertEquals(defaultTodayLayout(MeetingsLayout.Horizontal), onB.todayLayout)
                 assertEquals(null, onB.todayPhoneLayout, "The phone order is not touched")
                 assertEquals(fromB.copy(todayLayout = onB.todayLayout, todayHideEmpty = onB.todayHideEmpty), onB, "Nothing else changes")
+                assertTrue(storeA.refused.value.isEmpty())
+                assertTrue(storeB.refused.value.isEmpty())
+            } finally {
+                deviceA.backend.close()
+                deviceB.backend.close()
+            }
+        }
+
+    @Test
+    fun theTasksHideChoiceSyncsOnItsOwnAndTopicsJoinsTheList() =
+        emulatorTest {
+            val subject = syntheticSubject()
+            val deviceA = EmulatedDevice.signIn(subject)
+            val deviceB = EmulatedDevice.signIn(subject)
+            val storeA = FirestoreWorkspaceStore(deviceA.backend, deviceA.accountId)
+            val storeB = FirestoreWorkspaceStore(deviceB.backend, deviceB.accountId)
+            try {
+                storeA.write(seedWrites())
+                val seeded = storeA.observe().first { it.statuses.size == 4 && !it.pendingWrites }
+                assertEquals(true, seeded.prefs.todayTasksHideEmpty, "An empty Tasks card hides until turned off (D101)")
+
+                // Tasks "Hide when empty" off: only its own field is written; the list stays not set.
+                val tasksShown = seeded.prefs.withHiddenWhenEmpty(TodayHideableSection.Tasks, hide = false)
+                storeA.write(listOfNotNull(savePrefs(seeded, tasksShown)))
+                val dataB = storeB.observe().first { it.prefsStored && !it.prefs.todayTasksHideEmpty }
+                assertEquals(tasksShown, dataB.prefs, "The other device follows, and nothing else changes")
+                assertEquals(null, dataB.prefs.todayHideEmpty)
+
+                // Topics "Hide when empty" on: the list is written with topics and never with tasks.
+                val withTopics = dataB.prefs.withHiddenWhenEmpty(TodayHideableSection.Topics, hide = true)
+                storeB.write(listOfNotNull(savePrefs(dataB, withTopics)))
+                val onA = storeA.observe().first { it.prefs.todayHideEmpty != null && !it.pendingWrites }.prefs
+                assertEquals(setOf(TodayHideableSection.Topics), onA.todayHideEmpty)
+                assertEquals(false, onA.todayTasksHideEmpty, "The Tasks switch keeps its value")
+
+                // A document without the field, as saved by a build before D101, reads as on.
+                val main = doc(deviceA.backend.firestore, "users", deviceA.accountId.value, "prefs", "main")
+                val old = jsObject("topicsView" to "board", "captureType" to "task", "updatedAt" to serverTimestamp(), "schemaVersion" to 1)
+                setDoc(main, old).await()
+                val older = storeB.observe().first { it.prefs.topicsView == TopicsView.Board && it.prefs.todayHideEmpty == null }
+                assertEquals(true, older.prefs.todayTasksHideEmpty)
                 assertTrue(storeA.refused.value.isEmpty())
                 assertTrue(storeB.refused.value.isEmpty())
             } finally {

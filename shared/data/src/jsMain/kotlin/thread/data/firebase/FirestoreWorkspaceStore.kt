@@ -107,7 +107,8 @@ class WorkspaceReadException(
  *   Today's layouts (D95) are optional and may be null, not set: `todayLayout?`, a map of the places `top`, `left`,
  *   `right` and `bottom`, each a list of card ids in order, and `todayPhoneLayout?`, one list of card ids.
  *   `meetingTitleFit?` (D97), `diagonal`, `vertical`, `flags` or `wrap`, is optional; without it, or with a value this
- *   build does not know, narrow meeting titles run along the diagonal.
+ *   build does not know, narrow meeting titles run along the diagonal. `todayTasksHideEmpty?` (D101, bool) is optional;
+ *   without it Today's Tasks card hides while it has no task, as before. `todayHideEmpty` never holds `tasks`.
  * - `users/{uid}/notes/{noteId}`: read as the Notes listing (adr/ADR-011-notes-in-the-workspace.md). This store writes
  *   only `{inbox, discarded, createdAt, updatedAt, schemaVersion}`; the title, preview, head and Trash state belong to
  *   [FirestoreNoteSyncRemote], and the merge keeps them.
@@ -458,6 +459,7 @@ class FirestoreWorkspaceStore internal constructor(
         fun writes(field: (WorkspacePrefs) -> Any?): Boolean = if (before == null) field(prefs) != null else field(before) != field(prefs)
         if (writes { it.todayTopicsView }) data.todayTopicsView = prefs.todayTopicsView?.id
         if (writes { it.todayHideEmpty }) data.todayHideEmpty = prefs.todayHideEmpty?.ids { it.id }
+        if (writes { it.todayTasksHideEmpty }) data.todayTasksHideEmpty = prefs.todayTasksHideEmpty
         if (writes { it.todayGroupBy }) data.todayGroupBy = prefs.todayGroupBy.id
         if (writes { it.todayPastMeetings }) data.todayPastMeetings = prefs.todayPastMeetings
         if (writes { it.todayTopicCategories }) data.todayTopicCategories = prefs.todayTopicCategories.ids { it.id }
@@ -956,6 +958,7 @@ private fun decodePrefs(snapshot: DocumentSnapshot): WorkspacePrefs {
         meetingTitleFit = MeetingTitleFit.fromId(stringOrNull(data.meetingTitleFit)) ?: MeetingTitleFit.Diagonal,
         todayTopicsView = TopicsView.fromId(stringOrNull(data.todayTopicsView)),
         todayHideEmpty = stringsOrNull(data.todayHideEmpty)?.mapNotNull(TodayHideableSection::fromId)?.toSet(),
+        todayTasksHideEmpty = booleanOrNull(data.todayTasksHideEmpty) ?: true,
         todayGroupBy = TodayGroupBy.fromId(stringOrNull(data.todayGroupBy)) ?: TodayGroupBy.DueDate,
         todayPastMeetings = wholeOrNull(data.todayPastMeetings)?.takeIf { it in 0..PAST_MEETINGS_MAX }?.toInt(),
         todayTopicCategories =

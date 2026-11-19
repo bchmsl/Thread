@@ -380,8 +380,8 @@ private fun placeOf(
 }
 
 /**
- * The card's hide choice from Settings > Today (D-6): "Hide when empty" for Meetings, Reminders and Review requested,
- * the "Topics shown" checkboxes for Topics. Tasks has none.
+ * The card's hide choices from Settings > Today (D-6): "Hide when empty" for every card (Tasks and Topics since D101),
+ * then the "Topics shown" checkboxes for Topics.
  */
 @Composable
 private fun HideControl(
@@ -391,16 +391,13 @@ private fun HideControl(
     onChange: (TodayEditChange) -> Unit,
 ) {
     val section = hideableSection(card)
-    if (section != null) {
-        val id = "te-hide-${card.id}"
-        Div({ classes("ledit-card__hide") }) {
-            CheckBox(section in edit.hidden, label = "Hide $name when empty", classes = listOf("switch"), id = id, switch = true) { on ->
-                val text = if (on) "$name will hide when empty" else "$name will always show"
-                onChange(TodayEditChange(edit.withHidden(section, on), id, text))
-            }
-            Label(id) { Text("Hide when empty") }
+    val id = "te-hide-${card.id}"
+    Div({ classes("ledit-card__hide") }) {
+        CheckBox(section in edit.hidden, label = "Hide $name when empty", classes = listOf("switch"), id = id, switch = true) { on ->
+            val text = if (on) "$name will hide when empty" else "$name will always show"
+            onChange(TodayEditChange(edit.withHidden(section, on), id, text))
         }
-        return
+        Label(id) { Text("Hide when empty") }
     }
     if (card != TodayCard.Topics) return
     Div({
@@ -445,12 +442,13 @@ internal fun PhoneColumn(
     }) { cards.forEach { key(it) { drawCard(it) } } }
 }
 
-private fun hideableSection(card: TodayCard): TodayHideableSection? =
+private fun hideableSection(card: TodayCard): TodayHideableSection =
     when (card) {
         TodayCard.Meetings -> TodayHideableSection.Meetings
+        TodayCard.Tasks -> TodayHideableSection.Tasks
         TodayCard.Reminders -> TodayHideableSection.Reminders
         TodayCard.ReviewRequested -> TodayHideableSection.ReviewRequested
-        TodayCard.Tasks, TodayCard.Topics -> null
+        TodayCard.Topics -> TodayHideableSection.Topics
     }
 
 /** A card's name in edit mode and its announcements. */

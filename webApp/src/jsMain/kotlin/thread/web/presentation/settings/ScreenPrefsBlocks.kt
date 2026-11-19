@@ -27,6 +27,7 @@ import thread.domain.workspace.TopicHideableSection
 import thread.domain.workspace.TopicsView
 import thread.domain.workspace.todayHiddenWhenEmpty
 import thread.domain.workspace.todayTopicsLayout
+import thread.domain.workspace.withHiddenWhenEmpty
 import thread.web.presentation.CheckBox
 import thread.web.presentation.LocalToasts
 import thread.web.presentation.Place
@@ -215,8 +216,9 @@ private const val TOPICS_SHOWN_HINT =
     "Today shows the Topics whose status is in a checked category, grouped by status. With none checked, it leaves Topics out."
 
 /**
- * Hide empty sections (D86): a checkbox per Today section that can hide when empty. Each change saves the whole list,
- * never the switch it replaces, so an empty list stays empty instead of falling back to that switch.
+ * Hide empty sections (D86, D101): a checkbox per Today card, in card order, the same choices as edit mode's "Hide when
+ * empty". Tasks saves its own field; any other card saves the whole list, never the switch it replaces, so an empty list
+ * stays empty instead of falling back to that switch ([withHiddenWhenEmpty]).
  */
 @Composable
 private fun HideEmptyPref(workspace: WorkspaceModel) {
@@ -242,8 +244,7 @@ private fun HideEmptyPref(workspace: WorkspaceModel) {
                 val id = "he-${section.id}"
                 Span({ classes("pref-check") }) {
                     CheckBox(section in hidden, label = null, id = id) { on ->
-                        val now = workspace.prefs.todayHiddenWhenEmpty
-                        workspace.setPrefs(workspace.prefs.copy(todayHideEmpty = if (on) now + section else now - section))
+                        workspace.setPrefs(workspace.prefs.withHiddenWhenEmpty(section, on))
                     }
                     Label(id) { Text(hideableLabel(section)) }
                 }
@@ -253,7 +254,7 @@ private fun HideEmptyPref(workspace: WorkspaceModel) {
 }
 
 private const val HIDE_EMPTY_HINT =
-    "A checked section shows only when it has something. A meetings problem always shows. Empty task groups always hide."
+    "A checked section shows only when it has something. A meetings problem always shows. Inside Tasks, an empty group always hides."
 
 private const val GROUP_TASKS_HINT =
     "Due date: Completed (when completed tasks show), Today, Tomorrow and Upcoming. Empty groups hide."
@@ -281,8 +282,10 @@ private const val PAST_MEETINGS_HINT = "How many ended meetings the Vertical lay
 private fun hideableLabel(section: TodayHideableSection): String =
     when (section) {
         TodayHideableSection.Meetings -> "Meetings"
+        TodayHideableSection.Tasks -> "Tasks"
         TodayHideableSection.Reminders -> "Reminders"
         TodayHideableSection.ReviewRequested -> "Review requested"
+        TodayHideableSection.Topics -> "Topics"
     }
 
 /**

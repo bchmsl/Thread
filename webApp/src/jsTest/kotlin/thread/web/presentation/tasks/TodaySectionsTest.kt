@@ -19,6 +19,8 @@ import thread.domain.workspace.TodayHideableSection
 import thread.domain.workspace.TodayHideableSection.Meetings
 import thread.domain.workspace.TodayHideableSection.Reminders
 import thread.domain.workspace.TodayHideableSection.ReviewRequested
+import thread.domain.workspace.TodayHideableSection.Tasks
+import thread.domain.workspace.TodayHideableSection.Topics
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.todayHiddenWhenEmpty
 import kotlin.test.Test
@@ -28,8 +30,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * D77, D86: which Today sections show for each mix of Settings "Hide empty sections" (Meetings, Reminders, Review
- * requested), empty task groups (always hidden, Q2) and the meetings (D78, D79). SYNTHETIC tasks and pull requests.
+ * D77, D86, D101: which Today sections show for each mix of the "Hide when empty" choices (Meetings, Tasks, Reminders,
+ * Review requested, Topics), "Topics shown" (D89) and the meetings (D78, D79). SYNTHETIC tasks and pull requests.
  */
 class TodaySectionsTest {
     private val pull =
@@ -42,9 +44,15 @@ class TodaySectionsTest {
             webUrl = null,
         )
 
-    /** Every mix of the three checkboxes, none checked first. */
+    /** Every mix of the five checkboxes, none checked first. */
     private val everyMix: List<Set<TodayHideableSection>> =
-        (0 until 8).map { bits -> TodayHideableSection.entries.filterIndexed { index, _ -> bits and (1 shl index) != 0 }.toSet() }
+        (0 until 32).map { bits -> TodayHideableSection.entries.filterIndexed { index, _ -> bits and (1 shl index) != 0 }.toSet() }
+
+    /** The side column's cards. */
+    private val railCards = setOf(Meetings, Reminders, ReviewRequested)
+
+    /** What "Nothing for today" stands for: Tasks and the side column, all hidden. */
+    private val nothingCards = railCards + Tasks
 
     private fun page(vararg items: PullRequestSummary) = Saved(PullRequestListPage(items.toList(), items.size, isIncomplete = false), 0L)
 
@@ -56,7 +64,9 @@ class TodaySectionsTest {
         meetingsShown: Boolean = true,
         meetingsContent: Boolean = false,
         layout: MeetingsLayout = MeetingsLayout.Vertical,
-    ) = TodaySections(hidden, hasTasks, reminderRows, reviewContent, meetingsShown, meetingsContent, layout)
+        topicsShown: Boolean = true,
+        topicsContent: Boolean = false,
+    ) = TodaySections(hidden, hasTasks, reminderRows, reviewContent, meetingsShown, meetingsContent, layout, topicsShown, topicsContent)
 
     @Test
     fun reviewRequestsCountOnlyWhenThereIsSomethingToActOn() {
@@ -76,37 +86,61 @@ class TodaySectionsTest {
     }
 
     @Test
-    fun withNothingCheckedEveryCardShowsButAnEmptyTaskGroupDoesNot() {
+    fun withNothingCheckedEveryCardShowsEvenEmpty() {
         val empty = sections(emptySet())
         assertTrue(empty.meetings)
         assertTrue(empty.reminders)
         assertTrue(empty.review)
         assertTrue(empty.rail)
-        assertFalse(empty.main, "Q2: no task, no task group, Today's too")
+        assertTrue(empty.main, "D101: Tasks with its hide choice off says it has no task")
+        assertEquals(TodayCard.entries.toSet(), empty.drawn, "Topics with no Topic shows its empty state")
         assertFalse(empty.nothing)
     }
 
     @Test
+    fun byDefaultOnlyTasksHidesWhenEmpty() {
+        // D101: the look before D101 is kept until the owner changes a choice.
+        val defaults = WorkspacePrefs().todayHiddenWhenEmpty
+        assertEquals(setOf(Tasks), defaults)
+        val empty = sections(defaults)
+        assertFalse(empty.main, "Q2: no task, no Tasks card")
+        assertEquals(setOf(TodayCard.Meetings, TodayCard.Reminders, TodayCard.ReviewRequested, TodayCard.Topics), empty.drawn)
+        assertTrue(sections(defaults, hasTasks = true).main)
+        assertTrue(TodayCard.Topics in sections(defaults, topicsContent = true).drawn)
+    }
+
+    @Test
     fun eachCheckedSectionHidesOnlyWhileItIsEmpty() {
-        assertEquals(8, everyMix.toSet().size)
+        assertEquals(32, everyMix.toSet().size)
         everyMix.forEach { hidden ->
             val empty = sections(hidden)
             assertEquals(Meetings !in hidden, empty.meetings, "Meetings with $hidden")
+            assertEquals(Tasks !in hidden, empty.main, "Tasks with $hidden")
             assertEquals(Reminders !in hidden, empty.reminders, "Reminders with $hidden")
             assertEquals(ReviewRequested !in hidden, empty.review, "Review requested with $hidden")
-            assertEquals(hidden.size < 3, empty.rail, "Side column with $hidden")
-            assertFalse(empty.main)
-            assertEquals(hidden.size == 3, empty.nothing, "Nothing for today with $hidden")
+            assertEquals(Topics !in hidden, TodayCard.Topics in empty.drawn, "Topics with $hidden")
+            assertEquals(railCards.any { it !in hidden }, empty.rail, "Side column with $hidden")
+            assertEquals(hidden.containsAll(nothingCards), empty.nothing, "Nothing for today with $hidden")
 
-            val full = sections(hidden, reminderRows = 2, reviewContent = ReviewContent.Requests, meetingsContent = true)
-            assertTrue(full.meetings && full.reminders && full.review, "Something to show keeps every card with $hidden")
+            val full =
+                sections(
+                    hidden,
+                    hasTasks = true,
+                    reminderRows = 2,
+                    reviewContent = ReviewContent.Requests,
+                    meetingsContent = true,
+                    topicsContent = true,
+                )
+            assertEquals(TodayCard.entries.toSet(), full.drawn, "Something to show keeps every card with $hidden")
             assertFalse(full.nothing)
         }
     }
 
     @Test
     fun aCheckedSectionComesBackAloneWhenSomethingArrives() {
-        val all = setOf(Meetings, Reminders, ReviewRequested)
+        val all = TodayHideableSection.entries.toSet()
+        assertEquals(emptySet(), sections(all).drawn)
+
         val meeting = sections(all, meetingsContent = true)
         assertEquals(listOf(true, false, false), listOf(meeting.meetings, meeting.reminders, meeting.review))
         assertFalse(meeting.nothing)
@@ -119,6 +153,14 @@ class TodaySectionsTest {
 
         val problem = sections(all, reviewContent = ReviewContent.Problem)
         assertTrue(problem.review, "GitHub could not answer and nothing is saved: say so")
+
+        val task = sections(all, hasTasks = true)
+        assertEquals(setOf(TodayCard.Tasks), task.drawn)
+        assertFalse(task.nothing)
+
+        val topic = sections(all, topicsContent = true)
+        assertEquals(setOf(TodayCard.Topics), topic.drawn, "A Topic in a picked category brings the card back")
+        assertTrue(topic.nothing, "Nothing for today, Topics aside")
     }
 
     @Test
@@ -152,7 +194,7 @@ class TodaySectionsTest {
                 assertFalse(notSetUp.timeline)
             }
         }
-        val onlyMeetingsLeft = sections(setOf(Reminders, ReviewRequested), meetingsShown = false)
+        val onlyMeetingsLeft = sections(setOf(Tasks, Reminders, ReviewRequested), meetingsShown = false)
         assertFalse(onlyMeetingsLeft.rail)
         assertTrue(onlyMeetingsLeft.nothing)
     }
@@ -174,7 +216,7 @@ class TodaySectionsTest {
 
     @Test
     fun theTimelineHidesWhenEmptyAndComesBackLikeTheCard() {
-        val all = setOf(Meetings, Reminders, ReviewRequested)
+        val all = nothingCards
         val empty = sections(all, layout = MeetingsLayout.Horizontal)
         assertFalse(empty.timeline)
         assertTrue(empty.nothing)
@@ -197,6 +239,7 @@ class TodaySectionsTest {
         assertTrue(empty.meetings)
         assertFalse(empty.reminders)
         assertFalse(empty.review)
+        assertFalse(empty.main, "D101: Tasks still hides when empty")
         assertFalse(empty.nothing)
         assertTrue(sections(WorkspacePrefs().todayHiddenWhenEmpty).reminders, "Off by default")
     }
@@ -204,21 +247,23 @@ class TodaySectionsTest {
     @Test
     fun theDrawnCardsAreTheSectionsThatShow() {
         // D95: the layout places these; Meetings is one card for the side card and the timeline alike.
+        val defaults = setOf(Tasks)
         assertEquals(
             setOf(TodayCard.Meetings, TodayCard.Reminders, TodayCard.ReviewRequested, TodayCard.Topics),
-            sections(emptySet()).drawn,
+            sections(defaults).drawn,
         )
         assertEquals(
             setOf(TodayCard.Meetings, TodayCard.Tasks, TodayCard.Reminders, TodayCard.ReviewRequested, TodayCard.Topics),
-            sections(emptySet(), hasTasks = true, layout = MeetingsLayout.Horizontal).drawn,
+            sections(defaults, hasTasks = true, layout = MeetingsLayout.Horizontal).drawn,
         )
-        val allHidden = setOf(Meetings, Reminders, ReviewRequested)
+        val allHidden = nothingCards
         assertEquals(setOf(TodayCard.Topics), sections(allHidden).drawn, "Nothing for today, Topics aside")
         assertEquals(setOf(TodayCard.Tasks), sections(allHidden, hasTasks = true, meetingsShown = false).drawn - TodayCard.Topics)
-        val noTopics =
-            TodaySections(allHidden, false, 0, ReviewContent.Nothing, meetingsShown = true, meetingsContent = false, topicsShown = false)
+        val noTopics = sections(allHidden, topicsShown = false, topicsContent = true)
         assertEquals(emptySet(), noTopics.drawn, "Topics shown picks no category (D89)")
         assertTrue(noTopics.nothing)
+        assertEquals(emptySet(), sections(allHidden, topicsShown = false).drawn, "Not set up, whatever Hide when empty says")
+        assertEquals(emptySet(), sections(allHidden + Topics).drawn, "Topics hides while no Topic is in a picked category")
     }
 
     @Test
@@ -239,12 +284,15 @@ class TodaySectionsTest {
     @Test
     fun editModeSaysWhyACardIsNotShown() {
         val all = TodayHideableSection.entries.toSet()
-        val empty = TodaySections(all, false, 0, ReviewContent.Nothing, meetingsShown = true, meetingsContent = false, topicsShown = false)
+        val empty = sections(all, topicsShown = false)
         assertEquals(NotShown.Empty, empty.notShown(TodayCard.Meetings))
         assertEquals(NotShown.Empty, empty.notShown(TodayCard.Reminders))
         assertEquals(NotShown.Empty, empty.notShown(TodayCard.ReviewRequested))
-        assertEquals(NotShown.NoTasks, empty.notShown(TodayCard.Tasks))
+        assertEquals(NotShown.Empty, empty.notShown(TodayCard.Tasks), "D101: Tasks hides because it is empty")
         assertEquals(NotShown.NoTopicsPicked, empty.notShown(TodayCard.Topics))
+        assertEquals(NotShown.Empty, sections(all).notShown(TodayCard.Topics), "Picked, but no Topic is in those categories")
+        assertNull(sections(all - Tasks).notShown(TodayCard.Tasks), "Hide when empty off: drawn with no task")
+        assertNull(sections(all - Topics).notShown(TodayCard.Topics), "Hide when empty off: drawn with no Topic")
 
         val notSetUp = TodaySections(emptySet(), true, 0, ReviewContent.Nothing, meetingsShown = false, meetingsContent = false)
         assertEquals(NotShown.NotSetUp, notSetUp.notShown(TodayCard.Meetings), "Not set up hides it whatever Hide when empty says")
@@ -253,7 +301,7 @@ class TodaySectionsTest {
         val horizontal = sections(all, meetingsContent = true, layout = MeetingsLayout.Horizontal)
         assertNull(horizontal.notShown(TodayCard.Meetings), "The timeline is the Meetings card")
         assertEquals(
-            listOf("Not shown now: empty", "Not shown: meetings not set up", "Shows when there are tasks", "Not shown: no Topics picked"),
+            listOf("Not shown now: empty", "Not shown: meetings not set up", "Not shown: no Topics picked"),
             NotShown.entries.map { it.text },
         )
     }

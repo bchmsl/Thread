@@ -144,7 +144,10 @@ class TodayLayoutEditTest {
 
         val saved = edit.done(latest)
 
-        assertEquals(TodayHideableSection.entries.toSet(), saved.todayHideEmpty)
+        assertEquals(
+            setOf(TodayHideableSection.Meetings, TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested),
+            saved.todayHideEmpty,
+        )
         assertEquals(latest.copy(todayHideEmpty = saved.todayHideEmpty), saved, "Nothing else changes")
         assertEquals(latest, edit.withHidden(TodayHideableSection.Meetings, hide = false).done(latest), "Switched back: nothing to write")
     }
@@ -153,11 +156,30 @@ class TodayLayoutEditTest {
     fun aHideSwitchStartsFromTheSwitchBeforeD83() {
         val prefs = WorkspacePrefs(hideEmptySections = true)
         val edit = TodayLayoutEdit.start(prefs, TodayLayoutKind.Phone)
-        assertEquals(setOf(TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested), edit.hidden)
+        val fromTheSwitch = setOf(TodayHideableSection.Tasks, TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested)
+        assertEquals(fromTheSwitch, edit.hidden, "Tasks hides when empty by default (D101)")
 
         val saved = edit.withHidden(TodayHideableSection.Reminders, hide = false).done(prefs)
 
         assertEquals(setOf(TodayHideableSection.ReviewRequested), saved.todayHideEmpty)
+        assertEquals(true, saved.todayTasksHideEmpty)
+    }
+
+    @Test
+    fun theTasksSwitchSavesOnlyItsOwnFieldAndTopicsJoinsTheLatestList() {
+        val prefs = WorkspacePrefs()
+        val edit = TodayLayoutEdit.start(prefs, TodayLayoutKind.Desktop)
+        assertEquals(setOf(TodayHideableSection.Tasks), edit.hidden, "Tasks starts on, Topics off (D101)")
+
+        val tasksShown = edit.withHidden(TodayHideableSection.Tasks, hide = false).done(prefs)
+        assertEquals(prefs.copy(todayTasksHideEmpty = false), tasksShown, "The list stays not set")
+
+        // Meanwhile another device hides Reminders when empty.
+        val latest = prefs.copy(todayHideEmpty = setOf(TodayHideableSection.Reminders))
+        val topicsHidden = edit.withHidden(TodayHideableSection.Topics, hide = true).done(latest)
+        assertEquals(latest.copy(todayHideEmpty = setOf(TodayHideableSection.Reminders, TodayHideableSection.Topics)), topicsHidden)
+        val switchedBack = edit.withHidden(TodayHideableSection.Topics, hide = true).withHidden(TodayHideableSection.Topics, hide = false)
+        assertEquals(latest, switchedBack.done(latest), "Switched back: nothing to write")
     }
 
     @Test

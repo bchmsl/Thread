@@ -88,8 +88,10 @@ data class WorkspacePrefs(
     val meetingTitleFit: MeetingTitleFit = MeetingTitleFit.Diagonal,
     /** Today, "Topics open as". Not set: see [todayTopicsLayout]. */
     val todayTopicsView: TopicsView? = null,
-    /** Today, "Hide when empty". Not set: see [todayHiddenWhenEmpty]. */
+    /** Today, "Hide when empty", for every card but Tasks. Not set: see [todayHiddenWhenEmpty]. */
     val todayHideEmpty: Set<TodayHideableSection>? = null,
+    /** Today, "Hide when empty" for the Tasks card (D101). On by default: with no task, Tasks hides, as before D101. */
+    val todayTasksHideEmpty: Boolean = true,
     /** Today, "Group tasks by". Due date by default. */
     val todayGroupBy: TodayGroupBy = TodayGroupBy.DueDate,
     /** Today, past meetings the Vertical card shows, 0 to [PAST_MEETINGS_MAX]. Null shows them all, the default. */

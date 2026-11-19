@@ -36,16 +36,17 @@ internal fun reviewContent(
 }
 
 /**
- * Which of Today's sections show (D77, D86). A task group never shows empty (D53; Today too since D86, Q2): [hasTasks]
- * says whether Today has a Task to show in any group (D90). Settings "Hide empty sections" names Meetings, Reminders
- * and Review requested ([hidden], from [thread.domain.workspace.todayHiddenWhenEmpty]): each one named there shows
- * only while it has something, and comes back as soon as something arrives. The Topics card is not one of these: it
- * shows unless "Topics shown" picks no category (D89).
+ * Which of Today's sections show (D77, D86, D101). Settings "Hide empty sections" and edit mode name the cards that hide
+ * while empty ([hidden], from [thread.domain.workspace.todayHiddenWhenEmpty]): each one named there shows only while it
+ * has something, and comes back as soon as something arrives. Tasks is named until the owner turns it off (D101); inside
+ * it an empty task group never shows (D53, D86 Q2). The Topics card also stays out while "Topics shown" picks no
+ * category (D89), whatever its hide choice.
  *
- * [reminderRows]: today's reminders that have a row to show. [meetingsShown]: the meetings are set up
- * ([thread.web.presentation.calendar.MeetingsModel.cardShown]). [meetingsContent]: they have something to show
- * ([thread.web.presentation.calendar.TodayMeetingsView.hasContent]): a meeting left today, or a problem that never
- * hides. [meetingsLayout]: where (D79). [topicsShown]: "Topics shown" picks a category (D89).
+ * [hasTasks]: Today has a Task to show in any group (D90). [reminderRows]: today's reminders that have a row to show.
+ * [meetingsShown]: the meetings are set up ([thread.web.presentation.calendar.MeetingsModel.cardShown]).
+ * [meetingsContent]: they have something to show ([thread.web.presentation.calendar.TodayMeetingsView.hasContent]): a
+ * meeting left today, or a problem that never hides. [meetingsLayout]: where (D79). [topicsShown]: "Topics shown" picks a
+ * category (D89). [topicsContent]: a Topic is in a picked category.
  */
 internal class TodaySections(
     hidden: Set<TodayHideableSection>,
@@ -56,6 +57,7 @@ internal class TodaySections(
     meetingsContent: Boolean,
     meetingsLayout: MeetingsLayout = MeetingsLayout.Vertical,
     topicsShown: Boolean = true,
+    topicsContent: Boolean = true,
 ) {
     private val meetingsSetUp = meetingsShown
     private val meetingsAny = meetingsShown && (TodayHideableSection.Meetings !in hidden || meetingsContent)
@@ -69,8 +71,11 @@ internal class TodaySections(
     val reminders: Boolean = TodayHideableSection.Reminders !in hidden || reminderRows > 0
     val review: Boolean = TodayHideableSection.ReviewRequested !in hidden || reviewContent != ReviewContent.Nothing
 
-    /** The main column has a task group to show. */
-    val main: Boolean = hasTasks
+    /** The Tasks card shows: a task group, or "No tasks for today." while its "Hide when empty" is off (D101). */
+    val main: Boolean = TodayHideableSection.Tasks !in hidden || hasTasks
+
+    private val topicsSetUp = topicsShown
+    private val topics = topicsShown && (TodayHideableSection.Topics !in hidden || topicsContent)
 
     /** The side column has a card to show. */
     val rail: Boolean = meetings || reminders || review
@@ -85,7 +90,7 @@ internal class TodaySections(
             if (main) add(TodayCard.Tasks)
             if (reminders) add(TodayCard.Reminders)
             if (review) add(TodayCard.ReviewRequested)
-            if (topicsShown) add(TodayCard.Topics)
+            if (topics) add(TodayCard.Topics)
         }
 
     /** Why Today does not draw [card] now, or null when it does (D98). Edit mode tags such a card. */
@@ -93,8 +98,7 @@ internal class TodaySections(
         when {
             card in drawn -> null
             card == TodayCard.Meetings && !meetingsSetUp -> NotShown.NotSetUp
-            card == TodayCard.Tasks -> NotShown.NoTasks
-            card == TodayCard.Topics -> NotShown.NoTopicsPicked
+            card == TodayCard.Topics && !topicsSetUp -> NotShown.NoTopicsPicked
             else -> NotShown.Empty
         }
 }
@@ -108,9 +112,6 @@ internal enum class NotShown(
 
     /** No meeting source yet (D77, D78). */
     NotSetUp("Not shown: meetings not set up"),
-
-    /** No task to show in any group (D86, Q2). */
-    NoTasks("Shows when there are tasks"),
 
     /** "Topics shown" picks no category (D89). */
     NoTopicsPicked("Not shown: no Topics picked"),

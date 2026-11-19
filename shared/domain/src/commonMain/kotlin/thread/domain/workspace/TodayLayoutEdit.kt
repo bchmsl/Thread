@@ -207,12 +207,9 @@ data class TodayLayoutEdit(
                         else -> latest
                     }
             }
-        val switched = TodayHideableSection.entries.filter { (it in hidden) != (it in start.hidden) }
-        if (switched.isNotEmpty()) {
-            val stored = latest.todayHiddenWhenEmpty
-            val merged = switched.fold(stored) { set, section -> if (section in hidden) set + section else set - section }
-            next = next.copy(todayHideEmpty = merged)
-        }
+        TodayHideableSection.entries
+            .filter { (it in hidden) != (it in start.hidden) }
+            .forEach { section -> next = next.withHiddenWhenEmpty(section, hide = section in hidden) }
         if (categories != start.categories) next = next.copy(todayTopicCategories = categories)
         return next
     }

@@ -252,7 +252,8 @@ class RefusedChangesTest {
         val stored =
             WorkspacePrefs(
                 todayTopicsView = TopicsView.Board,
-                todayHideEmpty = setOf(TodayHideableSection.Meetings),
+                todayHideEmpty = setOf(TodayHideableSection.Meetings, TodayHideableSection.Topics),
+                todayTasksHideEmpty = false,
                 todayGroupBy = TodayGroupBy.Topic,
                 todayPastMeetings = 3,
                 todayTopicCategories = setOf(StatusCategory.Planned),
@@ -273,6 +274,8 @@ class RefusedChangesTest {
         // One field the server did not keep is enough.
         val partly = stored.copy(inboxShowNotes = true)
         assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = partly)).size)
+        val tasksNotKept = stored.copy(todayTasksHideEmpty = true)
+        assertEquals(1, unconfirmedChanges(leftovers, emptyList(), data(prefsStored = true).copy(prefs = tasksNotKept)).size, "D101")
     }
 
     @Test

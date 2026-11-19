@@ -304,7 +304,16 @@ class FirestoreWorkspaceRulesEmulatorTest {
             val accepted =
                 listOf<Pair<String, List<Any?>>>(
                     "todayTopicsView" to listOf("list", "board", null),
-                    "todayHideEmpty" to listOf(arrayOf<String>(), arrayOf("reminders"), arrayOf("meetings", "reminders", "review"), null),
+                    "todayHideEmpty" to
+                        listOf(
+                            arrayOf<String>(),
+                            arrayOf("reminders"),
+                            arrayOf("meetings", "reminders", "review"),
+                            arrayOf("topics"),
+                            arrayOf("meetings", "reminders", "review", "topics"),
+                            null,
+                        ),
+                    "todayTasksHideEmpty" to listOf(true, false),
                     "todayGroupBy" to listOf("none", "topic", "due"),
                     "todayPastMeetings" to listOf(0, 1, 20, null),
                     "todayTopicCategories" to listOf(arrayOf<String>(), arrayOf("active"), arrayOf("planned", "active", "paused", "done")),
@@ -342,7 +351,11 @@ class FirestoreWorkspaceRulesEmulatorTest {
                             arrayOf("Meetings"),
                             arrayOf(1),
                             arrayOf("meetings", "reminders", "review", "review"),
+                            // D101: Tasks is never in the list; it has its own field.
+                            arrayOf("tasks"),
+                            arrayOf("topics", "topics"),
                         ),
+                    "todayTasksHideEmpty" to listOf("yes", 1, null, arrayOf("tasks")),
                     "todayGroupBy" to listOf("repo", "Due", "", true, null),
                     "todayPastMeetings" to listOf(-1, 21, 2.5, "3", true),
                     "todayTopicCategories" to
@@ -381,6 +394,8 @@ class FirestoreWorkspaceRulesEmulatorTest {
             assertFails(setDoc(prefsRef(stranger, owner), prefs(*screenPrefs))).await()
             val strangerChange = jsObject("inboxShowNotes" to false, "updatedAt" to serverTimestamp())
             assertFails(mergeSetPromise(prefsRef(stranger, owner), strangerChange, stranger)).await()
+            val strangerTasks = jsObject("todayTasksHideEmpty" to false, "updatedAt" to serverTimestamp())
+            assertFails(mergeSetPromise(prefsRef(stranger, owner), strangerTasks, stranger)).await()
         }
 
     /** Today's desktop layout as the app stores it (D95): every place, each with its card ids in order. */

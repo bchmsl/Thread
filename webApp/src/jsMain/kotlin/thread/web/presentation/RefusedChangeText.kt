@@ -180,7 +180,8 @@ private fun screenPrefsLines(prefs: WorkspacePrefs): List<String> {
         "Today: Topics open as ${prefs.todayTopicsView?.id ?: NOT_SET}, tasks grouped by ${prefs.todayGroupBy.id}, " +
             "past meetings ${prefs.todayPastMeetings ?: "all"}, narrow meeting titles ${prefs.meetingTitleFit.id}, " +
             "Topics shown ${listed(prefs.todayTopicCategories.sortedBy { it.ordinal }.map { it.id })}, " +
-            "hidden when empty ${listed(prefs.todayHideEmpty?.sortedBy { it.ordinal }?.map { it.id })}",
+            "hidden when empty ${listed(prefs.todayHideEmpty?.sortedBy { it.ordinal }?.map { it.id })}, " +
+            "Tasks hide when empty ${onOff(prefs.todayTasksHideEmpty)}",
         "Inbox: completed tasks ${onOff(prefs.inboxShowCompleted)}, notes ${onOff(prefs.inboxShowNotes)}, " +
             "grouped by ${prefs.inboxGroupBy.id}",
         "Topic Details: completed tasks ${onOff(prefs.topicShowCompleted)}, " +

@@ -185,6 +185,7 @@ private fun WorkspacePrefs.fields(): Map<String, Any?> =
         "meetingTitleFit" to meetingTitleFit,
         "todayTopicsView" to todayTopicsView,
         "todayHideEmpty" to todayHideEmpty,
+        "todayTasksHideEmpty" to todayTasksHideEmpty,
         "todayGroupBy" to todayGroupBy,
         "todayPastMeetings" to todayPastMeetings,
         "todayTopicCategories" to todayTopicCategories,

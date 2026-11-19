@@ -229,6 +229,7 @@ internal fun TodayScreen(
     val meetingsView = todayMeetingsView(meetings.state, now, zone, pastMeetings)
     val draft = edit
     // In edit mode the draft's hide choices say which cards Today would draw, for the "not shown" tags.
+    val topicCategories = draft?.categories ?: workspace.prefs.todayTopicCategories
     val sections =
         TodaySections(
             hidden = draft?.hidden ?: workspace.prefs.todayHiddenWhenEmpty,
@@ -238,7 +239,8 @@ internal fun TodayScreen(
             meetingsShown = meetings.cardShown,
             meetingsContent = meetingsView.hasContent,
             meetingsLayout = layout,
-            topicsShown = (draft?.categories ?: workspace.prefs.todayTopicCategories).isNotEmpty(),
+            topicsShown = topicCategories.isNotEmpty(),
+            topicsContent = todayTopicGroups(workspace.topics, workspace.statuses, topicCategories).isNotEmpty(),
         )
     if (draft != null) {
         TodayEditBar(
@@ -459,7 +461,8 @@ private fun AddForTodayForm(
  * - None: one list, in the same order.
  *
  * Only the headings change between them: the same Tasks show in the same order (A4). An empty group is not drawn (Q2).
- * Without headings for the day, the rows say when a Task is planned, today included.
+ * Without headings for the day, the rows say when a Task is planned, today included. With no Task at all, the card is
+ * drawn only while its "Hide when empty" is off (D101), as one empty group.
  */
 @Composable
 private fun TodayTaskGroups(
@@ -467,6 +470,10 @@ private fun TodayTaskGroups(
     workspace: WorkspaceModel,
     onOpenTask: (Task) -> Unit,
 ) {
+    if (tasks.isEmpty()) {
+        NoTasksForToday()
+        return
+    }
     val now = LocalNow.current
     val remindAt = workspace.taskReminderTimes
     // The Tasks for today, done or not, lead the order. They always show; "Show all" is for the later ones.
@@ -507,6 +514,25 @@ private fun TodayTaskGroups(
             TaskGroup("all", "all", "Tasks", Icon.Task, tasks, NONE_HINT, openByDefault = true) {
                 ShortenedList(tasks, keep = todayPart(tasks)) { shown -> TaskList(shown, workspace, onOpenTask, showPlanned = true) }
             }
+    }
+}
+
+/**
+ * The Tasks card with no Task in any group (D101): one Task section card that says so, like the empty Reminders card.
+ * The page's "Add task for today" button stays the one way to add, so the card has none.
+ */
+@Composable
+private fun NoTasksForToday() {
+    SectionCard(
+        kind = CardKind.Task,
+        headingId = "g-none",
+        bodyId = "gb-none",
+        title = "Tasks",
+        count = "0",
+        mark = Icon.Task,
+        attrs = { classes("tgroup--empty") },
+    ) {
+        P({ classes("scard__empty") }) { Text("No tasks for today.") }
     }
 }
 

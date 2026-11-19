@@ -209,6 +209,7 @@ internal object WorkspaceWriteJson {
             put("meetingTitleFit", prefs.meetingTitleFit.id)
             put("todayTopicsView", prefs.todayTopicsView?.id)
             put("todayHideEmpty", prefs.todayHideEmpty?.let { ids(it) { section -> section.id } } ?: JsonNull)
+            put("todayTasksHideEmpty", prefs.todayTasksHideEmpty)
             put("todayGroupBy", prefs.todayGroupBy.id)
             put("todayPastMeetings", prefs.todayPastMeetings)
             put("todayTopicCategories", ids(prefs.todayTopicCategories) { it.id })
@@ -261,6 +262,8 @@ internal object WorkspaceWriteJson {
             // not set where a value can be not set. A value this build does not know reads the same way.
             todayTopicsView = TopicsView.fromId(json.str("todayTopicsView")),
             todayHideEmpty = json.strings("todayHideEmpty")?.mapNotNull(TodayHideableSection::fromId)?.toSet(),
+            // Absent in changes saved by builds before D101: Tasks hides when empty, as it did.
+            todayTasksHideEmpty = json.bool("todayTasksHideEmpty") ?: true,
             todayGroupBy = TodayGroupBy.fromId(json.str("todayGroupBy")) ?: TodayGroupBy.DueDate,
             todayPastMeetings = json.int("todayPastMeetings")?.takeIf { it in 0..PAST_MEETINGS_MAX },
             todayTopicCategories =

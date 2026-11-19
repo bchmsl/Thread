@@ -142,6 +142,11 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutPrefs(screenPrefs, before = WorkspacePrefs()),
             // Back to not set, and an empty pick, which is not the same as not set.
             WorkspaceWrite.PutPrefs(WorkspacePrefs(todayHideEmpty = emptySet(), todayTopicCategories = emptySet()), before = screenPrefs),
+            // D101: Tasks shows when empty, and Topics hides when empty.
+            WorkspaceWrite.PutPrefs(
+                WorkspacePrefs(todayHideEmpty = setOf(TodayHideableSection.Topics), todayTasksHideEmpty = false),
+                before = WorkspacePrefs(),
+            ),
             WorkspaceWrite.PutFocusSession(focusSession),
             WorkspaceWrite.PutFocusSession(focusSession.copy(id = "f-run-2", outcome = FocusOutcome.Stopped, target = null)),
             WorkspaceWrite.PutTask(task, isNew = true),
@@ -185,6 +190,17 @@ class WorkspaceWriteJsonTest {
         val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(focusWorkMinutes = 50)))).single().jsonObject
         val value = stored.getValue("value").jsonObject
         val older = JsonObject(stored + ("value" to JsonObject(value - "focusMin" - "breakMin")))
+
+        assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
+    }
+
+    @Test
+    fun preferencesSavedBeforeD101HideAnEmptyTasksCard() {
+        val prefs = WorkspacePrefs(TopicsView.Board, CaptureKind.Note, keepCompleted = false, timeZone = "Asia/Tbilisi")
+        val stored = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutPrefs(prefs.copy(todayTasksHideEmpty = false)))).single().jsonObject
+        val value = stored.getValue("value").jsonObject
+        assertEquals(JsonPrimitive(false), value["todayTasksHideEmpty"])
+        val older = JsonObject(stored + ("value" to JsonObject(value - "todayTasksHideEmpty")))
 
         assertEquals(listOf(WorkspaceWrite.PutPrefs(prefs)), WorkspaceWriteJson.decode(JsonArray(listOf(older))))
     }
@@ -264,6 +280,7 @@ class WorkspaceWriteJsonTest {
                     mapOf(
                         "todayTopicsView" to JsonPrimitive("grid"),
                         "todayHideEmpty" to JsonArray(listOf(JsonPrimitive("meetings"), JsonPrimitive("later"), JsonPrimitive(1))),
+                        "todayTasksHideEmpty" to JsonPrimitive("no"),
                         "todayGroupBy" to JsonPrimitive("weekly"),
                         "todayPastMeetings" to JsonPrimitive(21),
                         "todayTopicCategories" to JsonPrimitive("active"),

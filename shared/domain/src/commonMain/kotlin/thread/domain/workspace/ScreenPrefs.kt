@@ -61,13 +61,19 @@ enum class ReviewPrsGroupBy(
     }
 }
 
-/** A Today section that can hide while it has nothing to show. Empty task groups always hide. */
+/**
+ * A Today card that can hide while it has nothing to show, in Today's card order. Inside the Tasks card an empty task
+ * group always hides. [Tasks] is kept apart from the others ([WorkspacePrefs.todayTasksHideEmpty], D101), so its id is
+ * never stored in [WorkspacePrefs.todayHideEmpty].
+ */
 enum class TodayHideableSection(
     val id: String,
 ) {
     Meetings("meetings"),
+    Tasks("tasks"),
     Reminders("reminders"),
     ReviewRequested("review"),
+    Topics("topics"),
     ;
 
     companion object {
@@ -104,13 +110,32 @@ val DEFAULT_TODAY_TOPIC_CATEGORIES: Set<StatusCategory> = setOf(StatusCategory.A
 fun WorkspacePrefs.todayTopicsLayout(onThisDevice: TopicsView?): TopicsView = todayTopicsView ?: onThisDevice ?: TopicsView.List
 
 /**
- * The Today sections that hide while empty. Until they are picked, they follow the one switch from before D83 (D77):
- * on hides Reminders and Review requested, off hides none.
+ * The Today cards that hide while empty. Tasks follows [WorkspacePrefs.todayTasksHideEmpty], on unless turned off (D101;
+ * D86, Q2 before). The others follow [WorkspacePrefs.todayHideEmpty]; until it is picked, the one switch from before
+ * D83 (D77): on hides Reminders and Review requested, off hides none.
  */
 val WorkspacePrefs.todayHiddenWhenEmpty: Set<TodayHideableSection>
-    get() =
-        todayHideEmpty
-            ?: if (hideEmptySections) setOf(TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested) else emptySet()
+    get() {
+        val listed =
+            todayHideEmpty
+                ?: if (hideEmptySections) setOf(TodayHideableSection.Reminders, TodayHideableSection.ReviewRequested) else emptySet()
+        val others = listed - TodayHideableSection.Tasks
+        return if (todayTasksHideEmpty) others + TodayHideableSection.Tasks else others
+    }
+
+/**
+ * These prefs with [section] hiding while empty, or not ([hide]). Tasks changes only [WorkspacePrefs.todayTasksHideEmpty];
+ * any other card writes the whole [WorkspacePrefs.todayHideEmpty], starting from what [todayHiddenWhenEmpty] reads, so
+ * the first change keeps what the D77 switch hid and an empty list stays empty.
+ */
+fun WorkspacePrefs.withHiddenWhenEmpty(
+    section: TodayHideableSection,
+    hide: Boolean,
+): WorkspacePrefs {
+    if (section == TodayHideableSection.Tasks) return copy(todayTasksHideEmpty = hide)
+    val others = todayHiddenWhenEmpty - TodayHideableSection.Tasks
+    return copy(todayHideEmpty = if (hide) others + section else others - section)
+}
 
 /**
  * Jira "Current sprint only": the synced choice, else [onThisDevice], the choice this device kept before D83 (D50),
