@@ -1,5 +1,6 @@
 package thread.domain.workspace
 
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.focus.FOCUS_HISTORY_LIMIT
 import thread.domain.focus.FocusSession
 import thread.domain.note.NoteSummary
@@ -63,6 +64,7 @@ private fun documentOf(write: WorkspaceWrite): String =
         is WorkspaceWrite.PutExternalRef -> "externalRefs/${write.reference.id}"
         is WorkspaceWrite.PutExternalLink -> "externalLinks/${write.link.id}"
         is WorkspaceWrite.PutMeetingLink -> "meetingLinks/${write.link.id}"
+        is WorkspaceWrite.PutMeetingAlternate -> "meetingAlternates/${write.alternate.seriesKey.value}"
         is WorkspaceWrite.PutFocusSession -> "focusSessions/${write.session.id}"
         is WorkspaceWrite.DeleteForever ->
             when (write.kind) {
@@ -94,6 +96,10 @@ private fun writtenFields(write: WorkspaceWrite): Map<String, Any?> =
                 put(LINKED, write.link.linked)
                 write.link.title?.let { put(TITLE, it) }
             }
+        // A new document leaves out what is not set (D83).
+        is WorkspaceWrite.PutMeetingAlternate ->
+            write.before?.let { changed(write.alternate.fields(), it.fields()) }
+                ?: write.alternate.fields().filterValues { it != null }
         is WorkspaceWrite.PutFocusSession -> write.session.fields()
         is WorkspaceWrite.DeleteForever -> emptyMap()
     }
@@ -116,6 +122,7 @@ private fun storedFields(
             data.externalLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked, DISMISSED to it.dismissed) }
         is WorkspaceWrite.PutMeetingLink ->
             data.meetingLinks.firstOrNull { it.id == write.link.id }?.let { mapOf(LINKED to it.linked, TITLE to it.title) }
+        is WorkspaceWrite.PutMeetingAlternate -> data.meetingAlternates.firstOrNull { it.seriesKey == write.alternate.seriesKey }?.fields()
         is WorkspaceWrite.PutFocusSession ->
             (data.focusSessions.firstOrNull { it.id == write.session.id } ?: write.session.takeIf { beyondHistory(it, data) })?.fields()
         is WorkspaceWrite.DeleteForever ->
@@ -220,6 +227,8 @@ private fun FocusSession.fields(): Map<String, Any?> =
         "outcome" to outcome,
         "target" to target,
     )
+
+private fun MeetingAlternate.fields(): Map<String, Any?> = mapOf(TITLE to title, "joinUrl" to joinUrl)
 
 /** Only the filing fields: the title, preview and Trash state belong to Note sync. */
 private fun NoteSummary.filing(): Map<String, Any?> = mapOf("inbox" to inbox, "discarded" to discarded)

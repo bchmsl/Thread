@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.calendar.MeetingLink
 import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.SeriesKey
@@ -153,6 +154,10 @@ class WorkspaceWriteJsonTest {
             WorkspaceWrite.PutExternalLink(TopicExternalLink(topic.id, reference.id, linked = false, dismissed = true)),
             WorkspaceWrite.PutMeetingLink(MeetingLink(topic.id, series, title = "Synthetic standup")),
             WorkspaceWrite.PutMeetingLink(MeetingLink(topic.id, series, linked = false)),
+            WorkspaceWrite.PutMeetingAlternate(
+                MeetingAlternate(series, title = "SYNTHETIC Team sync", joinUrl = "https://meet.synthetic.example/r"),
+            ),
+            WorkspaceWrite.PutMeetingAlternate(MeetingAlternate(series), before = MeetingAlternate(series, title = "SYNTHETIC Team sync")),
             WorkspaceWrite.DeleteForever(TrashKind.Reminder, reminder.id.value, "Synthetic reminder"),
         )
 
@@ -364,6 +369,15 @@ class WorkspaceWriteJsonTest {
     fun aMeetingLinkWithASeriesKeyThatIsNotAHashDropsTheWholeChange() {
         val link = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutMeetingLink(MeetingLink(topic.id, series))))
         val damaged = Json.parseToJsonElement(link.toString().replace(series.value, "NOT-A-HASH")).jsonArray
+
+        assertNull(WorkspaceWriteJson.decode(damaged))
+    }
+
+    @Test
+    fun aMeetingAlternateWithALinkThatIsNotHttpsDropsTheWholeChange() {
+        val alternate = MeetingAlternate(series, joinUrl = "https://meet.synthetic.example/r")
+        val write = WorkspaceWriteJson.encode(listOf(WorkspaceWrite.PutMeetingAlternate(alternate)))
+        val damaged = Json.parseToJsonElement(write.toString().replace("https://", "http://")).jsonArray
 
         assertNull(WorkspaceWriteJson.decode(damaged))
     }

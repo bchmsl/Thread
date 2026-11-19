@@ -164,6 +164,8 @@ class MeetingTextTest {
             staleText(WallTime.of(today, 8, 10), today),
         )
         assertEquals("Join (Teams)", joinLabel("Teams"))
+        // A link set in Thread for another service (D100).
+        assertEquals("Join", joinLabel(null))
     }
 
     @Test

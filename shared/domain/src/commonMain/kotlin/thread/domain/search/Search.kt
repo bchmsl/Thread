@@ -92,7 +92,8 @@ const val SEARCH_SERIES_LIMIT: Int = 3
 
 /**
  * Searches the meetings on this device, yesterday to 14 days ahead (D78 P5b, adr/ADR-020-calendar-meetings-sync.md),
- * on title or location, ignoring case. The join link is never matched: it may hold a passcode. Nearest to [now] first:
+ * on title or location, ignoring case. The title matched is the alternate one (D100) and the calendar's, so either finds
+ * the meeting. The join link is never matched, nor the alternate one: it may hold a passcode. Nearest to [now] first:
  * those not over by start, then those over, the latest first. At most [SEARCH_SERIES_LIMIT] per series and
  * [SEARCH_GROUP_LIMIT] in all. Returns null for a blank [query].
  */
@@ -105,7 +106,10 @@ fun searchMeetings(
     if (q.isEmpty()) return null
 
     fun String?.has() = orEmpty().lowercase().contains(q)
-    val (over, ahead) = meetings.filter { it.title.has() || it.location.has() }.partition { hasEnded(it.time, now) }
+    val (over, ahead) =
+        meetings
+            .filter { it.title.has() || it.alternate?.title.has() || it.location.has() }
+            .partition { hasEnded(it.time, now) }
     val nearest =
         ahead.sortedWith(compareBy<Meeting>({ it.time.startsAt }, { it.displayTitle }, { it.id.value })) +
             over.sortedWith(LATEST_END_FIRST.then(compareBy({ it.displayTitle }, { it.id.value })))

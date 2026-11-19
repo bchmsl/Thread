@@ -378,3 +378,16 @@ Details: ADR-020 (Accepted). Plan: `calendar-plan.md` v2.2 in the session notes.
 - **Links** go through the workspace store (`PutMeetingLink`, ADR-009): the outbox, the sync status and the refused-change list cover them. Linking writes the series title as it is then, so a Topic can name a series that left the window.
 - **Device only:** whether this browser has seen meetings set up (`thread.meetings.seen`, so the card does not flash in or out on load), and on the Mac the index, the keychain item and the diagnostics (counts and codes only).
 - **Rules** were deployed by the owner before the clients shipped ("Deployed"). Until then the Mac app's writes and the web's listeners were refused, and the web kept the error inside the Meetings card.
+
+## Meeting alternates (D100, 2026-11-19)
+
+Owner change #31, phase M1. The owner's own title and join link for a meeting series, which Thread shows instead of the calendar's.
+
+- **Collection:** `users/{uid}/meetingAlternates/{seriesKey}`, owner only: `{seriesKey, title?, joinUrl?, updatedAt, schemaVersion: 1}`. The id is the series key (32 hex), so one document covers every occurrence of a repeating meeting. App-owned content, typed by the owner: the web writes it, the Mac app never reads or writes it, and `meetings` and `meetingSource` do not change.
+- **Values:** `title` is trimmed, not empty, at most 300 characters. `joinUrl` is a full `https://` link with a host of at least two labels, no user part, printable ASCII only, at most 2048 characters (`isAlternateJoinUrl` in the domain; the rules use the same pattern). A field set back to not set is stored as `null` (D83). A document with both fields null or absent reads as no alternate; nothing is deleted.
+- **Write path:** `PutMeetingAlternate` through the workspace store (ADR-009): the outbox, the sync status and the refused-change list cover it. Only the changed field is written (a merge), so a title change on one device and a link change on another both stay.
+- **Read:** the workspace listener reads the collection with the rest of the workspace. A document this build cannot read is skipped. A `permission-denied` on this listener alone, as before the rules are deployed, does not stop the workspace: meetings then show the calendar's values.
+- **Applied:** in the domain (`withAlternates`), over the meetings state the web already reads, so every place that names a meeting or offers Join uses the same values. A Topic's link to a series that left the window shows the alternate title too.
+- **Search:** ⌘K matches the alternate title and the calendar's title. Join links are never searched or shown as text.
+- **Rules:** `validMeetingAlternate`: only the five keys; `seriesKey`, `updatedAt` and `schemaVersion` required; `updatedAt == request.time`; the document id is the series key; the title and link checks above. Read, create and update by the owner only; no delete.
+- **Deploy the rules before the build ships.** Until then the server refuses every alternate write; it stays in the sync panel with Retry, and nothing typed is lost.

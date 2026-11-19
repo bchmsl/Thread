@@ -8,7 +8,8 @@ import kotlin.jvm.JvmInline
 /*
  * Work meetings from the owner's calendar (D78, adr/ADR-020-calendar-meetings-sync.md). The "Thread Calendar" Mac app
  * reads one calendar with EventKit and uploads these fields only, from yesterday to 14 days ahead. Thread reads them and
- * never changes them; it writes only the Topic links. Times are wall-clock times in the workspace time zone: the data
+ * never changes them; it writes only the Topic links and the owner's alternate title and link ([MeetingAlternate],
+ * D100). Times are wall-clock times in the workspace time zone: the data
  * layer converts the stored instants, so these rules never see a time zone.
  */
 
@@ -98,7 +99,8 @@ sealed interface MeetingTime {
 /**
  * One meeting, or one occurrence of a repeating meeting. [title] may be empty (shown as [UNTITLED_MEETING]).
  * [joinUrl], when present, is an https link on the allowlist ([joinServiceOf]); it may hold a passcode, so it is never
- * shown as text.
+ * shown as text. [title], [location] and [joinUrl] are the calendar's. [alternate] is the owner's own title and link for
+ * the series (D100), which win over the calendar's: read [displayTitle] and [join], not [title] and [joinUrl].
  */
 data class Meeting(
     val id: MeetingId,
@@ -108,8 +110,19 @@ data class Meeting(
     val response: MeetingResponse,
     val location: String? = null,
     val joinUrl: String? = null,
+    val alternate: MeetingAlternate? = null,
 ) {
-    val displayTitle: String get() = title.ifBlank { UNTITLED_MEETING }
+    /** What Thread shows: the alternate title when set, else the calendar's. */
+    val displayTitle: String get() = alternate?.title ?: calendarTitle
+
+    /** The calendar's own title, also when an alternate title is set. */
+    val calendarTitle: String get() = title.ifBlank { UNTITLED_MEETING }
+
+    /** What Join opens: the alternate link when set, else the calendar's. Null when there is none to offer. */
+    val join: MeetingJoin? get() = alternate?.joinUrl?.let { MeetingJoin(it, joinServiceOf(it)) } ?: calendarJoin
+
+    /** The calendar's own join link, also when an alternate link is set. */
+    val calendarJoin: MeetingJoin? get() = joinUrl?.let { url -> joinServiceOf(url)?.let { MeetingJoin(url, it) } }
 }
 
 /** Shown for a meeting without a title. */

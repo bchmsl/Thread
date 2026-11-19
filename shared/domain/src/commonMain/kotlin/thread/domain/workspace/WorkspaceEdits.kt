@@ -31,6 +31,9 @@ enum class EditProblem {
     ReplacementNeeded,
     BadReplacement,
 
+    /** A link that is not a full https link (a meeting's alternate join link, D100). */
+    BadLink,
+
     /** No status is stored yet: the workspace is still loading or not seeded. Status edits wait for it. */
     NotReady,
 }

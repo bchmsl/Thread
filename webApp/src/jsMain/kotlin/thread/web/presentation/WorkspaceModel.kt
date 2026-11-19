@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.calendar.MeetingLink
 import thread.domain.calendar.SeriesKey
 import thread.domain.focus.FocusSession
@@ -70,6 +71,7 @@ import thread.domain.workspace.WorkspaceEdit
 import thread.domain.workspace.WorkspacePrefs
 import thread.domain.workspace.WorkspaceStore
 import thread.domain.workspace.WorkspaceWrite
+import thread.domain.workspace.alternatesBySeries
 import thread.domain.workspace.copyNoteLinks
 import thread.domain.workspace.createNoteWrites
 import thread.domain.workspace.createReminderWrite
@@ -86,6 +88,8 @@ import thread.domain.workspace.linkedTopicIdsOfSeries
 import thread.domain.workspace.referencesOf
 import thread.domain.workspace.savePrefs
 import thread.domain.workspace.seedWrites
+import thread.domain.workspace.setAlternateJoinUrl
+import thread.domain.workspace.setAlternateTitle
 import thread.domain.workspace.setExternalLinks
 import thread.domain.workspace.setMeetingLinks
 import thread.domain.workspace.unlinkExternal
@@ -273,6 +277,7 @@ internal class WorkspaceModel(
         val inbox = inboxTasks(data?.tasks.orEmpty())
         val progress = mutableMapOf<TopicId, TaskProgress>()
         val nextTasks = firstOpenTasks(data?.tasks.orEmpty())
+        val meetingAlternates = alternatesBySeries(data?.meetingAlternates.orEmpty())
     }
 
     private var derivedFrom: WorkspaceData? = null
@@ -485,6 +490,30 @@ internal class WorkspaceModel(
         seriesKey: SeriesKey,
         topicId: TopicId,
     ): WorkspaceEdit? = data?.let { apply(unlinkMeeting(seriesKey, topicId, it)) }
+
+    /** The title and join link set for each meeting series that has one (D100), in place of the calendar's. */
+    val meetingAlternates: Map<SeriesKey, MeetingAlternate> get() = derived().meetingAlternates
+
+    /**
+     * Sets the title every meeting of the series [seriesKey] shows (D100); blank text goes back to the calendar's. Saved
+     * as it is, or refused with the reason (a title that is too long, or a workspace still loading).
+     */
+    fun setMeetingTitle(
+        seriesKey: SeriesKey,
+        text: String,
+    ): EditResult = applyOrRefuse { setAlternateTitle(seriesKey, text, it) }
+
+    /** Sets the join link of the series [seriesKey] (D100), like [setMeetingTitle]. A link that is not https is refused. */
+    fun setMeetingJoinUrl(
+        seriesKey: SeriesKey,
+        text: String,
+    ): EditResult = applyOrRefuse { setAlternateJoinUrl(seriesKey, text, it) }
+
+    private fun applyOrRefuse(edit: (WorkspaceData) -> EditResult): EditResult {
+        val result = data?.let(edit) ?: EditResult.Refused(EditProblem.NotReady)
+        apply(result)
+        return result
+    }
 
     /** Everything in Trash, newest deletion first. */
     val trash: List<TrashEntry>

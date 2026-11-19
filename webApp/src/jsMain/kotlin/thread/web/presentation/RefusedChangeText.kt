@@ -74,6 +74,8 @@ private fun WorkspaceModel.subjectOf(write: WorkspaceWrite): Pair<String, Place?
             val name = topic?.name?.let { "“$it”" } ?: "a Topic"
             "the link between ${meetingName(write)} and $name" to topic?.let(::topicPlace)
         }
+        // Keyed by series, not by one meeting, so there is no single card to open.
+        is WorkspaceWrite.PutMeetingAlternate -> "your title or join link for ${alternateName(write)}" to null
         is WorkspaceWrite.DeleteForever -> "“${write.title}”" to View.Trash.place
         // A refused session is not in the Focus panel's list, so there is nothing to open.
         is WorkspaceWrite.PutFocusSession -> "the focus session that ended ${endedText(write.session)}" to null
@@ -144,6 +146,11 @@ private fun WorkspaceModel.linesOf(write: WorkspaceWrite): List<String> =
             val how = if (write.link.linked) "linked to" else "unlinked from"
             listOf("${meetingName(write).capitalized()} $how $topic")
         }
+        is WorkspaceWrite.PutMeetingAlternate ->
+            listOfNotNull(
+                write.alternate.title?.let { "Meeting title: $it" },
+                write.alternate.joinUrl?.let { "Join link: $it" },
+            ).ifEmpty { listOf("Meeting title and join link back to the calendar's") }
         is WorkspaceWrite.DeleteForever -> listOf("Delete forever: ${write.title}")
         is WorkspaceWrite.PutFocusSession -> {
             val session = write.session
@@ -213,6 +220,10 @@ private fun WorkspaceModel.meetingName(write: WorkspaceWrite.PutMeetingLink): St
     val title = write.link.title?.takeIf { it.isNotBlank() } ?: storedLink?.title?.takeIf { it.isNotBlank() }
     return title?.let { "“$it”" } ?: "a meeting"
 }
+
+/** “Team sync” from the title the change sets, else the one it replaces, else "a meeting". */
+private fun alternateName(write: WorkspaceWrite.PutMeetingAlternate): String =
+    (write.alternate.title ?: write.before?.title)?.let { "“$it”" } ?: "a meeting"
 
 private fun String.capitalized(): String = replaceFirstChar { it.uppercaseChar() }
 

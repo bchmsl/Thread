@@ -191,7 +191,7 @@ fun isMeetingSourceStale(
 /**
  * A meeting series linked to a Topic, for Topic Details. [next] is the first occurrence that is not over at the time
  * asked, or null for "None in the next 14 days". [title] comes from the meetings when one is in the window, otherwise
- * from the link's snapshot (QA).
+ * from the series' alternate title (D100), otherwise from the link's snapshot (QA).
  */
 data class TopicMeeting(
     val link: MeetingLink,
@@ -201,13 +201,15 @@ data class TopicMeeting(
 
 /**
  * The series linked to [topicId], one row each: those with a next occurrence first, soonest first, then the rest by
- * title. Unlinked links are left out.
+ * title. Unlinked links are left out. [meetings] carry their alternates already; [alternates] name the series that left
+ * the window.
  */
 fun meetingsForTopic(
     topicId: TopicId,
     links: List<MeetingLink>,
     meetings: List<Meeting>,
     now: WallTime,
+    alternates: Map<SeriesKey, MeetingAlternate> = emptyMap(),
 ): List<TopicMeeting> {
     val bySeries = meetings.groupBy { it.seriesKey }
     val rows =
@@ -218,7 +220,11 @@ fun meetingsForTopic(
                 val occurrences = bySeries[link.seriesKey].orEmpty().sortedWith(compareBy<Meeting>({ it.time.startsAt }, { it.id.value }))
                 val next = occurrences.firstOrNull { !hasEnded(it.time, now) }
                 val latest = next ?: occurrences.lastOrNull()
-                val title = latest?.displayTitle ?: link.title?.takeIf { it.isNotBlank() } ?: UNTITLED_MEETING
+                val title =
+                    latest?.displayTitle
+                        ?: alternates[link.seriesKey]?.title
+                        ?: link.title?.takeIf { it.isNotBlank() }
+                        ?: UNTITLED_MEETING
                 TopicMeeting(link, title, next)
             }
     val (upcoming, none) = rows.partition { it.next != null }

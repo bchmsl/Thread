@@ -59,7 +59,8 @@ internal fun TopicMeetingsSection(
     val now = LocalNow.current
     val linkId = scopedId("td-link-meeting")
     var linking by remember(topic.id) { mutableStateOf(false) }
-    val rows = meetingsForTopic(topic.id, workspace.meetingLinks, meetings.meetings, now)
+    // A series with no meeting in the window still shows the title set in Thread (D100).
+    val rows = meetingsForTopic(topic.id, workspace.meetingLinks, meetings.meetings, now, meetings.alternates)
     if (!meetings.cardShown && rows.isEmpty()) return
     TopicSection(
         "meetings",

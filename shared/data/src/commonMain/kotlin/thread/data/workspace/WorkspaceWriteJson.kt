@@ -13,9 +13,12 @@ import thread.data.external.int
 import thread.data.external.long
 import thread.data.external.obj
 import thread.data.external.str
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.calendar.MeetingLink
 import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.alternateTitleOf
+import thread.domain.calendar.isAlternateJoinUrl
 import thread.domain.calendar.isMeetingHash
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
@@ -88,6 +91,8 @@ internal object WorkspaceWriteJson {
             is WorkspaceWrite.PutExternalRef -> put("externalRef", externalRef(write.reference))
             is WorkspaceWrite.PutExternalLink -> put("externalLink", externalLink(write.link))
             is WorkspaceWrite.PutMeetingLink -> put("meetingLink", meetingLink(write.link))
+            is WorkspaceWrite.PutMeetingAlternate ->
+                put("meetingAlternate", meetingAlternate(write.alternate), write.before?.let(::meetingAlternate))
             is WorkspaceWrite.PutFocusSession -> put("focusSession", focusSession(write.session))
             is WorkspaceWrite.DeleteForever ->
                 put(
@@ -128,6 +133,11 @@ internal object WorkspaceWriteJson {
             "externalRef" -> WorkspaceWrite.PutExternalRef(externalRef(value) ?: return null)
             "externalLink" -> WorkspaceWrite.PutExternalLink(externalLink(value) ?: return null)
             "meetingLink" -> WorkspaceWrite.PutMeetingLink(meetingLink(value) ?: return null)
+            "meetingAlternate" ->
+                WorkspaceWrite.PutMeetingAlternate(
+                    meetingAlternate(value) ?: return null,
+                    before?.let { meetingAlternate(it) ?: return null },
+                )
             "focusSession" -> WorkspaceWrite.PutFocusSession(focusSession(value) ?: return null)
             "deleteForever" -> {
                 val kind = TrashKind.entries.firstOrNull { it.name == value.str("kind") } ?: return null
@@ -422,6 +432,25 @@ internal object WorkspaceWriteJson {
             linked = json.bool("linked") ?: return null,
             title = json.str("title"),
         )
+
+    private fun meetingAlternate(alternate: MeetingAlternate): JsonObject =
+        buildJsonObject {
+            put("seriesKey", alternate.seriesKey.value)
+            alternate.title?.let { put("title", it) }
+            alternate.joinUrl?.let { put("joinUrl", it) }
+        }
+
+    private fun meetingAlternate(json: JsonObject): MeetingAlternate? {
+        val title = json.str("title")
+        val joinUrl = json.str("joinUrl")
+        if (title != null && alternateTitleOf(title) != title) return null
+        if (joinUrl != null && !isAlternateJoinUrl(joinUrl)) return null
+        return MeetingAlternate(
+            seriesKey = SeriesKey(json.str("seriesKey")?.takeIf(::isMeetingHash) ?: return null),
+            title = title,
+            joinUrl = joinUrl,
+        )
+    }
 
     private fun focusSession(session: FocusSession): JsonObject =
         buildJsonObject {

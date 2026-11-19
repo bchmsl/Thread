@@ -240,11 +240,15 @@
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
 /* The Meeting card. */
 .dmeet { display: flex; flex-direction: column; gap: 14px; }
+/* The card body is also the column and scrolls: a part never shrinks to fit (Join did, in Edit on a phone). */
+.dmeet > * { flex-shrink: 0; }
 .dmeet__t { margin: 0; font: 500 22px/1.3 var(--font-display); overflow-wrap: anywhere; }
 .dmeet__when { margin: -6px 0 0; font-size: var(--fs-15); color: var(--text-2); font-variant-numeric: tabular-nums; }
 .dmeet > .mjoin { align-self: flex-start; }
 .dmeet__where { overflow-wrap: anywhere; }
 .dmeet__foot { margin: 0; font-size: var(--fs-13); color: var(--text-3); }
+/* Its Edit (D100): the title and join link set in Thread, as Settings' form fields. */
+.dmeet__edit { display: flex; flex-direction: column; padding-top: 4px; }
 /* Topic links (P5): the Meeting card's Topics, the Today row's tags and the rows in a Topic's Meetings section. */
 /* Rows 8 px apart, so a chip's Unlink keeps its 40 px target next to the chips and Link to Topic above and below. */
 .dmeet__topics { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

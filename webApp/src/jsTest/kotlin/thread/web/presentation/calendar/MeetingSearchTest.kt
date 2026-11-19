@@ -1,6 +1,7 @@
 package thread.web.presentation.calendar
 
 import thread.domain.calendar.Meeting
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.calendar.MeetingId
 import thread.domain.calendar.MeetingResponse
 import thread.domain.calendar.MeetingTime
@@ -61,6 +62,19 @@ class MeetingSearchTest {
         options.forEach { option ->
             assertFalse("zoom" in option.label + option.sub || "pwd" in option.label + option.sub, "no part of the join link")
         }
+    }
+
+    @Test
+    fun aTitleSetInThreadShowsAndFindsTheMeeting() {
+        val own =
+            standup.copy(
+                alternate = MeetingAlternate(standupSeries, title = "Synthetic team sync", joinUrl = "https://meet.synthetic.example/r1"),
+            )
+        val found = searchMeetings("team sync", listOf(own, offsite), now).orEmpty()
+
+        assertEquals(listOf(own), found)
+        assertEquals(listOf("Synthetic team sync"), meetingSearchOptions(found, ::topicsOf, now) {}.map { it.label })
+        assertEquals(emptyList<Meeting>(), searchMeetings("synthetic.example", listOf(own, offsite), now).orEmpty(), "never the link")
     }
 
     @Test

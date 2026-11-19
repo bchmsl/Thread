@@ -128,7 +128,8 @@ internal fun CardHost(
                         }
                     CardType.Meeting ->
                         meetings.meeting(item.id)?.let { meeting ->
-                            MeetingCard(workspace, meeting, backTo, cards::back, close)
+                            val repeats = meetings.meetings.count { it.seriesKey == meeting.seriesKey } > 1
+                            MeetingCard(workspace, meeting, repeats, backTo, cards::back, close)
                         }
                 }
             }

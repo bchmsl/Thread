@@ -253,8 +253,8 @@ internal fun staleText(
     today: LocalDay,
 ): String = "Not updated since ${lastUpdateText(at, today)}. Is your Mac awake and Thread Calendar running?"
 
-/** "Join (Teams)". */
-internal fun joinLabel(service: String): String = "Join ($service)"
+/** "Join (Teams)", or plain "Join" for a link set in Thread that is not on the allowlist (D100). */
+internal fun joinLabel(service: String?): String = service?.let { "Join ($it)" } ?: "Join"
 
 /** The line at the top of the Meetings card: a problem ([warning]) or why the list is empty. */
 internal data class MeetingsNotice(

@@ -510,6 +510,33 @@ service cloud.firestore {
         && optionalText(link, 'title', 300);
     }
 
+    // users/{uid}/meetingAlternates/{seriesKey}: the owner's own title and join link for a meeting series (D100), which
+    // Thread shows instead of the calendar's. Written by Thread only, never by the Mac app. A field set back to not set
+    // is null. The title is trimmed and not empty. The link is any https link the owner typed, with nothing between the
+    // host and the path, so a user@host link is refused; Thread's isAlternateJoinUrl uses the same pattern.
+    function validAlternateTitle(alternate) {
+      return !('title' in alternate) || alternate.title == null
+        || (alternate.title is string && alternate.title.size() > 0 && alternate.title.size() <= 300
+          && alternate.title.trim() == alternate.title);
+    }
+
+    function validAlternateJoinUrl(alternate) {
+      return !('joinUrl' in alternate) || alternate.joinUrl == null
+        || (alternate.joinUrl is string && alternate.joinUrl.size() <= 2048
+          && alternate.joinUrl.matches('^https://[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+(:[0-9]{1,5})?([/?#][!-~]*)?$'));
+    }
+
+    function validMeetingAlternate(alternate, seriesKey) {
+      return alternate.keys().hasOnly(['seriesKey', 'title', 'joinUrl', 'updatedAt', 'schemaVersion'])
+        && alternate.keys().hasAll(['seriesKey', 'updatedAt', 'schemaVersion'])
+        && alternate.schemaVersion == 1
+        && alternate.updatedAt == request.time
+        && hex32(seriesKey)
+        && alternate.seriesKey == seriesKey
+        && validAlternateTitle(alternate)
+        && validAlternateJoinUrl(alternate);
+    }
+
     // The Mac app deletes meetings that leave the window, are cancelled or declined, and all of them on "Stop syncing
     // and remove meetings".
     match /users/{uid}/meetings/{meetingId} {
@@ -525,6 +552,11 @@ service cloud.firestore {
     match /users/{uid}/topicMeetingLinks/{linkId} {
       allow read: if signedInAs(uid);
       allow create, update: if signedInAs(uid) && validMeetingLink(request.resource.data, linkId);
+    }
+
+    match /users/{uid}/meetingAlternates/{seriesKey} {
+      allow read: if signedInAs(uid);
+      allow create, update: if signedInAs(uid) && validMeetingAlternate(request.resource.data, seriesKey);
     }
   }
 }

@@ -1,6 +1,8 @@
 package thread.domain.workspace
 
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.calendar.MeetingTitleFit
+import thread.domain.calendar.SeriesKey
 import thread.domain.focus.FOCUS_HISTORY_LIMIT
 import thread.domain.focus.FocusOutcome
 import thread.domain.focus.FocusSession
@@ -175,6 +177,23 @@ class RefusedChangesTest {
         // A link write without the field checks only linked.
         val linkOnly = listOf(change("c2", WorkspaceWrite.PutExternalLink(link.copy(linked = true, dismissed = null))))
         assertEquals(emptyList(), unconfirmedChanges(linkOnly, emptyList(), data().copy(externalLinks = listOf(link.copy(linked = true)))))
+    }
+
+    @Test
+    fun aMeetingAlternateIsComparedByTheFieldsItWrote() {
+        val series = SeriesKey("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        val titled = MeetingAlternate(series, title = "SYNTHETIC Team sync")
+        val linked = titled.copy(joinUrl = "https://meet.synthetic.example/r")
+        // A first write leaves out the link it does not set, so another device's link does not count against it.
+        val first = listOf(change("c1", WorkspaceWrite.PutMeetingAlternate(titled)))
+        assertEquals(emptyList(), unconfirmedChanges(first, emptyList(), data().copy(meetingAlternates = listOf(linked))))
+        assertEquals(listOf("c1"), unconfirmedChanges(first, emptyList(), data()).map { it.id }, "never stored")
+
+        // Clearing the title is shown once the stored title is null, whatever the link.
+        val cleared = listOf(change("c2", WorkspaceWrite.PutMeetingAlternate(linked.copy(title = null), before = linked)))
+        val clearedData = data().copy(meetingAlternates = listOf(MeetingAlternate(series)))
+        assertEquals(emptyList(), unconfirmedChanges(cleared, emptyList(), clearedData))
+        assertEquals(listOf("c2"), unconfirmedChanges(cleared, emptyList(), data().copy(meetingAlternates = listOf(linked))).map { it.id })
     }
 
     private fun session(

@@ -16,9 +16,12 @@ import thread.data.external.KeyValueStore
 import thread.data.local.newJsObject
 import thread.data.workspace.WorkspaceOutbox
 import thread.domain.account.AccountId
+import thread.domain.calendar.MeetingAlternate
 import thread.domain.calendar.MeetingLink
 import thread.domain.calendar.MeetingTitleFit
 import thread.domain.calendar.SeriesKey
+import thread.domain.calendar.alternateTitleOf
+import thread.domain.calendar.isAlternateJoinUrl
 import thread.domain.calendar.isMeetingHash
 import thread.domain.focus.FOCUS_HISTORY_LIMIT
 import thread.domain.focus.FocusOutcome
@@ -121,6 +124,10 @@ class WorkspaceReadException(
  *   schemaVersion: 1}` (adr/ADR-020-calendar-meetings-sync.md). One link covers a whole meeting series. Unlinking writes
  *   `linked: false`; the rules allow no delete. `title` is the series title when it was linked, written only then, so
  *   the Topic still names the series after it leaves the 16-day window. The meetings themselves are never written here.
+ * - `users/{uid}/meetingAlternates/{seriesKey}`: `{seriesKey, title?, joinUrl?, updatedAt, schemaVersion: 1}` (D100).
+ *   The owner's own title and join link for a meeting series, which win over the calendar's. A field set back to not set
+ *   is stored as null; the rules allow no delete. A refused read of this collection leaves it empty instead of stopping
+ *   the workspace, so a build ahead of its rules still loads.
  * - `users/{uid}/focusSessions/f-{runId}`: `{startedAt, endedAt, focusedMs, plannedMin, outcome, targetKind,
  *   targetId, schemaVersion: 1}` (adr/ADR-019-focus-timer.md). Times are epoch milliseconds from the device, never a
  *   server timestamp: a session is written whole, once, with fixed values, so a second identical write (Retry, or two
@@ -204,13 +211,15 @@ class FirestoreWorkspaceStore internal constructor(
             var externalRefs: QuerySnapshot? = null
             var externalLinks: QuerySnapshot? = null
             var meetingLinks: QuerySnapshot? = null
+            var meetingAlternates: QuerySnapshot? = null
+            var alternatesRefused = false
             var focusSessions: QuerySnapshot? = null
             var prefs: DocumentSnapshot? = null
             val emitWhenComplete = {
                 val collections =
                     listOf(statuses, topics, tasks, reminders, notes, links, externalRefs, externalLinks, meetingLinks, focusSessions)
                 val p = prefs
-                if (p != null && collections.all { it != null }) {
+                if (p != null && collections.all { it != null } && (meetingAlternates != null || alternatesRefused)) {
                     val snapshots =
                         Snapshots(
                             statuses!!,
@@ -222,6 +231,7 @@ class FirestoreWorkspaceStore internal constructor(
                             externalRefs!!,
                             externalLinks!!,
                             meetingLinks!!,
+                            meetingAlternates.takeUnless { alternatesRefused },
                             focusSessions!!,
                             p,
                         )
@@ -279,6 +289,21 @@ class FirestoreWorkspaceStore internal constructor(
                     meetingLinks = it
                     emitWhenComplete()
                 }, stop)
+            // D100. A refusal here, as before the rules for alternates are deployed, must not stop the whole workspace:
+            // the meetings then show the calendar's titles and links, and alternate writes are listed as refused.
+            val stopMeetingAlternates =
+                onCollectionSnapshot(collection(firestore, USERS, accountId.value, MEETING_ALTERNATES), options, {
+                    meetingAlternates = it
+                    alternatesRefused = false
+                    emitWhenComplete()
+                }, { error ->
+                    if (error.code == PERMISSION_DENIED) {
+                        alternatesRefused = true
+                        emitWhenComplete()
+                    } else {
+                        stop(error)
+                    }
+                })
             // The newest sessions only: the history grows without end, and the panel shows a few (F3 A).
             val recentSessions =
                 query(
@@ -306,6 +331,7 @@ class FirestoreWorkspaceStore internal constructor(
                 stopExternalRefs()
                 stopExternalLinks()
                 stopMeetingLinks()
+                stopMeetingAlternates()
                 stopFocusSessions()
                 stopPrefs()
             }
@@ -328,6 +354,7 @@ class FirestoreWorkspaceStore internal constructor(
                     is WorkspaceWrite.PutExternalRef -> externalRefData(write.reference)
                     is WorkspaceWrite.PutExternalLink -> externalLinkData(write.link)
                     is WorkspaceWrite.PutMeetingLink -> meetingLinkData(write.link)
+                    is WorkspaceWrite.PutMeetingAlternate -> meetingAlternateData(write.alternate, write.before)
                     is WorkspaceWrite.PutFocusSession -> focusSessionData(write.session)
                     is WorkspaceWrite.DeleteForever -> tombstone()
                 }
@@ -356,6 +383,8 @@ class FirestoreWorkspaceStore internal constructor(
             is WorkspaceWrite.PutExternalRef -> doc(firestore, USERS, accountId.value, EXTERNAL_REFS, write.reference.id)
             is WorkspaceWrite.PutExternalLink -> doc(firestore, USERS, accountId.value, EXTERNAL_LINKS, write.link.id)
             is WorkspaceWrite.PutMeetingLink -> doc(firestore, USERS, accountId.value, MEETING_LINKS, write.link.id)
+            is WorkspaceWrite.PutMeetingAlternate ->
+                doc(firestore, USERS, accountId.value, MEETING_ALTERNATES, write.alternate.seriesKey.value)
             is WorkspaceWrite.PutFocusSession -> doc(firestore, USERS, accountId.value, FOCUS_SESSIONS, write.session.id)
             is WorkspaceWrite.DeleteForever -> {
                 val collection =
@@ -565,6 +594,23 @@ class FirestoreWorkspaceStore internal constructor(
     }
 
     /**
+     * D100. With a [before] value, only the fields that differ; one set back to not set is stored as null. A new document
+     * leaves out what is not set (as D83 does for preferences). The series key is always written: the rules check it.
+     */
+    private fun meetingAlternateData(
+        alternate: MeetingAlternate,
+        before: MeetingAlternate?,
+    ): dynamic {
+        val data = newJsObject()
+        data.seriesKey = alternate.seriesKey.value
+        if (if (before == null) alternate.title != null else before.title != alternate.title) data.title = alternate.title
+        if (if (before == null) alternate.joinUrl != null else before.joinUrl != alternate.joinUrl) data.joinUrl = alternate.joinUrl
+        data.updatedAt = serverTimestamp()
+        data.schemaVersion = SCHEMA_VERSION
+        return data
+    }
+
+    /**
      * The whole session with no server timestamp, so writing it again stores the same document (see the class comment).
      * Times are whole milliseconds, which Firestore keeps as integers.
      */
@@ -599,7 +645,9 @@ class FirestoreWorkspaceStore internal constructor(
         const val EXTERNAL_REFS = "externalRefs"
         const val EXTERNAL_LINKS = "topicExternalLinks"
         const val MEETING_LINKS = "topicMeetingLinks"
+        const val MEETING_ALTERNATES = "meetingAlternates"
         const val FOCUS_SESSIONS = "focusSessions"
+        const val PERMISSION_DENIED = "permission-denied"
         const val PREFS_ID = "main"
         const val SCHEMA_VERSION = 1
     }
@@ -615,6 +663,8 @@ private class Snapshots(
     val externalRefs: QuerySnapshot,
     val externalLinks: QuerySnapshot,
     val meetingLinks: QuerySnapshot,
+    /** Null when the server refused the read (see [FirestoreWorkspaceStore.observe]): no alternates then. */
+    val meetingAlternates: QuerySnapshot?,
     val focusSessions: QuerySnapshot,
     val prefs: DocumentSnapshot,
 )
@@ -631,9 +681,11 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
     val decodedRefs = snapshots.externalRefs.docs.map(::decodeExternalRef)
     val decodedExternalLinks = snapshots.externalLinks.docs.map(::decodeExternalLink)
     val decodedMeetingLinks = snapshots.meetingLinks.docs.map(::decodeMeetingLink)
+    // Null while the rules refuse the collection (before they are deployed): no alternates.
+    val decodedAlternates = (snapshots.meetingAlternates?.docs ?: emptyArray()).map(::decodeMeetingAlternate)
     val decodedFocusSessions = snapshots.focusSessions.docs.map(::decodeFocusSession)
     val all =
-        listOf(
+        listOfNotNull(
             statuses,
             snapshots.topics,
             snapshots.tasks,
@@ -643,6 +695,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             snapshots.externalRefs,
             snapshots.externalLinks,
             snapshots.meetingLinks,
+            snapshots.meetingAlternates,
             snapshots.focusSessions,
         )
     val decoded =
@@ -656,6 +709,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
             decodedRefs,
             decodedExternalLinks,
             decodedMeetingLinks,
+            decodedAlternates,
             decodedFocusSessions,
         )
     return WorkspaceData(
@@ -668,6 +722,7 @@ private fun toWorkspaceData(snapshots: Snapshots): WorkspaceData {
         externalRefs = decodedRefs.filterNotNull(),
         externalLinks = decodedExternalLinks.filterNotNull(),
         meetingLinks = decodedMeetingLinks.filterNotNull(),
+        meetingAlternates = decodedAlternates.filterNotNull(),
         purgedNotes =
             snapshots.notes.docs
                 .filter(::isTombstone)
@@ -844,6 +899,21 @@ private fun decodeMeetingLink(snapshot: DocumentSnapshot): MeetingLink? {
     // Missing, or not text: no snapshot. The link itself still reads.
     val title = stringOrNull(data.title)
     return MeetingLink(TopicId(topicId), SeriesKey(seriesKey), linked, title).takeIf { it.id == snapshot.id }
+}
+
+/**
+ * The alternate title and join link of a meeting series in [snapshot] (D100), or null when this app cannot read it or its
+ * id is not its series key. A title or link this app would not offer reads as not set, so the calendar's shows.
+ */
+private fun decodeMeetingAlternate(snapshot: DocumentSnapshot): MeetingAlternate? {
+    val data: dynamic = snapshot.data(estimatedTimestamps())
+    if (data == null || data.schemaVersion != 1) return null
+    val seriesKey = stringOrNull(data.seriesKey)?.takeIf { isMeetingHash(it) && it == snapshot.id } ?: return null
+    return MeetingAlternate(
+        seriesKey = SeriesKey(seriesKey),
+        title = stringOrNull(data.title)?.let(::alternateTitleOf),
+        joinUrl = stringOrNull(data.joinUrl)?.takeIf(::isAlternateJoinUrl),
+    )
 }
 
 /** The Focus session in [snapshot], or null when this app cannot read it. The query orders sessions newest first. */

@@ -40,7 +40,7 @@ class WorkspaceEditsTest {
                     is WorkspaceWrite.PutPrefs, is WorkspaceWrite.PutTask, is WorkspaceWrite.PutReminder,
                     is WorkspaceWrite.PutNote, is WorkspaceWrite.PutNoteLink, is WorkspaceWrite.DeleteForever,
                     is WorkspaceWrite.PutExternalRef, is WorkspaceWrite.PutExternalLink, is WorkspaceWrite.PutMeetingLink,
-                    is WorkspaceWrite.PutFocusSession,
+                    is WorkspaceWrite.PutFocusSession, is WorkspaceWrite.PutMeetingAlternate,
                     -> Unit
                 }
             }

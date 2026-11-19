@@ -23,7 +23,6 @@ import thread.domain.calendar.MeetingsState
 import thread.domain.calendar.SeriesKey
 import thread.domain.calendar.TodayMeeting
 import thread.domain.calendar.isJoinTime
-import thread.domain.calendar.joinServiceOf
 import thread.domain.calendar.limitPastMeetings
 import thread.domain.calendar.todayMeetings
 import thread.domain.time.LocalDay
@@ -231,8 +230,9 @@ private fun MeetingRow(
 }
 
 /**
- * The meeting's Join link, when it has one on the allowlist: "Join (Teams)", in a new tab, without the opener or the
- * referrer. The link itself is never shown as text: it may hold a passcode. It uses the action style from
+ * The meeting's Join link ([Meeting.join]): the one set in Thread (D100), else the calendar's when it is on the
+ * allowlist. "Join (Teams)", or "Join" for a link of another service, in a new tab, without the opener or the referrer.
+ * The link itself is never shown as text: it may hold a passcode. It uses the action style from
  * [thread.domain.calendar.JOIN_LEAD_MINUTES] before the start until the end. [small]: a row's "Join". [named]: "Join
  * Standup", for the timeline's head (D79), where it stands apart from its meeting.
  */
@@ -243,9 +243,10 @@ internal fun JoinLink(
     small: Boolean,
     named: Boolean = false,
 ) {
-    val url = meeting.joinUrl ?: return
-    val service = joinServiceOf(url) ?: return
-    val label = joinLabel(service.label)
+    val join = meeting.join ?: return
+    val url = join.url
+    val service = join.service?.label
+    val label = joinLabel(service)
     A(url, {
         classes("btn", if (isJoinTime(meeting, now)) "btn--primary" else "btn--line", "mjoin")
         if (small) classes("mjoin--row")
@@ -255,7 +256,7 @@ internal fun JoinLink(
         // A row's Join names its meeting, so a list of Join links can be told apart.
         if (small) attr("aria-label", "$label, ${meeting.displayTitle}")
         // The name starts with what the link shows, then says the service.
-        if (named) attr("aria-label", "Join ${meeting.displayTitle} (${service.label})")
+        if (named) attr("aria-label", "Join ${meeting.displayTitle}" + (service?.let { " ($it)" } ?: ""))
     }) {
         when {
             named -> {

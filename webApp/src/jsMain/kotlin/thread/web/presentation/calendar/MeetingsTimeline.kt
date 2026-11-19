@@ -29,7 +29,6 @@ import thread.domain.calendar.TimelineBlock
 import thread.domain.calendar.TimelineFlag
 import thread.domain.calendar.TitleTurn
 import thread.domain.calendar.TodayMeeting
-import thread.domain.calendar.joinServiceOf
 import thread.domain.calendar.meetingTimeline
 import thread.domain.time.WallTime
 import thread.domain.time.clockText
@@ -70,7 +69,7 @@ internal fun MeetingsTimeline(
     var widthPx by remember { mutableStateOf<Double?>(null) }
     val joinable =
         view.rows.filter { row ->
-            (row.phase == MeetingPhase.Now || row.phase == MeetingPhase.Next) && row.meeting.joinUrl?.let(::joinServiceOf) != null
+            (row.phase == MeetingPhase.Now || row.phase == MeetingPhase.Next) && row.meeting.join != null
         }
     val joins: (@Composable () -> Unit)? =
         if (joinable.isEmpty()) {

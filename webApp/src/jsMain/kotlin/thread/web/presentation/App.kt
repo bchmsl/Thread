@@ -209,7 +209,7 @@ private fun Workspace(
     val now by rememberNow(workspace.prefs.timeZone)
     val online by rememberOnline()
     val zone = workspace.prefs.timeZone
-    val meetings = remember { MeetingsModel(services.meetingStore(signedIn.accountId)) }
+    val meetings = remember { MeetingsModel(services.meetingStore(signedIn.accountId)) { workspace.meetingAlternates } }
     // Meetings follow the server while Thread is open. After a read error they wait for the next network change.
     LaunchedEffect(meetings, zone, online) { meetings.follow(zone) }
     var searchOpen by remember { mutableStateOf(false) }
