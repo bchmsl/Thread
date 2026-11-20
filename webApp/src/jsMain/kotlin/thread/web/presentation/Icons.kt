@@ -165,6 +165,9 @@ internal enum class Icon(
     ),
     Signin("""<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16.5l4.5-4.5L10 7.5M14.5 12H4"/>"""),
     Sparkle("""<path d="M12 4v4M12 16v4M4 12h4M16 12h4M7 7l2 2M15 15l2 2M17 7l-2 2M9 15l-2 2"/>"""),
+
+    /** A star, the mark of the filters starred in Jira (D103). Drawn by Thread. */
+    Star("""<path d="M12 3.7l2.2 5.7 6.2.4-4.8 3.9 1.6 5.9-5.2-3.3-5.2 3.3 1.6-5.9-4.8-3.9 6.2-.4z"/>"""),
     Stop("""<rect x="6.5" y="6.5" width="11" height="11" rx="1.8" fill="currentColor" stroke="none"/>"""),
     Task("""<rect x="4" y="4" width="16" height="16" rx="4.5"/><path d="M8.5 12.2l2.4 2.4 4.6-4.9"/>"""),
 

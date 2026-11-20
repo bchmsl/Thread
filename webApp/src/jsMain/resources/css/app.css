@@ -931,6 +931,10 @@ main:has(.board) { max-width: 1520px; }
 .jst--done { background: #1c3d2f; color: #94e3b5; }
 .jl-filter { display: flex; align-items: center; padding: 2px 4px 6px; }
 .jl-filter label { display: inline-flex; gap: 10px; align-items: center; min-height: 40px; font-size: var(--fs-14); color: var(--text-2); cursor: pointer; }
+/* The Filters tab's "Starred filter" picker (D103). */
+.jl-pick { padding: 2px 0 4px; }
+.jl-pick .field__label .icon { color: var(--text-3); }
+.empty__acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pill-open {
   display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px 0 7px; border-radius: var(--r-pill);
   background: var(--pr-open); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap;

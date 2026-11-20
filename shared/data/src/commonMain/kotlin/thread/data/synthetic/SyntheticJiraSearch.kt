@@ -194,6 +194,22 @@ internal object SyntheticJiraSearch {
             ),
         )
 
+    /** The SYNTHETIC starred filters' own queries (D103). Matched exactly; this is not a JQL parser. */
+    const val FILTER_MY_OPEN_BUGS: String =
+        "assignee = currentUser() AND issuetype in (Bug, Defect) AND statusCategory != Done ORDER BY priority DESC, updated DESC"
+    const val FILTER_TEAM_IN_PROGRESS: String = "project = SYN AND statusCategory = \"In Progress\" ORDER BY updated DESC"
+    const val FILTER_EVERYTHING: String = "project = SYN ORDER BY updated DESC"
+
+    /** A query Jira refuses (400): it names a field the site does not have. */
+    const val FILTER_BROKEN: String = "project = SYN AND \"Synthetic Team\" = Mobile ORDER BY updated DESC"
+
+    private val FILTERS: Map<String, (SyntheticTicket) -> Boolean> =
+        mapOf(
+            FILTER_MY_OPEN_BUGS to { it.mine && it.type in setOf("Bug", "Defect") && it.category != "done" },
+            FILTER_TEAM_IN_PROGRESS to { it.category == "indeterminate" },
+            FILTER_EVERYTHING to { true },
+        )
+
     private const val OPEN_SPRINTS = "sprint in openSprints()"
     private val KEY = Regex("key = \"([A-Z][A-Z0-9_]*-[0-9]+)\"")
     private val TEXT = Regex("text ~ \"([^\"]*)\"")
@@ -240,9 +256,12 @@ internal object SyntheticJiraSearch {
         val jql = params["jql"] ?: return 400 to error("The JQL query is missing.")
         val pageSize = params["maxResults"]?.toIntOrNull()?.coerceIn(1, 100) ?: 50
         val start = params["nextPageToken"]?.removePrefix("synthetic-page-")?.toIntOrNull() ?: 0
+        if (jql == FILTER_BROKEN) return 400 to error("Field 'Synthetic Team' does not exist or you do not have permission to view it.")
         val inList = IN_LIST.find(jql)
+        val filter = FILTERS[jql]
         val found =
             when {
+                filter != null -> tickets.filter(filter)
                 inList != null -> {
                     val (field, list) = inList.destructured
                     val keys = QUOTED_KEY.findAll(list).map { it.groupValues[1] }.toList()

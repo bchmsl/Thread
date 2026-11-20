@@ -21,6 +21,8 @@ import thread.data.external.str
 import thread.domain.external.JiraAttachment
 import thread.domain.external.JiraComment
 import thread.domain.external.JiraFamily
+import thread.domain.external.JiraFilter
+import thread.domain.external.JiraFilterId
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueList
@@ -221,6 +223,38 @@ internal object JiraJson {
         )
 
     private fun issueKey(element: JsonElement): JiraIssueKey? = string(element)?.let(JiraIssueKey::parse)
+
+    /**
+     * The starred filters answer (`GET /filter/favourite`, a plain array) cut down to `{filters: [{id, name, jql}]}`,
+     * in Jira's order: no owner, share permissions or links. Null when the answer is not an array.
+     */
+    fun starredFilters(answer: JsonElement): JsonObject? {
+        val filters = answer.asArray() ?: return null
+        val kept = filters.mapNotNull { it.asObject()?.let(::filterBundle) }
+        return buildJsonObject { put("filters", JsonArray(kept)) }
+    }
+
+    /** A saved starred list. */
+    fun filters(data: JsonObject): List<JiraFilter> = data.objects("filters").mapNotNull(::readFilter).distinctBy { it.id }
+
+    /** One filter answer (`GET /filter/{id}`), or null when it has no usable id or name. */
+    fun filter(answer: JsonElement): JiraFilter? = answer.asObject()?.let(::filterBundle)?.let(::readFilter)
+
+    private fun filterBundle(filter: JsonObject): JsonObject? {
+        val id = (filter.str("id") ?: filter.long("id")?.toString())?.let(JiraFilterId::parse) ?: return null
+        val name = filter.str("name")?.takeIf { it.isNotBlank() } ?: return null
+        return buildJsonObject {
+            put("id", JsonPrimitive(id.value))
+            put("name", JsonPrimitive(name))
+            copy(filter, "jql")
+        }
+    }
+
+    private fun readFilter(filter: JsonObject): JiraFilter? {
+        val id = filter.str("id")?.let(JiraFilterId::parse) ?: return null
+        val name = filter.str("name")?.takeIf { it.isNotBlank() } ?: return null
+        return JiraFilter(id, name, filter.str("jql"))
+    }
 
     private fun status(status: JsonObject): JsonObject =
         buildJsonObject {

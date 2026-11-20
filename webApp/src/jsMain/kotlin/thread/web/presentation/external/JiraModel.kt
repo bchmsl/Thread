@@ -16,6 +16,8 @@ import thread.domain.external.ExternalRecordSource
 import thread.domain.external.ExternalView
 import thread.domain.external.JiraCloudId
 import thread.domain.external.JiraFamilySource
+import thread.domain.external.JiraFilter
+import thread.domain.external.JiraFilterId
 import thread.domain.external.JiraIssue
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueList
@@ -26,6 +28,7 @@ import thread.domain.external.JiraRowSource
 import thread.domain.external.JiraSearch
 import thread.domain.external.JiraSite
 import thread.domain.external.JiraSprints
+import thread.domain.external.JiraStarredFilters
 import thread.domain.external.RateLimitGate
 import thread.domain.external.RequestBudget
 import thread.domain.external.Saved
@@ -59,6 +62,10 @@ class JiraServices(
     val family: JiraFamilySource,
     /** Ticket rows refreshed by key while a screen shows them (D67). */
     val rows: JiraRowSource,
+    /** The filters the account starred in Jira, for the Filters tab (D103). */
+    val starredFilters: ExternalRecordSource<JiraStarredFilters, List<JiraFilter>>,
+    /** The tickets of one filter, run with the filter's own query (D103). */
+    val filterRows: ExternalRecordSource<JiraFilterId, JiraIssueList>,
     /** Deletes every saved Jira copy on this device. The connection stays. */
     val deleteSavedCopies: suspend () -> Unit,
 ) {
@@ -92,6 +99,33 @@ internal class JiraModel(
 
     /** The assigned lists, shared by the Jira page and the background refresh (D51). */
     val lists = ExternalListFeed(listLoader, scope, ::nowMillis) { _, view -> observeList(view) }
+
+    /** The starred filters, for the Filters tab only (D103). Not in the background refresh (D51). */
+    val starredFilters =
+        ExternalListFeed(
+            ExternalLoader(services.starredFilters, ::isOnline, ::nowMillis, services.rateLimit),
+            scope,
+            ::nowMillis,
+        ) { _, view -> observeProblems(view) }
+
+    /** The tickets of each filter opened in this page load (D103). Their rows also update the shared rows. */
+    val filterRows =
+        ExternalListFeed(
+            ExternalLoader(services.filterRows, ::isOnline, ::nowMillis, services.rateLimit),
+            scope,
+            ::nowMillis,
+        ) { _, view -> observeList(view) }
+
+    private val chosenFilterName = if (services.isSynthetic) "$CHOSEN_FILTER_NAME.synthetic" else CHOSEN_FILTER_NAME
+
+    /** The filter last picked on this device (D103, Q4: kept on this device only), or null. */
+    var chosenFilter: JiraFilterId? by mutableStateOf(readDeviceText(chosenFilterName)?.let(JiraFilterId::parse))
+        private set
+
+    fun chooseFilter(id: JiraFilterId) {
+        chosenFilter = id
+        writeDeviceText(chosenFilterName, id.value)
+    }
 
     /** This device's "Current sprint only" from before it synced (D50): the starting value until the synced one is set. */
     private val sprintOnlyOnThisDevice = readDeviceFlag(CURRENT_SPRINT_FLAG)
@@ -195,6 +229,8 @@ internal class JiraModel(
         rowRefresh.clear()
         gone = emptySet()
         lists.clear()
+        starredFilters.clear()
+        filterRows.clear()
         sprints = null
         notTickets = emptyMap()
         writeDeviceText(notTicketsName, null)
@@ -297,6 +333,16 @@ internal class JiraModel(
         }
     }
 
+    /** Records the access problems a view showed, for views without ticket rows such as the starred filters. */
+    private fun observeProblems(view: ExternalView<*>) {
+        when (view) {
+            is ExternalView.Fresh -> problem = null
+            is ExternalView.SavedCopy -> note(view.problem)
+            is ExternalView.Missing -> note(view.problem)
+            else -> Unit
+        }
+    }
+
     /** Remembers rows Jira sent at [atMillis], such as search results. Search rows are never saved. */
     fun keepRows(
         issues: List<JiraIssueSummary>,
@@ -337,6 +383,9 @@ internal class JiraModel(
 
 /** Where this device kept "Current sprint only" before it synced (D50, D84). Only read now. */
 private const val CURRENT_SPRINT_FLAG = "thread.jira.currentSprintOnly"
+
+/** Where [JiraModel.chosenFilter] is kept on this device: the filter id. */
+private const val CHOSEN_FILTER_NAME = "thread.jira.filter"
 
 /** Where [JiraModel.isNotATicket] keeps its keys on this device: `KEY:millis` pairs, comma separated. */
 private const val NOT_TICKETS_NAME = "thread.jira.notTickets"

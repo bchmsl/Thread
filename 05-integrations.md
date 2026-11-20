@@ -11,6 +11,7 @@ Do not assume every organizational repository or field is accessible.
 
 Read-only capabilities:
 - List issues assigned to the authenticated user.
+- Show the filters the person starred in Jira and the chosen filter's tickets (D103).
 - Search other accessible tickets.
 - Link existing ticket to one or more Topics.
 - Create a Topic from a ticket.
@@ -66,6 +67,16 @@ Handle pagination, permission loss, 401/403, 429/backoff, and partial data expli
 - Each list (all, current sprint) is saved apart on the device, so either one shows its own saved copy offline.
 - Only items where the owner is the assignee show. Items where the owner is in another user field (for example a custom "Developer" field) need a different JQL; not in v1.
 - Status lozenges use the status category (`new`, `indeterminate`, `done`), never the status name, so custom workflows color correctly. An unknown category keeps the neutral style.
+
+### Starred filters (D103)
+
+- List: `GET /rest/api/3/filter/favourite`, the filters the person starred, in Jira's order. Classic scope `read:jira-work`, so the existing token works. Only the id (digits), name and JQL are kept; owner, account ids, share permissions and links are dropped. A filter with no valid id or name is left out.
+- Tickets: the filter's own JQL, sent as Jira stored it through `GET /rest/api/3/search/jql`, so its ORDER BY holds. Row fields only, up to 2 pages of 50. When Jira has more: "Showing the first N" and a link to `https://{site}/issues/?filter=ID`. A filter whose JQL is not in the saved list is asked for with `GET /rest/api/3/filter/{id}`.
+- A 400 means Jira could not run the filter's JQL (a project, field or value gone or hidden). It shows on the Filters tab only and never marks Jira access as expired. A 404 means the filter is gone or no longer shared.
+- Refresh: the list on open (not again within a minute) and on Refresh; the chosen filter's tickets also every 5 minutes while the page is visible and online. Not in the background refresh (D51 unchanged). The rows also update the shared ticket rows (D67).
+- Saved on the device only, in `jiraMeta`: `filters:starred` and `filter:<id>`, scoped to the site and removed by "Delete saved copies". The chosen filter id is in browser storage (`thread.jira.filter`). Nothing reaches Firestore.
+- Known limit: Refresh asks for the list and the tickets together, so after a filter's JQL changes in Jira, one more refresh runs the old JQL.
+- Not checked live: real filters on the owner's site.
 
 ### Background refresh (D51)
 

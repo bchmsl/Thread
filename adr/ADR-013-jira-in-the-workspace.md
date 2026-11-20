@@ -23,11 +23,13 @@ Status: Proposed (2026-11-13). Written in Phase 10 while the owner was away. Bui
 
 - Each opened ticket is saved in IndexedDB `jiraIssues` with its fields, description and comments, tagged with the site host. Since D74 and D75 that copy also holds the attachment list (name, size, type, date; no file or thumbnail links), sub-tasks, fix versions and the due date, and its text keeps no mention account ids (ADR-006). No file is downloaded or saved.
 - The "Assigned to me" rows are saved in `jiraMeta` under `list:assigned`, next to the Sprint field id. Search results are kept only in memory for the page load.
+- Since D103 the Filters tab saves the starred filters in `jiraMeta` under `filters:starred` (id, name and JQL only) and each filter's rows under `filter:<id>`, scoped to the site like the other records. The filter this device showed last is kept in browser storage (`thread.jira.filter`, `.synthetic` with the fixtures). Filter names, JQL and rows never reach Firestore (owner answer Q4 of #33: kept on this device only).
 - Disconnect hides lists and copies until the same site connects again. "Delete saved copies" removes them from this device; the connection stays.
 
 ### Reading
 
 - Assigned to me: `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`, up to 2 pages of 50. The list says when it is not complete.
+- Filters (D103): the starred filters from `GET /filter/favourite`, then the chosen filter's own JQL through the enhanced search, up to 2 pages of 50. A filter whose JQL is not saved yet is asked for with `GET /filter/{id}`. A 400 means Jira could not run that filter and stays on the Filters tab; it is not an access problem. The list loads on open (not again within a minute) and on Refresh; the filter's rows also every 5 minutes while the page is visible, and they update the shared rows (D67).
 - Search: a typed key looks up that ticket (`key = "ABC-1"`); a 400 answer for a key means "no result". Other text becomes `text ~ "words"`, and a single word is also tried as a label. Lucene special characters and quotes are dropped, so typed text never reaches JQL unescaped. One page, never saved.
 - Copies refresh when opened and then every 5 minutes while the page is visible and online.
 - Rows refresh when they show (D67): a Topic's linked tickets and confirmed suggestions go in one search, `key in (...)` with the row fields only, up to 50 keys and 6 searches a minute, and a ticket asked less than a minute ago is skipped. The rows are saved in `jiraMeta` under `row:<KEY>`. A key Jira refuses (400) is found by splitting the search, shows "Not found or no access", and keeps its saved row.
@@ -35,7 +37,7 @@ Status: Proposed (2026-11-13). Written in Phase 10 while the owner was away. Bui
 
 ### Screens
 
-- Jira page: "Assigned to me" and "Search" tabs, with the ticket next to the list at 1000px and wider, else on its own.
+- Jira page: "Assigned to me", "Filters" (D103) and "Search" tabs, with the ticket next to the list at 1000px and wider, else on its own. The Filters tab's address is `#/jira?tab=filters&filter=ID`; without `filter=` it shows the filter this device showed last, else the first starred one.
 - From outside the Jira tab a ticket opens as a card on top of the screen (`?jira=KEY`, D70), with "Open full page" to the Jira tab. The old `#/item/jira/KEY` page is gone; its links open the ticket in the Jira tab.
 - Topic details: the Jira section lists linked tickets. A ticket opens as a card on top of the Topic (D70; before D70, a side panel at 1000px and wider).
 - A ticket's parts (D68, D69): Description, Attachments and Sub-tasks (D75, shown only when the ticket has them), Comments and Related issues on the left; Details (Due and Fix versions since D75) and Topics on the right. An attachment's name opens the file on the Jira site in a new tab; a sub-task opens as the next card, like a related ticket.

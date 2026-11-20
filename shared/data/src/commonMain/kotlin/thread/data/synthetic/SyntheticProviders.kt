@@ -163,6 +163,25 @@ object SyntheticFixtures {
 
     private val JIRA_ISSUE = Regex("^.*/rest/api/3/issue/([A-Z0-9_]+-[0-9]+)$")
     private val JIRA_COMMENTS = Regex("^.*/rest/api/3/issue/([A-Z0-9_]+-[0-9]+)/comment$")
+    private val JIRA_FILTER = Regex("^.*/rest/api/3/filter/([0-9]+)$")
+
+    /**
+     * SYNTHETIC starred filters (D103), with more than Thread keeps (owner, links, share permissions), as Jira sends
+     * them. The last one's query is one Jira refuses (400).
+     */
+    private val STARRED_FILTERS: List<String> =
+        listOf(
+            "10010" to ("SYNTHETIC: My open bugs" to SyntheticJiraSearch.FILTER_MY_OPEN_BUGS),
+            "10011" to ("SYNTHETIC: Team in progress" to SyntheticJiraSearch.FILTER_TEAM_IN_PROGRESS),
+            "10012" to ("SYNTHETIC: Everything in SYN" to SyntheticJiraSearch.FILTER_EVERYTHING),
+            "10013" to ("SYNTHETIC: Broken filter" to SyntheticJiraSearch.FILTER_BROKEN),
+        ).map { (id, filter) ->
+            val (name, jql) = filter
+            """{"self":"https://synthetic.example.test/rest/api/3/filter/$id","id":"$id","name":${JsonPrimitive(name)},""" +
+                """"owner":{"accountId":"synthetic-account-a","displayName":"Synthetic Person A"},"jql":${JsonPrimitive(jql)},""" +
+                """"viewUrl":"https://synthetic-site.atlassian.net/issues/?filter=$id","favourite":true,"favouritedCount":1,""" +
+                """"sharePermissions":[],"subscriptions":{"size":0,"items":[]}}"""
+        }
     private val GITHUB_PULL = Regex("^https://api\\.github\\.com/repos/([^/]+)/([^/]+)/pulls/([0-9]+)(/reviews)?$")
     private val GITHUB_COMMIT = Regex("^https://api\\.github\\.com/repos/[^/]+/[^/]+/commits/([0-9a-f]{40})/(status|check-runs)$")
 
@@ -172,6 +191,8 @@ object SyntheticFixtures {
     ): String? {
         if (path.endsWith("/_edge/tenant_info")) return """{"cloudId":"$CLOUD_ID"}"""
         if (path.endsWith("/rest/api/3/field")) return FIELDS
+        if (path.endsWith("/rest/api/3/filter/favourite")) return "[" + STARRED_FILTERS.joinToString(",") + "]"
+        JIRA_FILTER.matchEntire(path)?.let { match -> return STARRED_FILTERS.firstOrNull { "\"id\":\"${match.groupValues[1]}\"" in it } }
         JIRA_COMMENTS.matchEntire(path)?.let { match -> COMMENTS[match.groupValues[1]]?.let { return it } }
         JIRA_COMMENTS.matchEntire(path)?.let { match ->
             return SyntheticJiraSearch.issue(match.groupValues[1])?.let { """{"startAt":0,"maxResults":100,"total":0,"comments":[]}""" }

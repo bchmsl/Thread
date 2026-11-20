@@ -35,6 +35,8 @@ One refresh of a ticket sends up to three requests:
 2. `GET /issue/{key}?fields=summary,issuetype,status,priority,assignee,reporter,labels,updated,description,issuelinks,parent,attachment,subtasks,fixVersions,duedate` plus the Sprint field. The last four came with D75 in the same request.
 3. `GET /issue/{key}/comment?orderBy=-created&maxResults=100`. The newest 100 comments are shown with "Showing the newest N of M" when there are more.
 
+The Filters tab (D103) adds two GETs under the same base, headers and options, both covered by `read:jira-work`, so no new scope: `GET /filter/favourite` (the starred filters) and, only when a filter's JQL is not saved yet, `GET /filter/{id}`. The filter's tickets come from the enhanced JQL search with the filter's JQL as Jira stored it. A 400 on that search means the JQL cannot run; it is shown on the Filters tab and does not change the connection state.
+
 ### Cloud id
 
 - The person types the site and the cloud id into the spike form.
@@ -70,7 +72,7 @@ One refresh of a ticket sends up to three requests:
 
 ### Saved copies
 
-- IndexedDB database `thread-external-cache`, stores `jiraIssues` (by issue key) and `jiraMeta` (Sprint field id).
+- IndexedDB database `thread-external-cache`, stores `jiraIssues` (by issue key) and `jiraMeta` (Sprint field id, lists, rows and, since D103, `filters:starred` and `filter:<id>`). A starred filter keeps only its id (digits), name and JQL: no owner, account ids, share permissions or links.
 - A record is `{recordVersion: 1, savedAtMillis, scope: site host, data}`. `data` is the answer cut down to what Thread shows: no account ids, e-mails or avatars. A copy saved for another site is not shown.
 - Since D74 the description and comment bodies are saved without mention account ids (`AdfMapper.forStorage` removes `attrs.id` from mention nodes); the mention's text stays. Copies saved before D74 keep those ids until the ticket refreshes or "Delete saved copies" removes them.
 - Since D75 an attachment keeps only its id (digits only), file name, size, type and date: not its author or its file and thumbnail links. Sub-tasks keep key, title, status and type; fix versions their names; the due date as Jira gives it.

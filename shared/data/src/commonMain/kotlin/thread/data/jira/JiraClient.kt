@@ -14,6 +14,7 @@ import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.JiraCloudId
 import thread.domain.external.JiraConnection
+import thread.domain.external.JiraFilterId
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraSite
 import kotlin.io.encoding.Base64
@@ -71,6 +72,19 @@ internal class JiraClient(
             }
         return get(connection, url, "GET /rest/api/3/search/jql", nowMillis)
     }
+
+    /** The filters the account starred, in Jira's order (D103). A plain array, no paging. */
+    suspend fun starredFilters(
+        connection: JiraConnection,
+        nowMillis: Long,
+    ): ExternalResult<JsonElement> = get(connection, "${api(connection)}/filter/favourite", "GET /rest/api/3/filter/favourite", nowMillis)
+
+    /** One filter by id, for its query when the starred list does not have it (D103). */
+    suspend fun filter(
+        connection: JiraConnection,
+        id: JiraFilterId,
+        nowMillis: Long,
+    ): ExternalResult<JsonElement> = get(connection, "${api(connection)}/filter/${id.value}", "GET /rest/api/3/filter/{id}", nowMillis)
 
     /** The site's cloud id from its public tenant info, without a token. The browser may block it (CORS). */
     suspend fun cloudId(

@@ -35,6 +35,7 @@ import org.w3c.dom.HTMLElement
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
 import thread.domain.external.ExternalView
+import thread.domain.external.JiraFilterId
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraList
@@ -61,8 +62,26 @@ import kotlin.math.ceil
 internal const val JIRA_TAB_PARAM = "tab"
 internal const val JIRA_KEY_PARAM = "key"
 internal const val JIRA_QUERY_PARAM = "q"
+internal const val JIRA_FILTER_PARAM = "filter"
 private const val SEARCH_TAB = "search"
+private const val FILTERS_TAB = "filters"
 private const val WIDE_QUERY = "(min-width: 1000px)"
+
+/** The Jira page's tabs, in order (D103). [param] is the `tab=` value; Assigned to me has none. */
+private enum class JiraTab(
+    val param: String?,
+    val tabId: String,
+    val label: String,
+) {
+    Assigned(null, "tab-assigned", "Assigned to me"),
+    Filters(FILTERS_TAB, "tab-filters", "Filters"),
+    Search(SEARCH_TAB, "tab-search", "Search"),
+    ;
+
+    companion object {
+        fun of(param: String?): JiraTab = entries.firstOrNull { it.param != null && it.param == param } ?: Assigned
+    }
+}
 
 /** `#/jira?key=KEY`: the Jira page with that ticket open. */
 internal fun jiraPlace(key: JiraIssueKey): Place = View.Jira.place.with(JIRA_KEY_PARAM, key.value)
@@ -94,9 +113,9 @@ private class SearchState {
 }
 
 /**
- * The Jira page (v3 jira.html, adr/ADR-013-jira-in-the-workspace.md): "Assigned to me" and Search on the left, the
- * open ticket on the right, one at a time below 1000px. Read-only. The assigned list is kept on this device; search
- * results are not.
+ * The Jira page (v3 jira.html, adr/ADR-013-jira-in-the-workspace.md): "Assigned to me", Filters (D103) and Search on
+ * the left, the open ticket on the right, one at a time below 1000px. Read-only. The assigned list and the filters are
+ * kept on this device; search results are not.
  */
 @Composable
 internal fun JiraScreen(
@@ -112,7 +131,8 @@ internal fun JiraScreen(
         return
     }
     val wide = rememberWide()
-    val searchTab = place.param(JIRA_TAB_PARAM) == SEARCH_TAB
+    val tab = JiraTab.of(place.param(JIRA_TAB_PARAM))
+    val searchTab = tab == JiraTab.Search
     val query = place.param(JIRA_QUERY_PARAM).orEmpty()
     val openKey = place.param(JIRA_KEY_PARAM)?.let(JiraIssueKey::parse)
     val search = remember { SearchState() }
@@ -126,6 +146,15 @@ internal fun JiraScreen(
     rememberListLoads(jira.lists, listKey, listRefresh, listAuto, jira.version)
     val listView = jira.lists.view(listKey)
     val assigned = listView?.savedOrNull?.value
+
+    // The Filters tab loads its filters only while it shows (D103).
+    var filtersRefresh by remember { mutableStateOf(0) }
+    val filters =
+        if (tab == JiraTab.Filters) {
+            rememberFilters(jira, place.param(JIRA_FILTER_PARAM)?.let(JiraFilterId::parse), filtersRefresh)
+        } else {
+            null
+        }
 
     fun runSearch(text: String) {
         val q = text.trim()
@@ -174,7 +203,12 @@ internal fun JiraScreen(
         if (searchTab && query.isNotBlank() && search.ranFor != query.trim()) runSearch(query)
     }
 
-    val rows: List<JiraIssueSummary> = if (searchTab) search.results.orEmpty() else assigned?.issues.orEmpty()
+    val rows: List<JiraIssueSummary> =
+        when (tab) {
+            JiraTab.Assigned -> assigned?.issues.orEmpty()
+            JiraTab.Filters -> filters?.issues.orEmpty()
+            JiraTab.Search -> search.results.orEmpty()
+        }
     // At 1000px and wider the first ticket of the list shows when none is picked (v3 shownKey).
     val shownKey = openKey ?: if (wide) rows.firstOrNull()?.key else null
     var ticketRefresh by remember { mutableStateOf(0) }
@@ -201,16 +235,17 @@ internal fun JiraScreen(
         }
     }
 
-    fun listPlace(tabSearch: Boolean): Place {
-        var to = View.Jira.place
-        if (tabSearch) {
-            to = to.with(JIRA_TAB_PARAM, SEARCH_TAB)
-            if (query.isNotEmpty()) to = to.with(JIRA_QUERY_PARAM, query)
+    fun listPlace(to: JiraTab): Place {
+        var at = View.Jira.place.with(JIRA_TAB_PARAM, to.param)
+        when (to) {
+            JiraTab.Assigned -> Unit
+            JiraTab.Filters -> filters?.filterId?.let { at = at.with(JIRA_FILTER_PARAM, it.value) }
+            JiraTab.Search -> if (query.isNotEmpty()) at = at.with(JIRA_QUERY_PARAM, query)
         }
-        return to
+        return at
     }
 
-    fun rowPlace(key: JiraIssueKey): Place = listPlace(searchTab).with(JIRA_KEY_PARAM, key.value)
+    fun rowPlace(key: JiraIssueKey): Place = listPlace(tab).with(JIRA_KEY_PARAM, key.value)
 
     fun open(key: JiraIssueKey) {
         router.go(rowPlace(key))
@@ -221,55 +256,84 @@ internal fun JiraScreen(
     PageHeader(jira.name, "Read-only. Tickets you open are saved on this device.")
     // The banner speaks for a view that shows its saved copy because of a problem (ticket first), so a list that got a
     // 401 still says why while the ticket on screen is fine. Else for the ticket on screen, else for the list.
+    val listViews = if (filters != null) listOf(filters.rowsView, filters.starredView) else listOf(listView)
     val bannerView =
-        listOf(ticketView, listView).firstOrNull { it is ExternalView.SavedCopy }
+        (listOf(ticketView) + listViews).firstOrNull { it is ExternalView.SavedCopy }
             ?: ticketView?.takeIf { it.savedOrNull != null }
-            ?: listView?.takeIf { it.savedOrNull != null }
+            ?: listViews.firstOrNull { it?.savedOrNull != null }
     ViewBanner(bannerView, jira.name, "tickets") { router.go(CONNECTIONS_PLACE) }
     Div({ classes("md", "md--wide", *(if (openKey != null) arrayOf("has-open") else emptyArray())) }) {
         Div({ classes("md__list") }) {
-            Tabs(searchTab, assigned?.issues?.size) { toSearch ->
-                router.replace(listPlace(toSearch))
+            Tabs(tab, assigned?.issues?.size) { to ->
+                router.replace(listPlace(to))
                 scope.launch {
                     delay(16)
-                    val tabId = if (toSearch) "tab-search" else "tab-assigned"
-                    (document.getElementById(tabId) as? HTMLElement)?.focus()
-                    if (toSearch && search.results == null) (document.getElementById("jq") as? HTMLElement)?.focus()
+                    (document.getElementById(to.tabId) as? HTMLElement)?.focus()
+                    if (to == JiraTab.Search && search.results == null) (document.getElementById("jq") as? HTMLElement)?.focus()
                 }
             }
             Div({
                 id("jl-panel")
                 classes("md__list")
                 attr("role", "tabpanel")
-                attr("aria-labelledby", if (searchTab) "tab-search" else "tab-assigned")
+                attr("aria-labelledby", tab.tabId)
             }) {
-                if (searchTab) {
-                    SearchPanel(search, query, jira, workspace, shownKey, ::rowPlace, ::open) { text ->
-                        router.replace(listPlace(true).with(JIRA_QUERY_PARAM, text.trim().ifEmpty { null }))
-                        runSearch(text)
-                    }
-                } else {
-                    AssignedPanel(listView, jira, workspace, shownKey, ::rowPlace, ::open) { listRefresh++ }
+                when (tab) {
+                    JiraTab.Assigned -> AssignedPanel(listView, jira, workspace, shownKey, ::rowPlace, ::open) { listRefresh++ }
+                    JiraTab.Filters ->
+                        if (filters != null) {
+                            FiltersPanel(
+                                filters = filters,
+                                jira = jira,
+                                workspace = workspace,
+                                shownKey = shownKey,
+                                rowPlace = ::rowPlace,
+                                onOpen = ::open,
+                                onPick = { id -> router.replace(listPlace(JiraTab.Filters).with(JIRA_FILTER_PARAM, id.value)) },
+                                onRefresh = { filtersRefresh++ },
+                            )
+                        }
+                    JiraTab.Search ->
+                        SearchPanel(search, query, jira, workspace, shownKey, ::rowPlace, ::open) { text ->
+                            router.replace(listPlace(JiraTab.Search).with(JIRA_QUERY_PARAM, text.trim().ifEmpty { null }))
+                            runSearch(text)
+                        }
                 }
             }
         }
         Div({ classes("md__detail") }) {
-            A(listPlace(searchTab).hash, {
+            A(listPlace(tab).hash, {
                 classes("back", "md-back")
                 onClick {
                     it.preventDefault()
-                    router.go(listPlace(searchTab))
+                    router.go(listPlace(tab))
                 }
             }) {
                 IconView(Icon.ChevLeft, 16)
-                Text(if (searchTab) " Search results" else " Assigned to me")
+                Text(
+                    when (tab) {
+                        JiraTab.Assigned -> " Assigned to me"
+                        JiraTab.Filters -> " " + (filters?.filterName ?: "Filters")
+                        JiraTab.Search -> " Search results"
+                    },
+                )
             }
             if (shownKey == null) {
-                EmptyState(
-                    Icon.Jira,
-                    if (searchTab) "Search for a ticket" else "No ticket selected",
-                    "Pick one from the list to read it here.",
-                )
+                when {
+                    searchTab -> EmptyState(Icon.Jira, "Search for a ticket", "Pick one from the list to read it here.")
+                    // A filter with no tickets on screen (none match, or Jira could not run it) has nothing to pick.
+                    tab == JiraTab.Filters && rows.isEmpty() ->
+                        EmptyState(
+                            Icon.Jira,
+                            "No tickets to show",
+                            if (filters?.starred.orEmpty().size > 1) {
+                                "Pick another starred filter to see its tickets."
+                            } else {
+                                "Tickets from your starred filters show here."
+                            },
+                        )
+                    else -> EmptyState(Icon.Jira, "No ticket selected", "Pick one from the list to read it here.")
+                }
             } else {
                 JiraTicket(
                     jira = jira,
@@ -289,37 +353,47 @@ internal fun JiraScreen(
     }
 }
 
+/** The tab list: arrows move between tabs and wrap, Home and End go to the first and last (WAI-ARIA tabs). */
 @Composable
 private fun Tabs(
-    searchTab: Boolean,
+    current: JiraTab,
     assignedCount: Int?,
-    onSelect: (search: Boolean) -> Unit,
+    onSelect: (JiraTab) -> Unit,
 ) {
+    val tabs = JiraTab.entries
     Div({
         classes("tabs")
         attr("role", "tablist")
         attr("aria-label", "Jira lists")
     }) {
-        listOf(false, true).forEach { isSearch ->
-            val selected = isSearch == searchTab
+        tabs.forEachIndexed { index, tab ->
+            val selected = tab == current
             Button({
                 classes("tab")
                 type(ButtonType.Button)
-                id(if (isSearch) "tab-search" else "tab-assigned")
+                id(tab.tabId)
                 attr("role", "tab")
                 attr("aria-selected", selected.toString())
                 attr("aria-controls", "jl-panel")
                 tabIndex(if (selected) 0 else -1)
-                onClick { onSelect(isSearch) }
+                onClick { onSelect(tab) }
                 onKeyDown { event ->
-                    if (event.key == "ArrowLeft" || event.key == "ArrowRight") {
+                    val next =
+                        when (event.key) {
+                            "ArrowLeft" -> tabs[(index + tabs.size - 1) % tabs.size]
+                            "ArrowRight" -> tabs[(index + 1) % tabs.size]
+                            "Home" -> tabs.first()
+                            "End" -> tabs.last()
+                            else -> null
+                        }
+                    if (next != null) {
                         event.preventDefault()
-                        onSelect(!isSearch)
+                        onSelect(next)
                     }
                 }
             }) {
-                Text(if (isSearch) "Search" else "Assigned to me")
-                if (!isSearch && assignedCount != null) {
+                Text(tab.label)
+                if (tab == JiraTab.Assigned && assignedCount != null) {
                     Text(" ")
                     Span({ classes("n") }) { Text(assignedCount.toString()) }
                 }
@@ -345,21 +419,7 @@ private fun AssignedPanel(
     when {
         view == null || view == ExternalView.Loading -> P({ classes("muted") }) { Text("Loading your tickets…") }
         view is ExternalView.Missing ->
-            when (view.problem) {
-                ExternalProblem.Offline ->
-                    EmptyState(Icon.CloudOff, "Nothing saved on this device yet", "Your assigned tickets load when you are back online.")
-                ExternalProblem.NotConnected -> JiraNotConnected(jira.name)
-                else -> {
-                    val message = describe(view.problem, jira.name, "tickets", null, Times.now())
-                    EmptyState(message.icon, message.title, message.text) {
-                        if (view.problem == ExternalProblem.Unauthorized || view.problem == ExternalProblem.Forbidden) {
-                            A(CONNECTIONS_PLACE.hash, { classes("btn", "btn--line") }) { Text("Open Settings") }
-                        } else {
-                            RetryButton(onRefresh)
-                        }
-                    }
-                }
-            }
+            JiraListProblem(view.problem, jira, "Your assigned tickets load when you are back online.", onRefresh)
         list != null -> {
             CacheBar(view, "Refresh the list", onRefresh)
             if (list.issues.isEmpty() && sprintOnly) {
@@ -376,6 +436,30 @@ private fun AssignedPanel(
                 }
                 if (!list.complete) {
                     P({ classes("muted", "xd__note") }) { Text("Showing the latest ${list.issues.size}. Search finds the others.") }
+                }
+            }
+        }
+    }
+}
+
+/** Why a Jira list has nothing to show. [offlineText] says when it loads. */
+@Composable
+internal fun JiraListProblem(
+    problem: ExternalProblem,
+    jira: JiraModel,
+    offlineText: String,
+    onRefresh: () -> Unit,
+) {
+    when (problem) {
+        ExternalProblem.Offline -> EmptyState(Icon.CloudOff, "Nothing saved on this device yet", offlineText)
+        ExternalProblem.NotConnected -> JiraNotConnected(jira.name)
+        else -> {
+            val message = describe(problem, jira.name, "tickets", null, Times.now())
+            EmptyState(message.icon, message.title, message.text) {
+                if (problem == ExternalProblem.Unauthorized || problem == ExternalProblem.Forbidden) {
+                    A(CONNECTIONS_PLACE.hash, { classes("btn", "btn--line") }) { Text("Open Settings") }
+                } else {
+                    RetryButton(onRefresh)
                 }
             }
         }
@@ -467,7 +551,7 @@ private fun resultsText(
 
 /** v3 `X.jiraRow`: key, type, status, title, its Topics, and whether a copy is on this device. */
 @Composable
-private fun JiraRow(
+internal fun JiraRow(
     issue: JiraIssueSummary,
     to: Place,
     current: Boolean,

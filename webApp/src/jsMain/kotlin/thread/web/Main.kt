@@ -19,9 +19,11 @@ import thread.data.http.HttpTransport
 import thread.data.http.InMemoryRequestLog
 import thread.data.http.RecordingTransport
 import thread.data.jira.JiraFamilyRepository
+import thread.data.jira.JiraFilterRowsRepository
 import thread.data.jira.JiraIssueRepository
 import thread.data.jira.JiraListRepository
 import thread.data.jira.JiraRowRepository
+import thread.data.jira.JiraStarredFilterRepository
 import thread.data.local.IndexedDbDraftStore
 import thread.data.local.IndexedDbKeyValueDatabase
 import thread.data.local.browserDeviceId
@@ -240,6 +242,8 @@ private fun jiraServices(
         sprints = lists,
         family = JiraFamilyRepository(connections, transport, meta),
         rows = JiraRowRepository(connections, transport, meta),
+        starredFilters = JiraStarredFilterRepository(connections, transport, meta),
+        filterRows = JiraFilterRowsRepository(connections, transport, meta),
         deleteSavedCopies = {
             issues.clear()
             meta.clear()
