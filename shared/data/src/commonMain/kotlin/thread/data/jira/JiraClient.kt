@@ -12,6 +12,7 @@ import thread.data.http.getJson
 import thread.data.http.urlEncode
 import thread.domain.external.ExternalProblem
 import thread.domain.external.ExternalResult
+import thread.domain.external.JiraBoardId
 import thread.domain.external.JiraCloudId
 import thread.domain.external.JiraConnection
 import thread.domain.external.JiraFilterId
@@ -86,6 +87,22 @@ internal class JiraClient(
         nowMillis: Long,
     ): ExternalResult<JsonElement> = get(connection, "${api(connection)}/filter/${id.value}", "GET /rest/api/3/filter/{id}", nowMillis)
 
+    /**
+     * A board's own columns, status mapping, limits and estimate field (Jira Software Agile REST, D103 B). It needs the
+     * granular `read:board-scope.admin:jira-software` and `read:project:jira` scopes; a token without them gets 401.
+     */
+    suspend fun boardConfiguration(
+        connection: JiraConnection,
+        boardId: JiraBoardId,
+        nowMillis: Long,
+    ): ExternalResult<JsonElement> =
+        get(
+            connection,
+            "${agile(connection)}/board/${boardId.value}/configuration",
+            "GET /rest/agile/1.0/board/{id}/configuration",
+            nowMillis,
+        )
+
     /** The site's cloud id from its public tenant info, without a token. The browser may block it (CORS). */
     suspend fun cloudId(
         site: JiraSite,
@@ -115,6 +132,8 @@ internal class JiraClient(
     }
 
     private fun api(connection: JiraConnection): String = "https://api.atlassian.com/ex/jira/${connection.cloudId.value}/rest/api/3"
+
+    private fun agile(connection: JiraConnection): String = "https://api.atlassian.com/ex/jira/${connection.cloudId.value}/rest/agile/1.0"
 
     private fun basicAuth(connection: JiraConnection): String {
         val credentials = "${connection.email}:${connection.token.reveal()}"

@@ -708,12 +708,19 @@ internal object Times {
             when {
                 sameDay(date, today) -> "Today"
                 sameDay(date, yesterday) -> "Yesterday"
-                else -> {
-                    val year = if (date.getFullYear() != today.getFullYear()) " ${date.getFullYear()}" else ""
-                    "${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}$year"
-                }
+                else -> dateText(millis, nowMillis)
             }
         return "$day ${clock(millis)}"
+    }
+
+    /** `Thu 12 Nov`, with the year when it is not this year. */
+    fun dateText(
+        millis: Long,
+        nowMillis: Long = now(),
+    ): String {
+        val date = Date(millis.toDouble())
+        val year = if (date.getFullYear() != Date(nowMillis.toDouble()).getFullYear()) " ${date.getFullYear()}" else ""
+        return "${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}$year"
     }
 
     private fun sameDay(

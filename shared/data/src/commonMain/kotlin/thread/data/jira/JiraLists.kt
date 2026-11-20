@@ -17,6 +17,7 @@ import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueList
 import thread.domain.external.JiraList
 import thread.domain.external.JiraSearch
+import thread.domain.external.JiraSprintId
 import thread.domain.external.JiraSprints
 import thread.domain.external.Refreshed
 import thread.domain.external.Saved
@@ -131,6 +132,12 @@ internal object JiraQuery {
     /** "Current sprint only" (D50): `openSprints()` is the sprints that started and are not completed yet. */
     const val ASSIGNED_CURRENT_SPRINT: String =
         "assignee = currentUser() AND statusCategory != Done AND sprint in openSprints() ORDER BY updated DESC"
+
+    /** The account's tickets of any status in open sprints, to find its active sprints (D103 B). */
+    const val MY_OPEN_SPRINTS: String = "assignee = currentUser() AND sprint in openSprints() ORDER BY updated DESC"
+
+    /** One sprint's tickets in the board's rank order (D103 B). [JiraSprintId] is digits only, so it is safe here. */
+    fun sprint(id: JiraSprintId): String = "sprint = ${id.value} ORDER BY Rank ASC"
 
     private val SPECIAL = Regex("[+\\-&|!(){}\\[\\]^~*?:\\\\/\"']")
     private val SPACES = Regex("\\s+")

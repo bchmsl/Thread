@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
 import thread.data.external.ExternalTime
 import thread.data.external.arr
 import thread.data.external.asArray
@@ -19,6 +20,12 @@ import thread.data.external.pick
 import thread.data.external.putIfNotNull
 import thread.data.external.str
 import thread.domain.external.JiraAttachment
+import thread.domain.external.JiraBoardCard
+import thread.domain.external.JiraBoardConfig
+import thread.domain.external.JiraBoardConfigColumn
+import thread.domain.external.JiraBoardId
+import thread.domain.external.JiraColumnLimits
+import thread.domain.external.JiraColumnsNote
 import thread.domain.external.JiraComment
 import thread.domain.external.JiraFamily
 import thread.domain.external.JiraFilter
@@ -29,6 +36,10 @@ import thread.domain.external.JiraIssueList
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraRelated
 import thread.domain.external.JiraSite
+import thread.domain.external.JiraSprint
+import thread.domain.external.JiraSprintBoard
+import thread.domain.external.JiraSprintId
+import thread.domain.external.JiraSprintList
 import thread.domain.external.JiraStatus
 import thread.domain.external.JiraStatusCategory
 import thread.domain.note.LinkHref
@@ -62,6 +73,18 @@ internal object JiraJson {
 
     private val ATTACHMENT_ID = Regex("^[0-9]{1,20}$")
 
+    /** A custom field id, the only kind Thread puts in a `fields` list it did not write itself. */
+    private val CUSTOM_FIELD = Regex("^customfield_[0-9]{1,18}$")
+
+    /** A status id as Jira gives it: digits only. */
+    private val STATUS_ID = Regex("^[0-9]{1,20}$")
+
+    /** The schema type of team-managed projects' "Story point estimate" field. */
+    private const val STORY_POINTS_SCHEMA = "com.pyxis.greenhopper.jira:jsw-story-points"
+
+    /** A sprint board card's fields (D103 B), plus the story points field when there is one. */
+    const val BOARD_FIELDS: String = "summary,issuetype,status,priority,assignee,parent,updated"
+
     fun sprintFieldId(fields: JsonElement): String? =
         fields
             .asArray()
@@ -69,6 +92,24 @@ internal object JiraJson {
             .mapNotNull { it.asObject() }
             .firstOrNull { it.obj("schema")?.str("custom") == SPRINT_SCHEMA }
             ?.str("id")
+
+    /**
+     * The site's story points field (D103 B): a number field named "Story Points" (company-managed projects), else the
+     * "Story point estimate" field of team-managed projects. Null when there is none.
+     */
+    fun storyPointsFieldId(fields: JsonElement): String? {
+        val numbers =
+            fields
+                .asArray()
+                .orEmpty()
+                .mapNotNull { it.asObject() }
+                .filter { field -> field.str("id")?.let(CUSTOM_FIELD::matches) == true && field.obj("schema")?.str("type") == "number" }
+        val chosen =
+            numbers.firstOrNull { it.str("name").equals("Story Points", ignoreCase = true) }
+                ?: numbers.firstOrNull { it.obj("schema")?.str("custom") == STORY_POINTS_SCHEMA }
+                ?: numbers.firstOrNull { it.str("name").equals("Story point estimate", ignoreCase = true) }
+        return chosen?.str("id")
+    }
 
     /** [comments] is a comment page fetched newest first; the bundle keeps it oldest first. */
     fun bundle(
@@ -156,14 +197,268 @@ internal object JiraJson {
     }
 
     /** One page of the enhanced search, its issues cut down to the row fields. */
-    fun searchPage(page: JsonElement): SearchPage? {
+    fun searchPage(page: JsonElement): SearchPage? = searchPage(page, ::summaryBundle)
+
+    /** One page of the enhanced search, its issues cut down by [cut]. */
+    fun searchPage(
+        page: JsonElement,
+        cut: (JsonObject) -> JsonObject?,
+    ): SearchPage? {
         val raw = page.asObject() ?: return null
         val issues = raw.arr("issues") ?: return null
         val token = raw.str("nextPageToken")
         return SearchPage(
-            issues = issues.mapNotNull { it.asObject()?.let(::summaryBundle) },
+            issues = issues.mapNotNull { it.asObject()?.let(cut) },
             nextPageToken = token,
             isLast = raw.bool("isLast") ?: (token == null),
+        )
+    }
+
+    /**
+     * The active sprints named by the Sprint field ([sprintFieldId]) of the account's tickets (D103 B), with the keys of
+     * those tickets per sprint: `{sprints: [{id, name, boardId, startDate, endDate, goal, mine: [keys]}],
+     * siteHasSprints: true}`. Closed and future sprints are left out.
+     */
+    fun mySprintsBundle(
+        issues: List<JsonObject>,
+        sprintFieldId: String,
+    ): JsonObject {
+        val sprints = linkedMapOf<String, JsonObject>()
+        val mine = mutableMapOf<String, MutableSet<String>>()
+        for (issue in issues) {
+            val key = issue.str("key")?.let(JiraIssueKey::parse) ?: continue
+            for (sprint in issue.obj("fields")?.objects(sprintFieldId).orEmpty()) {
+                if (sprint.str("state") != "active") continue
+                val id = idText(sprint, "id")?.let(JiraSprintId::parse) ?: continue
+                val name = sprint.str("name")?.takeIf { it.isNotBlank() } ?: continue
+                sprints.getOrPut(id.value) {
+                    buildJsonObject {
+                        put("id", JsonPrimitive(id.value))
+                        put("name", JsonPrimitive(name))
+                        idText(sprint, "boardId")?.let(JiraBoardId::parse)?.let { put("boardId", JsonPrimitive(it.value)) }
+                        copy(sprint, "startDate")
+                        copy(sprint, "endDate")
+                        sprint.str("goal")?.takeIf { it.isNotBlank() }?.let { put("goal", JsonPrimitive(it)) }
+                    }
+                }
+                mine.getOrPut(id.value) { linkedSetOf() } += key.value
+            }
+        }
+        val kept =
+            sprints.map { (id, sprint) ->
+                JsonObject(sprint + ("mine" to JsonArray(mine[id].orEmpty().map(::JsonPrimitive))))
+            }
+        return buildJsonObject {
+            put("sprints", JsonArray(kept))
+            put("siteHasSprints", JsonPrimitive(true))
+        }
+    }
+
+    /** The saved form for a site without a Sprint field. */
+    fun noSprintsBundle(): JsonObject =
+        buildJsonObject {
+            put("sprints", JsonArray(emptyList()))
+            put("siteHasSprints", JsonPrimitive(false))
+        }
+
+    /** A saved sprint list, the sprint with most of the account's tickets first, then by name. */
+    fun sprintList(data: JsonObject): JiraSprintList =
+        JiraSprintList(
+            sprints =
+                data
+                    .objects("sprints")
+                    .mapNotNull(::readSprint)
+                    .distinctBy { it.id }
+                    .sortedWith(compareByDescending<JiraSprint> { it.myKeys.size }.thenBy { it.name.lowercase() }),
+            siteHasSprints = data.bool("siteHasSprints") ?: true,
+        )
+
+    private fun readSprint(sprint: JsonObject): JiraSprint? {
+        val id = sprint.str("id")?.let(JiraSprintId::parse) ?: return null
+        val name = sprint.str("name")?.takeIf { it.isNotBlank() } ?: return null
+        return JiraSprint(
+            id = id,
+            name = name,
+            boardId = sprint.str("boardId")?.let(JiraBoardId::parse),
+            startMillis = ExternalTime.parseMillis(sprint.str("startDate")),
+            endMillis = ExternalTime.parseMillis(sprint.str("endDate")),
+            goal = sprint.str("goal")?.takeIf { it.isNotBlank() },
+            myKeys =
+                sprint
+                    .arr("mine")
+                    .orEmpty()
+                    .mapNotNull(::issueKey)
+                    .toSet(),
+        )
+    }
+
+    /** An id Jira sends as a number or as text. */
+    private fun idText(
+        from: JsonObject,
+        key: String,
+    ): String? = from.long(key)?.toString() ?: from.str(key)
+
+    /**
+     * One board card (D103 B): key, title, type (with whether it is a sub-task), status with its id, priority, assignee
+     * name, parent key and title, updated, and [pointsField]'s number as `points`. No account ids or avatars.
+     */
+    fun boardCardBundle(
+        issue: JsonObject,
+        pointsField: String?,
+    ): JsonObject? {
+        val fields = issue.obj("fields") ?: return null
+        if (issue.str("key") == null || fields.str("summary") == null) return null
+        return buildJsonObject {
+            copy(issue, "key")
+            put(
+                "fields",
+                buildJsonObject {
+                    copy(fields, "summary")
+                    putIfNotNull("issuetype", fields.obj("issuetype")?.pick("name", "subtask"))
+                    putIfNotNull(
+                        "status",
+                        fields.obj("status")?.let { status ->
+                            buildJsonObject {
+                                status.str("id")?.takeIf(STATUS_ID::matches)?.let { put("id", JsonPrimitive(it)) }
+                                copy(status, "name")
+                                putIfNotNull("statusCategory", status.obj("statusCategory")?.pick("key"))
+                            }
+                        },
+                    )
+                    putIfNotNull("priority", fields.obj("priority")?.pick("name"))
+                    putIfNotNull("assignee", fields.obj("assignee")?.pick("displayName"))
+                    putIfNotNull(
+                        "parent",
+                        fields.obj("parent")?.let { parent ->
+                            buildJsonObject {
+                                copy(parent, "key")
+                                parent.obj("fields")?.let { copy(it, "summary") }
+                            }
+                        },
+                    )
+                    copy(fields, "updated")
+                    pointsField
+                        ?.let { fields[it] as? JsonPrimitive }
+                        ?.takeIf { !it.isString && it.doubleOrNull != null }
+                        ?.let { put("points", it) }
+                },
+            )
+        }
+    }
+
+    private fun boardCard(bundle: JsonObject): JiraBoardCard? {
+        val key = bundle.str("key")?.let(JiraIssueKey::parse) ?: return null
+        val fields = bundle.obj("fields") ?: return null
+        val parent = fields.obj("parent")
+        return JiraBoardCard(
+            key = key,
+            type = fields.obj("issuetype")?.str("name"),
+            isSubtask = fields.obj("issuetype")?.bool("subtask") == true,
+            title = fields.str("summary") ?: return null,
+            status = fields.obj("status")?.let(::readStatus),
+            statusId = fields.obj("status")?.str("id"),
+            priority = fields.obj("priority")?.str("name"),
+            assignee = fields.obj("assignee")?.str("displayName"),
+            parentKey = parent?.str("key")?.let(JiraIssueKey::parse),
+            parentTitle = parent?.str("summary"),
+            storyPoints = (fields["points"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull,
+            updatedAtMillis = ExternalTime.parseMillis(fields.str("updated")),
+        )
+    }
+
+    /**
+     * A board's settings answer cut down to `{name, columns: [{name, statuses: [ids], min, max}], constraintType,
+     * estimationField}`: no filter, location, owner or links. Null when it has no column settings.
+     */
+    fun boardConfigBundle(answer: JsonElement): JsonObject? {
+        val raw = answer.asObject() ?: return null
+        val columnConfig = raw.obj("columnConfig") ?: return null
+        val columns =
+            columnConfig.objects("columns").mapNotNull { column ->
+                val name = column.str("name")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                buildJsonObject {
+                    put("name", JsonPrimitive(name))
+                    val statuses = column.objects("statuses").mapNotNull { idText(it, "id")?.takeIf(STATUS_ID::matches) }
+                    put("statuses", JsonArray(statuses.map(::JsonPrimitive)))
+                    column.int("min")?.takeIf { it >= 0 }?.let { put("min", JsonPrimitive(it)) }
+                    column.int("max")?.takeIf { it >= 0 }?.let { put("max", JsonPrimitive(it)) }
+                }
+            }
+        return buildJsonObject {
+            raw.str("name")?.takeIf { it.isNotBlank() }?.let { put("name", JsonPrimitive(it)) }
+            put("columns", JsonArray(columns))
+            copy(columnConfig, "constraintType")
+            raw
+                .obj("estimation")
+                ?.takeIf { it.str("type") == "field" }
+                ?.obj("field")
+                ?.str("fieldId")
+                ?.takeIf(CUSTOM_FIELD::matches)
+                ?.let { put("estimationField", JsonPrimitive(it)) }
+        }
+    }
+
+    fun boardConfig(data: JsonObject): JiraBoardConfig =
+        JiraBoardConfig(
+            name = data.str("name"),
+            columns =
+                data.objects("columns").mapNotNull { column ->
+                    JiraBoardConfigColumn(
+                        name = column.str("name") ?: return@mapNotNull null,
+                        statusIds =
+                            column
+                                .arr("statuses")
+                                .orEmpty()
+                                .mapNotNull(::string)
+                                .toSet(),
+                        min = column.int("min"),
+                        max = column.int("max"),
+                    )
+                },
+            limits =
+                when (data.str("constraintType")) {
+                    "none" -> JiraColumnLimits.None
+                    "issueCountExclSubs" -> JiraColumnLimits.IssueCountExcludingSubtasks
+                    else -> JiraColumnLimits.IssueCount
+                },
+        )
+
+    /** The board's estimate field, when it estimates with a custom number field such as Story Points. */
+    fun estimationField(config: JsonObject): String? = config.str("estimationField")?.takeIf(CUSTOM_FIELD::matches)
+
+    /**
+     * A saved sprint board: `{issues: [cards], complete, config?: board settings, columnsNote?: "scopes" or
+     * "unavailable"}`.
+     */
+    fun sprintBoardBundle(
+        issues: List<JsonObject>,
+        complete: Boolean,
+        config: JsonObject?,
+        note: JiraColumnsNote?,
+    ): JsonObject =
+        buildJsonObject {
+            put("issues", JsonArray(issues))
+            put("complete", JsonPrimitive(complete))
+            putIfNotNull("config", config)
+            when (note) {
+                JiraColumnsNote.NeedsScopes -> put("columnsNote", JsonPrimitive("scopes"))
+                JiraColumnsNote.Unavailable -> put("columnsNote", JsonPrimitive("unavailable"))
+                null -> Unit
+            }
+        }
+
+    fun sprintBoard(data: JsonObject): JiraSprintBoard {
+        val config = data.obj("config")?.let(::boardConfig)
+        return JiraSprintBoard(
+            cards = data.objects("issues").mapNotNull(::boardCard).distinctBy { it.key },
+            complete = data.bool("complete") ?: true,
+            config = config,
+            columnsNote =
+                when {
+                    config != null -> null
+                    data.str("columnsNote") == "scopes" -> JiraColumnsNote.NeedsScopes
+                    else -> JiraColumnsNote.Unavailable
+                },
         )
     }
 

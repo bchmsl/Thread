@@ -12,6 +12,7 @@ Do not assume every organizational repository or field is accessible.
 Read-only capabilities:
 - List issues assigned to the authenticated user.
 - Show the filters the person starred in Jira and the chosen filter's tickets (D103).
+- Show the active sprint board for the active sprints the person has tickets in (D103 part B).
 - Search other accessible tickets.
 - Link existing ticket to one or more Topics.
 - Create a Topic from a ticket.
@@ -77,6 +78,16 @@ Handle pagination, permission loss, 401/403, 429/backoff, and partial data expli
 - Saved on the device only, in `jiraMeta`: `filters:starred` and `filter:<id>`, scoped to the site and removed by "Delete saved copies". The chosen filter id is in browser storage (`thread.jira.filter`). Nothing reaches Firestore.
 - Known limit: Refresh asks for the list and the tickets together, so after a filter's JQL changes in Jira, one more refresh runs the old JQL.
 - Not checked live: real filters on the owner's site.
+
+### Active sprint board (D103 part B)
+
+- Sprints: `assignee = currentUser() AND sprint in openSprints() ORDER BY updated DESC` through `GET /rest/api/3/search/jql` with the Sprint field, up to 4 pages of 50. The active sprints in those tickets' Sprint field are the list, the one with most of the person's tickets first; each keeps its id, name, board id, dates, goal and the keys of the person's tickets. `read:jira-work`, so the existing token works.
+- Board: `sprint = ID ORDER BY Rank ASC` through the same search, up to 4 pages of 50, with the row fields, the parent and the story points field. When the sprint has more: "Showing the first N tickets of this sprint." A 400 shows "Jira could not show this sprint" on the Board tab only.
+- Columns: `GET /rest/agile/1.0/board/{boardId}/configuration` on the same gateway gives the board's columns (status ids), its column limits and how they count, and its estimate field. It needs the granular scopes `read:board-scope.admin:jira-software` and `read:project:jira`; a token without them gets 401. Asked at most once a day per board. A 401 or 403 there shows one column per status and a note linking to Settings, and never marks Jira access as expired; another failure keeps the last saved settings, else status columns; only a rate limit stops the board.
+- Story points: the board's estimate field when its settings are known, else the site's Story Points field found by `GET /field` (same daily request as the Sprint field).
+- Refresh: on open (not again within a minute), every 5 minutes while the page is visible and online, and on Refresh. Not in the background refresh (D51 unchanged). The cards also update the shared ticket rows (D67).
+- Saved on the device only, in `jiraMeta`: `sprints:mine`, `sprint:<id>` and `boardConfig:<boardId>`, scoped to the site and removed by "Delete saved copies". No account ids, e-mails or avatars. The chosen sprint id and "Only my issues" are in browser storage (`thread.jira.sprint`, `thread.jira.boardMine`). Nothing reaches Firestore.
+- Not checked live: real sprints and board settings, or a token with the two board scopes.
 
 ### Background refresh (D51)
 

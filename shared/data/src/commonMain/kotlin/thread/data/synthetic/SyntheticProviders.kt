@@ -117,6 +117,10 @@ class SyntheticHttpTransport(
             val (status, body) = SyntheticJiraSearch.answer(query, revision())
             return HttpResponse(status, emptyMap(), body)
         }
+        // Board 8's settings answer like a token without the board scopes (D103 B).
+        if (!gitHub && path.endsWith("/rest/agile/1.0/board/8/configuration")) {
+            return HttpResponse(401, emptyMap(), """{"code":401,"message":"Unauthorized; scope does not match"}""")
+        }
         val body = if (gitHub) SyntheticFixtures.gitHub(path, query, revision()) else SyntheticFixtures.jira(path, revision())
         return if (body != null) ok(body, gitHub) else error(404, gitHub)
     }
@@ -160,10 +164,33 @@ class SyntheticHttpTransport(
 object SyntheticFixtures {
     const val CLOUD_ID: String = "00000000-0000-4000-8000-000000000000"
     const val SPRINT_FIELD: String = "customfield_10020"
+    const val POINTS_FIELD: String = "customfield_10016"
 
     private val JIRA_ISSUE = Regex("^.*/rest/api/3/issue/([A-Z0-9_]+-[0-9]+)$")
     private val JIRA_COMMENTS = Regex("^.*/rest/api/3/issue/([A-Z0-9_]+-[0-9]+)/comment$")
     private val JIRA_FILTER = Regex("^.*/rest/api/3/filter/([0-9]+)$")
+    private val BOARD_CONFIG = Regex("^.*/rest/agile/1\\.0/board/([0-9]+)/configuration$")
+
+    /**
+     * SYNTHETIC settings of board 7 (D103 B), with more than Thread keeps (location, filter, sub-query, ranking, links),
+     * as Jira sends them. In Progress has a limit of 3; Triage is on no column.
+     */
+    private val BOARD_7_CONFIG: String =
+        """
+        {"id":7,"name":"SYNTHETIC: SYN board","type":"scrum",
+         "self":"https://synthetic.example.test/rest/agile/1.0/board/7/configuration",
+         "location":{"type":"project","key":"SYN","id":"10000","name":"Synthetic"},
+         "filter":{"id":"10100","self":"https://synthetic.example.test/rest/api/3/filter/10100"},
+         "subQuery":{"query":"fixVersion in unreleasedVersions() OR fixVersion is EMPTY"},
+         "columnConfig":{"columns":[
+           {"name":"To Do","statuses":[{"id":"10001","self":"https://synthetic.example.test/status/10001"}]},
+           {"name":"In Progress","statuses":[{"id":"10002","self":"https://synthetic.example.test/status/10002"}],"max":3},
+           {"name":"In Review","statuses":[{"id":"10003","self":"https://synthetic.example.test/status/10003"}]},
+           {"name":"Done","statuses":[{"id":"10004","self":"https://synthetic.example.test/status/10004"}]}
+         ],"constraintType":"issueCount"},
+         "estimation":{"type":"field","field":{"fieldId":"$POINTS_FIELD","displayName":"Story Points"}},
+         "ranking":{"rankCustomFieldId":10019}}
+        """.trimIndent()
 
     /**
      * SYNTHETIC starred filters (D103), with more than Thread keeps (owner, links, share permissions), as Jira sends
@@ -193,6 +220,7 @@ object SyntheticFixtures {
         if (path.endsWith("/rest/api/3/field")) return FIELDS
         if (path.endsWith("/rest/api/3/filter/favourite")) return "[" + STARRED_FILTERS.joinToString(",") + "]"
         JIRA_FILTER.matchEntire(path)?.let { match -> return STARRED_FILTERS.firstOrNull { "\"id\":\"${match.groupValues[1]}\"" in it } }
+        BOARD_CONFIG.matchEntire(path)?.let { match -> return if (match.groupValues[1] == "7") BOARD_7_CONFIG else null }
         JIRA_COMMENTS.matchEntire(path)?.let { match -> COMMENTS[match.groupValues[1]]?.let { return it } }
         JIRA_COMMENTS.matchEntire(path)?.let { match ->
             return SyntheticJiraSearch.issue(match.groupValues[1])?.let { """{"startAt":0,"maxResults":100,"total":0,"comments":[]}""" }
@@ -329,7 +357,9 @@ object SyntheticFixtures {
           {"id":"customfield_10011","key":"customfield_10011","name":"Synthetic text field","custom":true,
            "schema":{"type":"string","custom":"com.atlassian.jira.plugin.system.customfieldtypes:textfield","customId":10011}},
           {"id":"$SPRINT_FIELD","key":"$SPRINT_FIELD","name":"Sprint","custom":true,
-           "schema":{"type":"array","items":"json","custom":"com.pyxis.greenhopper.jira:gh-sprint","customId":10020}}
+           "schema":{"type":"array","items":"json","custom":"com.pyxis.greenhopper.jira:gh-sprint","customId":10020}},
+          {"id":"$POINTS_FIELD","key":"$POINTS_FIELD","name":"Story Points","custom":true,
+           "schema":{"type":"number","custom":"com.atlassian.jira.plugin.system.customfieldtypes:float","customId":10016}}
         ]
         """.trimIndent()
 

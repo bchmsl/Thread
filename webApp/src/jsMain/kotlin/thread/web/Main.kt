@@ -22,7 +22,9 @@ import thread.data.jira.JiraFamilyRepository
 import thread.data.jira.JiraFilterRowsRepository
 import thread.data.jira.JiraIssueRepository
 import thread.data.jira.JiraListRepository
+import thread.data.jira.JiraMySprintRepository
 import thread.data.jira.JiraRowRepository
+import thread.data.jira.JiraSprintBoardRepository
 import thread.data.jira.JiraStarredFilterRepository
 import thread.data.local.IndexedDbDraftStore
 import thread.data.local.IndexedDbKeyValueDatabase
@@ -244,6 +246,8 @@ private fun jiraServices(
         rows = JiraRowRepository(connections, transport, meta),
         starredFilters = JiraStarredFilterRepository(connections, transport, meta),
         filterRows = JiraFilterRowsRepository(connections, transport, meta),
+        mySprints = JiraMySprintRepository(connections, transport, meta),
+        sprintBoard = JiraSprintBoardRepository(connections, transport, meta),
         deleteSavedCopies = {
             issues.clear()
             meta.clear()

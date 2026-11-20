@@ -39,6 +39,7 @@ import thread.domain.external.JiraFilterId
 import thread.domain.external.JiraIssueKey
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraList
+import thread.domain.external.JiraSprintId
 import thread.web.platform.isOnline
 import thread.web.platform.mediaMatches
 import thread.web.platform.nowMillis
@@ -63,19 +64,26 @@ internal const val JIRA_TAB_PARAM = "tab"
 internal const val JIRA_KEY_PARAM = "key"
 internal const val JIRA_QUERY_PARAM = "q"
 internal const val JIRA_FILTER_PARAM = "filter"
+internal const val JIRA_SPRINT_PARAM = "sprint"
 private const val SEARCH_TAB = "search"
 private const val FILTERS_TAB = "filters"
+private const val BOARD_TAB = "board"
 private const val WIDE_QUERY = "(min-width: 1000px)"
 
-/** The Jira page's tabs, in order (D103). [param] is the `tab=` value; Assigned to me has none. */
+/**
+ * The Jira page's tabs, in order (D103). [param] is the `tab=` value; Assigned to me has none. [short] is the label on
+ * a phone, a word of [label] so the tab's name still holds what it shows.
+ */
 private enum class JiraTab(
     val param: String?,
     val tabId: String,
     val label: String,
+    val short: String,
 ) {
-    Assigned(null, "tab-assigned", "Assigned to me"),
-    Filters(FILTERS_TAB, "tab-filters", "Filters"),
-    Search(SEARCH_TAB, "tab-search", "Search"),
+    Assigned(null, "tab-assigned", "Assigned to me", "Assigned"),
+    Board(BOARD_TAB, "tab-board", "Board", "Board"),
+    Filters(FILTERS_TAB, "tab-filters", "Filters", "Filters"),
+    Search(SEARCH_TAB, "tab-search", "Search", "Search"),
     ;
 
     companion object {
@@ -155,6 +163,14 @@ internal fun JiraScreen(
         } else {
             null
         }
+    // So does the Board tab its sprints and board (D103 B).
+    var boardRefresh by remember { mutableStateOf(0) }
+    val board =
+        if (tab == JiraTab.Board) {
+            rememberBoard(jira, place.param(JIRA_SPRINT_PARAM)?.let(JiraSprintId::parse), boardRefresh)
+        } else {
+            null
+        }
 
     fun runSearch(text: String) {
         val q = text.trim()
@@ -206,11 +222,19 @@ internal fun JiraScreen(
     val rows: List<JiraIssueSummary> =
         when (tab) {
             JiraTab.Assigned -> assigned?.issues.orEmpty()
+            JiraTab.Board -> emptyList()
             JiraTab.Filters -> filters?.issues.orEmpty()
             JiraTab.Search -> search.results.orEmpty()
         }
-    // At 1000px and wider the first ticket of the list shows when none is picked (v3 shownKey).
-    val shownKey = openKey ?: if (wide) rows.firstOrNull()?.key else null
+    // At 1000px and wider the first ticket of the list shows when none is picked (v3 shownKey). The board has no
+    // ticket beside it: its tickets open as cards on top (D103 B, Q3).
+    val shownKey =
+        when {
+            tab == JiraTab.Board -> null
+            openKey != null -> openKey
+            wide -> rows.firstOrNull()?.key
+            else -> null
+        }
     var ticketRefresh by remember { mutableStateOf(0) }
     val ticketView = rememberJiraTicket(jira, shownKey, ticketRefresh)
     // Opening a ticket moves focus to its title once it is on screen.
@@ -239,6 +263,7 @@ internal fun JiraScreen(
         var at = View.Jira.place.with(JIRA_TAB_PARAM, to.param)
         when (to) {
             JiraTab.Assigned -> Unit
+            JiraTab.Board -> board?.sprintId?.let { at = at.with(JIRA_SPRINT_PARAM, it.value) }
             JiraTab.Filters -> filters?.filterId?.let { at = at.with(JIRA_FILTER_PARAM, it.value) }
             JiraTab.Search -> if (query.isNotEmpty()) at = at.with(JIRA_QUERY_PARAM, query)
         }
@@ -256,22 +281,51 @@ internal fun JiraScreen(
     PageHeader(jira.name, "Read-only. Tickets you open are saved on this device.")
     // The banner speaks for a view that shows its saved copy because of a problem (ticket first), so a list that got a
     // 401 still says why while the ticket on screen is fine. Else for the ticket on screen, else for the list.
-    val listViews = if (filters != null) listOf(filters.rowsView, filters.starredView) else listOf(listView)
+    val listViews: List<ExternalView<*>?> =
+        when {
+            board != null -> board.views
+            filters != null -> listOf(filters.rowsView, filters.starredView)
+            else -> listOf(listView)
+        }
     val bannerView =
         (listOf(ticketView) + listViews).firstOrNull { it is ExternalView.SavedCopy }
             ?: ticketView?.takeIf { it.savedOrNull != null }
             ?: listViews.firstOrNull { it?.savedOrNull != null }
     ViewBanner(bannerView, jira.name, "tickets") { router.go(CONNECTIONS_PLACE) }
+
+    fun selectTab(to: JiraTab) {
+        router.replace(listPlace(to))
+        scope.launch {
+            delay(16)
+            (document.getElementById(to.tabId) as? HTMLElement)?.focus()
+            if (to == JiraTab.Search && search.results == null) (document.getElementById("jq") as? HTMLElement)?.focus()
+        }
+    }
+
+    // The board takes the page's width: no list and ticket side by side (D103 B).
+    if (board != null) {
+        Div({ classes("jb") }) {
+            Div({ classes("jb__tabs") }) { Tabs(tab, assigned?.issues?.size, ::selectTab) }
+            Div({
+                id("jl-panel")
+                classes("jb__panel")
+                attr("role", "tabpanel")
+                attr("aria-labelledby", tab.tabId)
+            }) {
+                BoardPanel(
+                    board = board,
+                    jira = jira,
+                    place = listPlace(JiraTab.Board),
+                    onPick = { id -> router.replace(listPlace(JiraTab.Board).with(JIRA_SPRINT_PARAM, id.value)) },
+                    onRefresh = { boardRefresh++ },
+                )
+            }
+        }
+        return
+    }
     Div({ classes("md", "md--wide", *(if (openKey != null) arrayOf("has-open") else emptyArray())) }) {
         Div({ classes("md__list") }) {
-            Tabs(tab, assigned?.issues?.size) { to ->
-                router.replace(listPlace(to))
-                scope.launch {
-                    delay(16)
-                    (document.getElementById(to.tabId) as? HTMLElement)?.focus()
-                    if (to == JiraTab.Search && search.results == null) (document.getElementById("jq") as? HTMLElement)?.focus()
-                }
-            }
+            Tabs(tab, assigned?.issues?.size, ::selectTab)
             Div({
                 id("jl-panel")
                 classes("md__list")
@@ -280,6 +334,7 @@ internal fun JiraScreen(
             }) {
                 when (tab) {
                     JiraTab.Assigned -> AssignedPanel(listView, jira, workspace, shownKey, ::rowPlace, ::open) { listRefresh++ }
+                    JiraTab.Board -> Unit
                     JiraTab.Filters ->
                         if (filters != null) {
                             FiltersPanel(
@@ -313,6 +368,7 @@ internal fun JiraScreen(
                 Text(
                     when (tab) {
                         JiraTab.Assigned -> " Assigned to me"
+                        JiraTab.Board -> " Board"
                         JiraTab.Filters -> " " + (filters?.filterName ?: "Filters")
                         JiraTab.Search -> " Search results"
                     },
@@ -392,7 +448,16 @@ private fun Tabs(
                     }
                 }
             }) {
-                Text(tab.label)
+                if (tab.short == tab.label) {
+                    Text(tab.label)
+                } else {
+                    // A phone shows the short word; the full name stays the tab's name for screen readers.
+                    Span({ classes("tab__full") }) { Text(tab.label) }
+                    Span({
+                        classes("tab__short")
+                        attr("aria-hidden", "true")
+                    }) { Text(tab.short) }
+                }
                 if (tab == JiraTab.Assigned && assignedCount != null) {
                     Text(" ")
                     Span({ classes("n") }) { Text(assignedCount.toString()) }

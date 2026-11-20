@@ -24,9 +24,13 @@ import thread.domain.external.JiraIssueList
 import thread.domain.external.JiraIssueSource
 import thread.domain.external.JiraIssueSummary
 import thread.domain.external.JiraList
+import thread.domain.external.JiraMySprints
 import thread.domain.external.JiraRowSource
 import thread.domain.external.JiraSearch
 import thread.domain.external.JiraSite
+import thread.domain.external.JiraSprintBoard
+import thread.domain.external.JiraSprintId
+import thread.domain.external.JiraSprintList
 import thread.domain.external.JiraSprints
 import thread.domain.external.JiraStarredFilters
 import thread.domain.external.RateLimitGate
@@ -42,6 +46,7 @@ import thread.web.platform.isOnline
 import thread.web.platform.nowMillis
 import thread.web.platform.readDeviceFlag
 import thread.web.platform.readDeviceText
+import thread.web.platform.writeDeviceFlag
 import thread.web.platform.writeDeviceText
 
 /**
@@ -66,6 +71,10 @@ class JiraServices(
     val starredFilters: ExternalRecordSource<JiraStarredFilters, List<JiraFilter>>,
     /** The tickets of one filter, run with the filter's own query (D103). */
     val filterRows: ExternalRecordSource<JiraFilterId, JiraIssueList>,
+    /** The active sprints the account has tickets in, for the Board tab (D103 B). */
+    val mySprints: ExternalRecordSource<JiraMySprints, JiraSprintList>,
+    /** One sprint's board: its tickets in rank order and the board's own columns when Jira sends them (D103 B). */
+    val sprintBoard: ExternalRecordSource<JiraSprintId, JiraSprintBoard>,
     /** Deletes every saved Jira copy on this device. The connection stays. */
     val deleteSavedCopies: suspend () -> Unit,
 ) {
@@ -125,6 +134,43 @@ internal class JiraModel(
     fun chooseFilter(id: JiraFilterId) {
         chosenFilter = id
         writeDeviceText(chosenFilterName, id.value)
+    }
+
+    /** The account's active sprints, for the Board tab only (D103 B). Not in the background refresh (D51). */
+    val mySprints =
+        ExternalListFeed(
+            ExternalLoader(services.mySprints, ::isOnline, ::nowMillis, services.rateLimit),
+            scope,
+            ::nowMillis,
+        ) { _, view -> observeProblems(view) }
+
+    /** The board of each sprint opened in this page load (D103 B). Its cards also update the shared rows. */
+    val sprintBoards =
+        ExternalListFeed(
+            ExternalLoader(services.sprintBoard, ::isOnline, ::nowMillis, services.rateLimit),
+            scope,
+            ::nowMillis,
+        ) { _, view -> observeBoard(view) }
+
+    private val chosenSprintName = if (services.isSynthetic) "$CHOSEN_SPRINT_NAME.synthetic" else CHOSEN_SPRINT_NAME
+    private val boardOnlyMineName = if (services.isSynthetic) "$BOARD_ONLY_MINE_NAME.synthetic" else BOARD_ONLY_MINE_NAME
+
+    /** The sprint last shown on this device (D103 B, Q4: kept on this device only), or null. */
+    var chosenSprint: JiraSprintId? by mutableStateOf(readDeviceText(chosenSprintName)?.let(JiraSprintId::parse))
+        private set
+
+    fun chooseSprint(id: JiraSprintId) {
+        chosenSprint = id
+        writeDeviceText(chosenSprintName, id.value)
+    }
+
+    /** "Only my issues" on the board, kept on this device only (D103 B, Q4). */
+    var boardOnlyMine: Boolean by mutableStateOf(readDeviceFlag(boardOnlyMineName))
+        private set
+
+    fun setBoardOnlyMine(on: Boolean) {
+        boardOnlyMine = on
+        writeDeviceFlag(boardOnlyMineName, on)
     }
 
     /** This device's "Current sprint only" from before it synced (D50): the starting value until the synced one is set. */
@@ -231,6 +277,8 @@ internal class JiraModel(
         lists.clear()
         starredFilters.clear()
         filterRows.clear()
+        mySprints.clear()
+        sprintBoards.clear()
         sprints = null
         notTickets = emptyMap()
         writeDeviceText(notTicketsName, null)
@@ -333,6 +381,23 @@ internal class JiraModel(
         }
     }
 
+    /** Records what loading a sprint board showed. Its cards are ticket rows too (D67). */
+    private fun observeBoard(view: ExternalView<JiraSprintBoard>) {
+        when (view) {
+            is ExternalView.Fresh -> {
+                problem = null
+                val at = view.saved.savedAtMillis
+                val board = view.saved.value
+                val rows = board.cards.map { it.summary() }
+                keepRows(rows, at)
+                rows.forEach { rowRefresh.noteAsked(it.key, at) }
+            }
+            is ExternalView.SavedCopy -> note(view.problem)
+            is ExternalView.Missing -> note(view.problem)
+            else -> Unit
+        }
+    }
+
     /** Records the access problems a view showed, for views without ticket rows such as the starred filters. */
     private fun observeProblems(view: ExternalView<*>) {
         when (view) {
@@ -386,6 +451,12 @@ private const val CURRENT_SPRINT_FLAG = "thread.jira.currentSprintOnly"
 
 /** Where [JiraModel.chosenFilter] is kept on this device: the filter id. */
 private const val CHOSEN_FILTER_NAME = "thread.jira.filter"
+
+/** Where [JiraModel.chosenSprint] is kept on this device: the sprint id. */
+private const val CHOSEN_SPRINT_NAME = "thread.jira.sprint"
+
+/** Where [JiraModel.boardOnlyMine] is kept on this device. */
+private const val BOARD_ONLY_MINE_NAME = "thread.jira.boardMine"
 
 /** Where [JiraModel.isNotATicket] keeps its keys on this device: `KEY:millis` pairs, comma separated. */
 private const val NOT_TICKETS_NAME = "thread.jira.notTickets"
